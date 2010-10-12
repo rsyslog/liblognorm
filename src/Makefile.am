@@ -7,6 +7,7 @@ PTHREADS_CFLAGS = -pthread
 lib_LTLIBRARIES = liblognorm.la
 
 liblognorm_la_SOURCES = \
+	liblognorm.c \
 	lognorm.c
 
 liblognorm_la_CPPFLAGS = $(PTHREADS_CFLAGS)

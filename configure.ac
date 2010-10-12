@@ -4,6 +4,7 @@
 AC_PREREQ(2.61)
 AC_INIT([liblognorm], [0.0.0], [rgerhards@adiscon.com])
 AM_INIT_AUTOMAKE
+AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([src/lognorm.c])
 AC_CONFIG_HEADER([config.h])
 
