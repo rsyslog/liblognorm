@@ -1,5 +1,8 @@
-/* tree.h -- the parse tree object
- * 
+/**
+ * @file ptree.h
+ * @brief The parse tree object.
+ * @class ln_ptree ptree.h
+ *//*
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is meant to be included by applications using liblognorm.
@@ -26,7 +29,7 @@
 #ifndef LIBLOGNORM_TREE_H_INCLUDED
 #define	LIBLOGNORM_TREE_H_INCLUDED
 
-typedef struct ln_ptree_s ln_ptree_t;
+typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
 
 /* value list. This is a single-linked list. In a later stage, we should
@@ -37,28 +40,40 @@ typedef struct ln_fieldList_s ln_fieldList_t;
  */
 struct ln_fieldList_s {
 	/* TODO: add syntax/names for fields */
-	ln_ptree_t *subtree;
+	ln_ptree *subtree;
 	ln_fieldList_t *next;
 };
 
 /* parse tree object
  */
-struct ln_ptree_s {
+struct ln_ptree {
+	ln_ptree	*parent;
 	ln_fieldList_t	*fields; /* these will be parsed first */
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.
 	 * But we do not do this in the initial step.
 	 */
-	ln_ptree_t	*subtree[sizeof(char)];
+	ln_ptree	*subtree[sizeof(char)];
 };
 
 
 /* library context
  */
-typedef struct ln_context_s {
-	ln_ptree_t *ptree;
-} ln_context;
+struct ln_ctx {
+	ln_ptree *ptree;
+};
 
+/* Methods */
+
+/**
+ * Return library version string.
+ * @memberof ln_ptree
+ *
+ * Returns the version of the currently used library.
+ *
+ * @return Zero-Terminated library version string.
+ */
+int doit(void);
 
 #endif /* #ifndef LOGNORM_TREE_H_INCLUDED */

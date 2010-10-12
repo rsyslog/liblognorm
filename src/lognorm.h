@@ -1,5 +1,7 @@
-/* This file implements the liblognorm API.
- * See header file for descriptions.
+/**
+ * @file lognorm.h
+ * @brief Private data structures used by the liblognorm API.
+ *//*
  *
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
@@ -22,61 +24,22 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
-#include "config.h"
+#ifndef LIBLOGNORM_LOGNORM_HINCLUDED
+#define	LIBLOGNORM_LOGNORM_HINCLUDED
+#include <stdlib.h>	/* we need size_t */
+#include "ptree.h"
 
-#include "liblognorm.h"
-#include "lognorm.h"
+#define ObjID_None 0xFEFE0001
+#define ObjID_CTX 0xFEFE0001
 
-#define CHECK_CTX \
-	if(ctx->objID != ObjID_CTX) { \
-		r = -1; \
-		goto done; \
-	}
+struct ln_ctx_s {
+	unsigned objID;	/**< a magic number to prevent some memory adressing errors */
+	void (*dbgCB)(void *cookie, char *msg, size_t lenMsg);
+		/**< user-provided debug output callback */
+	void *dbgCookie; /**< cookie to be passed to debug callback */
+	ln_ptree *ptree; /**< parse tree being used by this context */
+};
 
-char *
-ln_version(void)
-{
-	return VERSION;
-}
+void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));
 
-
-ln_ctx
-ln_initCtx(void)
-{
-	ln_ctx ctx;
-	if((ctx = calloc(1, sizeof(struct ln_ctx_s))) == NULL)
-		goto done;
-
-	ctx->objID = ObjID_CTX;
-	ctx->dbgCB = NULL;
-	ctx->ptree = NULL;
-done:
-	return ctx;
-}
-
-
-int
-ln_exitCtx(ln_ctx ctx)
-{
-	int r = 0;
-
-	CHECK_CTX;
-
-	ctx->objID = ObjID_None; /* prevent double free */
-	free(ctx);
-done:
-	return r;
-}
-
-
-int
-ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie)
-{
-	int r = 0;
-
-	CHECK_CTX;
-	ctx->dbgCB = cb;
-	ctx->dbgCookie = cookie;
-done:
-	return r;
-}
+#endif /* #ifndef LIBLOGNORM_LOGNORM_HINCLUDED */

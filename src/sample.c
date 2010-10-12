@@ -1,6 +1,15 @@
-/* This file implements the liblognorm API.
- * See header file for descriptions.
+/**
+ * @file sample.c
+ * @brief A very basic, yet complete, sample of how to use liblognorm.
  *
+ * This is the most basic example demonstrating how to use liblognorm.
+ * It loads log samples from the files specified on the command line,
+ * reads to-be-normalized data from stdin and writes the normalized
+ * form to stdout.
+ *
+ * @author Rainer Gerhards <rgerhards@adiscon.com>
+ *
+ *//*
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
@@ -22,61 +31,35 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
-#include "config.h"
-
+#include <stdio.h>
 #include "liblognorm.h"
-#include "lognorm.h"
 
-#define CHECK_CTX \
-	if(ctx->objID != ObjID_CTX) { \
-		r = -1; \
-		goto done; \
+static ln_ctx ctx;
+
+void
+dbgCallBack(void __attribute__((unused)) *cookie, char *msg,
+	    size_t __attribute__((unused)) lenMsg)
+{
+	printf("liblognorm: %s\n", msg);
+}
+
+void errout(char *errmsg)
+{
+	fprintf(stderr, "%s\n", errmsg);
+	exit(1);
+}
+
+
+int main(int argc, char *argv[])
+{
+	printf("Using liblognorm version %s.\n", ln_version());
+
+	if((ctx = ln_initCtx()) == NULL) {
+		errout("Could not initialize liblognorm context");
 	}
 
-char *
-ln_version(void)
-{
-	return VERSION;
-}
+	ln_setDebugCB(ctx, dbgCallBack, NULL);
 
-
-ln_ctx
-ln_initCtx(void)
-{
-	ln_ctx ctx;
-	if((ctx = calloc(1, sizeof(struct ln_ctx_s))) == NULL)
-		goto done;
-
-	ctx->objID = ObjID_CTX;
-	ctx->dbgCB = NULL;
-	ctx->ptree = NULL;
-done:
-	return ctx;
-}
-
-
-int
-ln_exitCtx(ln_ctx ctx)
-{
-	int r = 0;
-
-	CHECK_CTX;
-
-	ctx->objID = ObjID_None; /* prevent double free */
-	free(ctx);
-done:
-	return r;
-}
-
-
-int
-ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie)
-{
-	int r = 0;
-
-	CHECK_CTX;
-	ctx->dbgCB = cb;
-	ctx->dbgCookie = cookie;
-done:
-	return r;
+	ln_exitCtx(ctx);
+	return 0;
 }

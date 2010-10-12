@@ -18,6 +18,8 @@
  *
  * For further details, see it's initial announcement available at
  *    http://blog.gerhards.net/2010/10/introducing-liblognorm.html
+ *
+ * The public interface of this library is describe in liblognorm.h.
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
@@ -56,7 +58,7 @@ typedef void * event_t;
  * library to be called within a single program. This is most 
  * useful for plugin-based architectures.
  */
-typedef struct ln_context* ln_ctx_t;
+typedef struct ln_ctx_s* ln_ctx;
 
 /* API */
 /**
@@ -79,7 +81,7 @@ char *ln_version(void);
  *
  * @return new library context or NULL if an error occured
  */
-ln_ctx_t ln_initCtx(void);
+ln_ctx ln_initCtx(void);
 
 /**
  * Discard a library context.
@@ -91,7 +93,7 @@ ln_ctx_t ln_initCtx(void);
  *
  * @return Returns zero on success, something else otherwise.
  */
-int ln_exitCtx(ln_ctx_t ctx);
+int ln_exitCtx(ln_ctx ctx);
 
 /**
  * Set a debug message handler (callback).
@@ -122,8 +124,26 @@ int ln_exitCtx(ln_ctx_t ctx);
  *                   used for some state tracking by the caller. This is defined as
  *                   void* to support pointers. To play it safe, a pointer should be
  *                   passed (but advantorous folks may also use an unsigned).
+ *
+ * @return Returns zero on success, something else otherwise.
  */
-int ln_setDebugCB(ln_ctx_t ctx, void (*cb)(void*, char*, size_t), void *cookie);
+int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie);
+
+
+/**
+ * Load a (log) sample file.
+ *
+ * The file must contain log samples in syntactically correct format. Samples are added
+ * to set already loaded in the current context. If there is a sample with duplicate
+ * semantics, this sample will be ignored. Most importantly, this can \b not be used
+ * to change tag assignments for a given sample.
+ *
+ * @param[in] ctx The library context to apply callback to.
+ * @param[in] file Name of file to be loaded.
+ *
+ * @return Returns zero on success, something else otherwise.
+ */
+int ln_loadSamples(ln_ctx ctx, char *file);
 
 /**
  * Normalize a message.
@@ -151,6 +171,6 @@ int ln_setDebugCB(ln_ctx_t ctx, void (*cb)(void*, char*, size_t), void *cookie);
  *
  * @return Returns zero on success, something else otherwise.
  */
-int ln_normalizeMsg(ln_ctx_t ctx, char *msg, size_t lenmsg, event_t *event);
+int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, event_t *event);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

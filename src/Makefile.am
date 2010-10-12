@@ -4,6 +4,12 @@ PTHREADS_CFLAGS = -pthread
 
 #CFLAGS += $(DEBUG)
 
+# we need to clean the sample up once we have reached a decent
+# milestone (latest at initial release!)
+sbin_PROGRAMS = sample
+sample_SOURCES = sample.c \
+	liblognorm.c lognorm.c
+
 lib_LTLIBRARIES = liblognorm.la
 
 liblognorm_la_SOURCES = \
