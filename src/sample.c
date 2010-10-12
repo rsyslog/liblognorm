@@ -52,6 +52,10 @@ void errout(char *errmsg)
 
 int main(int argc, char *argv[])
 {
+	if(argc != 2) {
+		errout("samples repository must be given");
+	}
+
 	printf("Using liblognorm version %s.\n", ln_version());
 
 	if((ctx = ln_initCtx()) == NULL) {
@@ -59,6 +63,8 @@ int main(int argc, char *argv[])
 	}
 
 	ln_setDebugCB(ctx, dbgCallBack, NULL);
+
+	ln_loadSamples(ctx, argv[1]);
 
 	ln_exitCtx(ctx);
 	return 0;

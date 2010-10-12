@@ -26,6 +26,9 @@
 
 #include "liblognorm.h"
 #include "lognorm.h"
+#include "samp.h"
+
+#define ERR_ABORT {r = 1; goto done; }
 
 #define CHECK_CTX \
 	if(ctx->objID != ObjID_CTX) { \
@@ -77,6 +80,29 @@ ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie)
 	CHECK_CTX;
 	ctx->dbgCB = cb;
 	ctx->dbgCookie = cookie;
+done:
+	return r;
+}
+
+
+int
+ln_loadSamples(ln_ctx ctx, char *file)
+{
+	int r = 0;
+	struct ln_sampRepos *repo;
+	struct ln_samp *samp;
+	int isEof = 0;
+
+	CHECK_CTX;
+	if(file == NULL) ERR_ABORT;
+	if((repo = ln_sampOpen(ctx, file)) == NULL) ERR_ABORT;
+	while(!isEof) {
+		if((samp = ln_sampRead(ctx, repo, &isEof)) == NULL) {
+			/* TODO: what exactly to do? */
+		}
+	}
+	ln_sampClose(ctx, repo);
+
 done:
 	return r;
 }
