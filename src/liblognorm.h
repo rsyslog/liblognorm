@@ -21,12 +21,22 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
- *
- * If the terms of the GPL are unsuitable for your needs, you may obtain
- * a commercial license from Adiscon. Contact sales@adiscon.com for further
- * details.
  */
 #ifndef LIBLOGNORM_H_INCLUDED
 #define	LIBLOGNORM_H_INCLUDED
+
+/* event_t needs to come from libcee, or whatever it will be called. We
+ * provide a dummy to be able to compile the initial skeletons.
+ */
+typedef void * event_t;
+
+/* the library context descriptor
+ */
+typedef struct ln_context* ln_ctx_t;
+
+/* API */
+ln_ctx_t ln_initCtx(void);
+int ln_exitCtx(ln_ctx_t);
+int ln_normalizeMsg(ln_ctx_t, char *, event_t *);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */
