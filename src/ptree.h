@@ -26,8 +26,8 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
-#ifndef LIBLOGNORM_TREE_H_INCLUDED
-#define	LIBLOGNORM_TREE_H_INCLUDED
+#ifndef LIBLOGNORM_PTREE_H_INCLUDED
+#define	LIBLOGNORM_PTREE_H_INCLUDED
 
 typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
@@ -48,6 +48,11 @@ struct ln_fieldList_s {
  */
 struct ln_ptree {
 	ln_ptree	*parent;
+	char		*commonPrefix;
+	/**< if non-NULL, text that must be present in the input string
+	 * at the parse positon. This reduces the need to walk tree nodes
+	 * for common text.
+	 */
 	ln_fieldList_t	*fields; /* these will be parsed first */
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
@@ -58,22 +63,50 @@ struct ln_ptree {
 };
 
 
-/* library context
- */
-struct ln_ctx {
-	ln_ptree *ptree;
-};
-
 /* Methods */
 
 /**
- * Return library version string.
+ * Allocates and initializes a new parse tree node.
  * @memberof ln_ptree
  *
- * Returns the version of the currently used library.
+ * @param[in] ctx current library context
  *
- * @return Zero-Terminated library version string.
+ * @return pointer to new node or NULL on error
  */
-int doit(void);
+struct ln_ptree* newPTreeNode(ln_ctx ctx);
 
-#endif /* #ifndef LOGNORM_TREE_H_INCLUDED */
+
+/**
+ * Free a parse tree node and destruct all members.
+ * @memberof ln_ptree
+ *
+ * @param[in] ctx current library context
+ * @param[in] tree pointer to ptree to free
+ */
+void freePTreeNode(ln_ctx ctx, struct ln_ptree *tree);
+
+
+/**
+ * Traverse a (sub) tree according to a string.
+ *
+ * This functions traverses the provided tree according to the
+ * provided string. It navigates to the deepest node possible.
+ * Then, it returns this node as well as the position until which
+ * the string could be parsed. If there is no match at all,
+ * NULL is returned instead of a tree node. Note that this is
+ * different from the case where the root of the subtree is
+ * returned. In that case, there was at least a single match
+ * inside that root.
+ * @memberof ln_ptree
+ *
+ * @param[in] subtree root of subtree to traverse
+ * @param[in] str string to parse
+ * @param[in] lenStr length (in bytes) of the parse string
+ * @param[out] parsedTo position of first matched byte
+ *
+ * @return pointer to found tree node or NULL if there was no match at all
+ */
+void traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str, int lenStr,
+                   int *parsedTo);
+
+#endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

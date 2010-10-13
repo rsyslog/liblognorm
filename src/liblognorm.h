@@ -20,6 +20,19 @@
  *    http://blog.gerhards.net/2010/10/introducing-liblognorm.html
  *
  * The public interface of this library is describe in liblognorm.h.
+ *
+ * Liblognorm fully supports Unicode. Like most Linux tools, it operates
+ * on UTF-8 natively, called "passive mode". This was decided because we
+ * so can keep the size of data structures small while still supporting
+ * all of the world's languages (actually more than when we did UCS-2).
+ *
+ * At the  technical level, we can handle UTF-8 multibyte sequences transparently.
+ * Liblognorm needs to look at a few US-ASCII characters to do the
+ * sample base parsing (things to indicate fields), so this is no
+ * issue. Inside the parse tree, a multibyte sequence can simple be processed
+ * as if it were a sequence of different characters that make up a their
+ * own symbol each. In fact, this even allows for somewhat greater parsing
+ * speed.
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
