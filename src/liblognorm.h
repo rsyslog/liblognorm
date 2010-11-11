@@ -59,6 +59,7 @@
 #ifndef LIBLOGNORM_H_INCLUDED
 #define	LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
+#include <libee/libee.h>
 
 /* error codes */
 #define LN_NOMEM -1
@@ -111,6 +112,16 @@ ln_ctx ln_initCtx(void);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_exitCtx(ln_ctx ctx);
+
+
+/**
+ * Set the libee context to be used by this liblognorm context.
+ *
+ * @param ctx context to be modified
+ * @param eectx	libee context
+ */
+void ln_setEECtx(ln_ctx ctx, ee_ctx eectx);
+
 
 /**
  * Set a debug message handler (callback).

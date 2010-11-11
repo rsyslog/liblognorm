@@ -29,6 +29,7 @@
 #ifndef LIBLOGNORM_PTREE_H_INCLUDED
 #define	LIBLOGNORM_PTREE_H_INCLUDED
 #include <libestr.h>
+#include <libee/libee.h>
 
 typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
@@ -48,7 +49,8 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)();	/**< parser to use */
+	int (*parser)(ee_ctx, es_str_t*, size_t*, struct ee_value**);
+				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
 };
@@ -130,7 +132,8 @@ int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree *tree, ln_fieldList_t *node)
  * @param[in] ctx library context
  * @param[in] subtree root of subtree to traverse
  * @param[in] str string to parse
- * @param[out] parsedTo position of first matched byte
+ * @param[in/out] parsedTo on entry: start position within string,
+ * 	          on exist position of first unmatched byte
  *
  * @return pointer to found tree node or NULL if there was no match at all
  */
@@ -154,4 +157,7 @@ struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
 struct ln_ptree*
 ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs);
 
+#include <libee/libee.h>
+//TODO : find a correct place (and name)!
+int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

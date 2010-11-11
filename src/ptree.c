@@ -86,10 +86,6 @@ ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, size_t *pa
 	struct ln_ptree *curr = subtree;
 	struct ln_ptree *prev = NULL;
 
-#if 0
-	ln_dbgprintf(ctx, "traversePTree: search '%s'(%d), subtree %p",
-		str, lenStr, subtree);
-#endif
 	c = es_getBufAddr(str);
 	while(curr != NULL && i < es_strlen(str)) {
 		// TODO: implement commonPrefix
@@ -208,4 +204,94 @@ ln_displayPTree(ln_ctx ctx, struct ln_ptree *tree, int level)
 		free(cstr);
 		ln_displayPTree(ctx, node->subtree, level + 1);
 	}
+}
+
+
+/* TODO: Move to a better location? */
+
+static inline int
+addField(ln_ctx ctx, struct ee_event **event, es_str_t *name, struct ee_value *value)
+{
+	int r;
+	struct ee_field *field;
+
+	if(*event == NULL) {
+		CHKN(*event = ee_newEvent(ctx->eectx));
+	}
+
+	CHKN(field = ee_newField(ctx->eectx));
+	CHKR(ee_nameField(field, name));
+	CHKR(ee_addValueToField(field, value));
+	CHKR(ee_addFieldToEvent(*event, field));
+	r = 0;
+
+done:	return r;
+}
+
+
+/* check fields, if any are present (fields take precedence over
+ * literals).
+ * Offset is only modified if some data could be processed.
+ * @return 0 if a field was processed, 1 otherwise.
+ */
+static inline int
+checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
+	   struct ln_ptree **tree)
+{
+	int r = 1;
+	size_t i;
+	ln_fieldList_t *node;
+	struct ee_value *value;
+	char *cstr;
+
+	i = *offs;
+	node = (*tree)->froot;
+	ln_dbgprintf(ctx, "enter checkfields, node %p, offs %u, str %p",
+			node, (unsigned) i, str);
+	while(node != NULL) {
+		cstr = es_str2cstr(node->name, NULL);
+		ln_dbgprintf(ctx, "trying parser for field '%s': %p",
+			     cstr, node->parser);
+		free(cstr);
+		if((r = node->parser(ctx->eectx, str, &i, &value)) == 0) {
+			/* got it! */
+			ln_dbgprintf(ctx, "parser call was successful, offs now %u",
+				     (unsigned) i);
+			CHKR(addField(ctx, event, node->name, value));
+			*offs = i;
+			*tree = node->subtree;
+			r = 0;
+			break;
+		}
+		node = node->next;
+	}
+
+done:	return r;
+}
+
+
+int
+ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
+{
+	int r;
+	size_t offs;
+	struct ln_ptree *tree;
+	unsigned char *c;
+
+	offs = 0;
+	tree = ctx->ptree;
+	c = es_getBufAddr(str);
+
+	while(tree != NULL && offs < es_strlen(str)) {
+		// TODO: implement commonPrefix
+		ln_dbgprintf(ctx, "traversePTree: tree %p, char %u", tree, c[offs]);
+		if(checkFields(ctx, str, event, &offs, &tree) == 1) {
+			/* field matching failed, on to next literal */
+			ln_dbgprintf(ctx, "traversePTree: trying literal tree %p, char %c", tree, c[offs]);
+			tree = tree->subtree[c[offs++]];
+			ln_dbgprintf(ctx, "traversePTree: next tree %p\n", tree);
+		}
+	};
+
+done:	return r;
 }

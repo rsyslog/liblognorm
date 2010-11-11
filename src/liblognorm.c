@@ -31,7 +31,7 @@
 #define ERR_ABORT {r = 1; goto done; }
 
 #define CHECK_CTX \
-	if(ctx->objID != ObjID_CTX) { \
+	if(ctx->objID != LN_ObjID_CTX) { \
 		r = -1; \
 		goto done; \
 	}
@@ -50,7 +50,7 @@ ln_initCtx(void)
 	if((ctx = calloc(1, sizeof(struct ln_ctx_s))) == NULL)
 		goto done;
 
-	ctx->objID = ObjID_CTX;
+	ctx->objID = LN_ObjID_CTX;
 	ctx->dbgCB = NULL;
 
 	/* we add an root for the empty word, this simplifies parse
@@ -74,7 +74,7 @@ ln_exitCtx(ln_ctx ctx)
 
 	CHECK_CTX;
 
-	ctx->objID = ObjID_None; /* prevent double free */
+	ctx->objID = LN_ObjID_None; /* prevent double free */
 	free(ctx);
 done:
 	return r;
@@ -114,4 +114,11 @@ ln_loadSamples(ln_ctx ctx, char *file)
 
 done:
 	return r;
+}
+
+
+void
+ln_setEECtx(ln_ctx ctx, ee_ctx eectx)
+{
+	ctx->eectx = eectx;
 }

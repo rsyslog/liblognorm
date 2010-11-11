@@ -26,6 +26,8 @@
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
+#include <libee/libee.h>
+#include <libee/primitivetype.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -151,6 +153,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 
 	if(!es_strconstcmp(*str, "date-rfc3164")) {
 ln_dbgprintf(ctx, "we have a date-rfc3164");
+		node->parser = ee_parseRFC3164Date;
 	} else {
 		FAIL(LN_INVLDFDESCR);
 	}
@@ -223,6 +226,7 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 		free(cstr);
 	}
 
+	parsedTo = 0;
 	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
 	if(parsedTo != es_strlen(*str)) {
 		*subtree = ln_addPTree(ctx, newsubtree, *str, parsedTo);
