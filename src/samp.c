@@ -225,7 +225,7 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 
 	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
 	if(parsedTo != es_strlen(*str)) {
-		*subtree = ln_addPTree(ctx, *subtree, *str, parsedTo);
+		*subtree = ln_addPTree(ctx, newsubtree, *str, parsedTo);
 	}
 	r = 0;
 	*bufOffs = i;
