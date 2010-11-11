@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
 	}
 
 	ln_setDebugCB(ctx, dbgCallBack, NULL);
+	ln_enableDebug(ctx, 1);
 
 	ln_loadSamples(ctx, argv[1]);
 

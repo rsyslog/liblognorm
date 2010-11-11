@@ -42,6 +42,14 @@ AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 #AC_CHECK_FUNCS([])
 
+LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/include"
+LIBLOGNORM_LIBS="\$(top_builddir)/src/liblognorm.la"
+AC_SUBST(LIBLOGNORM_CFLAGS)
+AC_SUBST(LIBLOGNORM_LIBS)
+
+# modules we require
+PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
+PKG_CHECK_MODULES(LIBEE, libee >= 0.0.0)
 
 # debug mode settings
 AC_ARG_ENABLE(debug,

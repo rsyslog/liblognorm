@@ -25,10 +25,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
+#include <assert.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
+#include "internal.h"
 
 struct ln_sampRepos*
 ln_sampOpen(ln_ctx __attribute((unused)) ctx, char *name)
@@ -73,14 +75,201 @@ ln_sampCreate(ln_ctx __attribute__((unused)) ctx)
 	
 	/* place specific init code here (none at this time) */
 
-done:
-	return samp;
+done:	return samp;
 }
 
 void
 ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 {
 	free(samp);
+}
+
+
+/**
+ * Extract a field description from a sample.
+ * The field description is added to the tail of the current
+ * subtree's field list.
+ *
+ * Note that we break up the object model and access ptree members
+ * directly. Let's consider us a friend of ptree. This is necessary
+ * to optimize the structure for a high-speed parsing process.
+ *
+ * @param[in] str a temporary work string. This is passed in to save the
+ * 		  creation overhead
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
+	        size_t lenBuf, size_t *bufOffs, es_str_t **str)
+{
+	int r;
+	ln_fieldList_t *node;
+	size_t i = *bufOffs;
+	char *cstr;	/* for debug mode strings */
+
+	assert(subtree != NULL);
+	assert(buf != NULL);
+
+	CHKN(node = malloc(sizeof(ln_fieldList_t)));
+	node->subtree = NULL;
+	node->next = NULL;
+	CHKN(node->name = es_newStr(16));
+
+	while(i < lenBuf && buf[i] != ':') {
+		CHKR(es_addChar(&node->name, buf[i++]));
+	}
+
+	if(es_strlen(node->name) == 0) {
+		FAIL(LN_INVLDFDESCR);
+	} 
+
+	if(ctx->debug) {
+		cstr = es_str2cstr(node->name, NULL);
+		ln_dbgprintf(ctx, "parsed field: '%s'", cstr);
+		free(cstr);
+	}
+
+	if(buf[i] != ':') {
+		/* may be valid later if we have a loaded CEE dictionary
+		 * and the name is present inside it.
+		 */
+		FAIL(LN_INVLDFDESCR);
+	}
+	++i; /* skip ':' */
+
+	/* parse and process type
+	 * Note: if we have a CEE dictionary, this part can be optional!
+	 */
+	es_emptyStr(*str);
+	while(i < lenBuf && buf[i] != ':' && buf[i] != '%') {
+		CHKR(es_addChar(str, buf[i++]));
+	}
+
+	if(i == lenBuf) {
+		FAIL(LN_INVLDFDESCR);
+	}
+
+	if(!es_strconstcmp(*str, "date-rfc3164")) {
+ln_dbgprintf(ctx, "we have a date-rfc3164");
+	} else {
+		FAIL(LN_INVLDFDESCR);
+	}
+
+	if(buf[i] == '%') {
+		i++;
+	} else {
+		/* parse extra data */
+		CHKN(node->data = es_newStr(8));
+		i++;
+		while(i < lenBuf) {
+			if(buf[i] == '%') {
+				++i;
+				if(i == lenBuf || buf[i] != '%') {
+					break; /* end of field */
+				}
+			}
+			CHKR(es_addChar(&node->data, buf[i++]));
+		}
+		es_unescapeStr(node->data);
+	}
+
+	if(ctx->debug) {
+		cstr = es_str2cstr(node->data, NULL);
+		ln_dbgprintf(ctx, "parsed extra data: '%s'", cstr);
+		free(cstr);
+	}
+
+	/* finished */
+	CHKR(ln_addFDescrToPTree(ctx, *subtree, node));
+	*subtree = node->subtree;
+	*bufOffs = i;
+	r = 0;
+
+done:	return r;
+}
+
+
+/**
+ * Parse a Literal string out of the template and add it to the tree.
+ */
+static inline int
+parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
+	     size_t lenBuf, size_t *bufOffs, es_str_t **str)
+{
+	int r;
+	size_t i = *bufOffs;
+	size_t parsedTo;
+	struct ln_ptree *newsubtree;
+
+	es_emptyStr(*str);
+	/* extract maximum length literal */
+	while(i < lenBuf) {
+		if(buf[i] == '%') {
+			++i;
+			if(i < lenBuf && buf[i] != '%') {
+				break; /* field start is end of literal */
+			}
+		}
+		CHKR(es_addChar(str, buf[i]));
+		++i;
+	}
+	if(es_strlen(*str) == 0)
+		goto done;
+
+	es_unescapeStr(*str);
+	if(ctx->debug) {
+		char *cstr = es_str2cstr(*str, NULL);
+		ln_dbgprintf(ctx, "parsed literal: '%s'", cstr);
+		free(cstr);
+	}
+
+	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
+	if(parsedTo != es_strlen(*str)) {
+		*subtree = ln_addPTree(ctx, *subtree, *str, parsedTo);
+	}
+	r = 0;
+	*bufOffs = i;
+
+done:	return r;
+}
+
+
+/* Implementation note:
+ * We read in the sample, and split it into chunks of literal text and
+ * fields. Each literal text is added as whole to the tree, as is each
+ * field individually. To do so, we keep track of our current subtree 
+ * root, which changes whenever a new part of the tree is build. It is
+ * set to the then-lowest part of the tree, where the next step sample
+ * data is to be added.
+ * 
+ * This function processes the whole string or returns an error.
+ *
+ * format: literal1%field:type:extra-data%literal2
+ *
+ * @returns the new subtree root (or NULL in case of error)
+ */
+static inline int
+addSampToTree(ln_ctx ctx, char *buf, size_t lenBuf)
+{
+	int r;
+	struct ln_ptree* subtree;
+	es_str_t *str;
+	size_t i;
+
+	ln_dbgprintf(ctx, "actual sample is '%s'", buf+i);
+
+	subtree = ctx->ptree;
+	CHKN(str = es_newStr(256));
+	i = 0;
+	while(i < lenBuf) {
+		CHKR(parseLiteral(ctx, &subtree, buf, lenBuf, &i, &str));
+		if(es_strlen(str) > 0) {
+			/* we had no literal, so let's parse a field description */
+			CHKR(parseFieldDescr(ctx, &subtree, buf, lenBuf, &i, &str));
+		}
+	}
+
+done:	return r;
 }
 
 
@@ -92,7 +281,6 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	int done = 0;
 	char buf[10*1024]; /**< max size of log sample */ // TODO: make configurable
 	size_t lenBuf;
-	int parsedTo;
 
 	/* we ignore empty lines and lines that begin with "#" */
 	while(!done) {
@@ -130,17 +318,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 		// TODO: provide some error indicator to app? We definitely must do (a callback?)
 		goto done;
 	}
-
-	ln_dbgprintf(ctx, "actual sample is '%s'", buf+i);
-
-	struct ln_ptree* subtree;
-	int lenNew = lenBuf - i;
-	char *new = buf + i;
-	subtree = ln_traversePTree(ctx, ctx->ptree, new, lenNew, &parsedTo);
-		ln_dbgprintf(ctx, "parsed to %d", parsedTo);
-	if(parsedTo != lenNew) {
-		ln_addPTree(ctx, ctx->ptree, new+parsedTo, lenNew - parsedTo);
-	}
+	addSampToTree(ctx, buf+i, lenBuf - i);
 
 	//ln_displayPTree(ctx, ctx->ptree, 0);
 done:

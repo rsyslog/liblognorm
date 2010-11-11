@@ -60,6 +60,10 @@
 #define	LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
 
+/* error codes */
+#define LN_NOMEM -1
+#define LN_INVLDFDESCR -1
+
 /* event_t needs to come from libcee, or whatever it will be called. We
  * provide a dummy to be able to compile the initial skeletons.
  */
@@ -142,6 +146,14 @@ int ln_exitCtx(ln_ctx ctx);
  */
 int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie);
 
+
+/**
+ * enable or disable debug mode.
+ *
+ * @param[in] ctx context
+ * @param[in] b boolean 0 - disable debug mode, 1 - enable debug mode
+ */
+void ln_enableDebug(ln_ctx ctx, int i);
 
 /**
  * Load a (log) sample file.

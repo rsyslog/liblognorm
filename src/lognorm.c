@@ -58,7 +58,12 @@ ln_dbgprintf(ln_ctx ctx, char *fmt, ...)
 	}
 
 	ctx->dbgCB(ctx->dbgCookie, buf, lenBuf);
-done: 
-	return;
+done:	return;
 }
 
+
+void
+ln_enableDebug(ln_ctx ctx, int i)
+{
+	ctx->debug = i & 0x01;
+}

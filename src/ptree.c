@@ -29,10 +29,13 @@
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
+#include <libestr.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
+#include "ptree.h"
+#include "internal.h"
 
 struct ln_ptree*
 ln_newPTree(ln_ctx ctx, struct ln_ptree *parent)
@@ -44,34 +47,55 @@ ln_newPTree(ln_ctx ctx, struct ln_ptree *parent)
 	
 	tree->parent = parent;
 	ctx->nNodes++;
-done:
-	return tree;
+done:	return tree;
 }
 
 
 void
-ln_freePTree(ln_ctx ctx, struct ln_ptree *tree)
+ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree)
 {
-	free(tree); // TODO: leak, leak do recursive!
+	ln_fieldList_t *node, *nodeDel;
+	size_t i;
+
+	if(tree == NULL)
+		goto done;
+
+	for(node = tree->froot ; node != NULL ; ) {
+		ln_deletePTree(ctx, node->subtree);
+		nodeDel = node;
+		es_deleteStr(node->name);
+		es_deleteStr(node->data);
+		node = node->next;
+		free(nodeDel);
+	}
+
+	for(i = 0 ; i < 256 ; ++i)
+		if(tree->subtree[i] != NULL)
+			ln_deletePTree(ctx, tree->subtree[i]);
+	free(tree);
+
+done:	return;
 }
 
 
 struct ln_ptree*
-ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str,
-                 int lenStr, int *parsedTo)
+ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, size_t *parsedTo)
 {
-	int i = 0;
+	size_t i = 0;
+	unsigned char *c;
 	struct ln_ptree *curr = subtree;
 	struct ln_ptree *prev = NULL;
 
+#if 0
 	ln_dbgprintf(ctx, "traversePTree: search '%s'(%d), subtree %p",
 		str, lenStr, subtree);
-	assert(lenStr >= 0);
-	while(curr != NULL && i < lenStr) {
+#endif
+	c = es_getBufAddr(str);
+	while(curr != NULL && i < es_strlen(str)) {
 		// TODO: implement commonPrefix
-		ln_dbgprintf(ctx, "traversePTree: curr %p, char %u", curr, (unsigned char) str[i]);
+		ln_dbgprintf(ctx, "traversePTree: curr %p, char %u", curr, c[i]);
 		prev = curr;
-		curr = curr->subtree[(unsigned char)str[i++]];
+		curr = curr->subtree[c[i++]];
 	};
 
 	if(curr == NULL) {
@@ -79,63 +103,109 @@ ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str,
 	}
 
 	--i;
-done:
+
 	*parsedTo = i;
-	ln_dbgprintf(ctx, "traversePTree: returns node %p, offset %d", curr, i);
+	ln_dbgprintf(ctx, "traversePTree: returns node %p, offset %u", curr, (unsigned) i);
 	return curr;
 }
 
 
-int
-ln_addPTree(ln_ctx ctx, struct ln_ptree *parent, char *str,
-              int lenStr)
+struct ln_ptree *
+ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs)
 {
-	int r =0;
+	struct ln_ptree *r;
 	struct ln_ptree *new;
 
-	if(lenStr == 0) /* break recursion */
+	if(ctx->debug) {
+		char * cstr = es_str2cstr(str, NULL);
+		ln_dbgprintf(ctx, "addPTree: add '%s', offs %u, tree %p",
+			     cstr+offs, (unsigned) offs, tree);
+		free(cstr);
+	}
+
+	if((new = ln_newPTree(ctx, tree)) == NULL) {
+		r = NULL;
 		goto done;
+	}
 
-	ln_dbgprintf(ctx, "addPTree: add '%s'(%d), parent %p\n",
-	             str, lenStr, parent);
+	tree->subtree[es_getBufAddr(str)[offs]] = new;
+	if(offs + 1 < es_strlen(str)) { /* need another recursion step? */
+		r = ln_addPTree(ctx, new, str, offs + 1);
+	} else {
+		r = new;
+	}
 
-	if((new = ln_newPTree(ctx, parent)) == NULL) {
+done:	return r;
+}
+
+
+int 
+ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree *tree, ln_fieldList_t *node)
+{
+	int r;
+
+	assert(tree != NULL);
+	assert(node != NULL);
+
+	if((node->subtree = ln_newPTree(ctx, tree)) == NULL) {
 		r = -1;
 		goto done;
 	}
 
-	parent->subtree[(unsigned char)*str] = new;
-	r = ln_addPTree(ctx, new, str+1, lenStr-1);
+	if(tree->froot == NULL) {
+		tree->froot = tree->ftail = node;
+	} else {
+		tree->ftail->next = node;
+		tree->ftail = node;
+	}
+	r = 0;
 
-done:
-	return r;
+done:	return r;
 }
 
 
 void
 ln_displayPTree(ln_ctx ctx, struct ln_ptree *tree, int level)
 {
-	char indent[2048];
 	int i;
-	int nChilds;
+	int nChildLit;
+	int nChildField;
+	char *cstr;
+	ln_fieldList_t *node;
+	char indent[2048];
 
 	if(level > 1023)
 		level = 1023;
 	memset(indent, ' ', level * 2);
-	indent[level * 2 + 1] = '\0';
-	nChilds = 0;
+	indent[level * 2] = '\0';
+
+	nChildField = 0;
+	for(node = tree->froot ; node != NULL ; node = node->next ) {
+		++nChildField;
+	}
+
+	nChildLit = 0;
 	for(i = 0 ; i < 256 ; ++i) {
 		if(tree->subtree[i] != NULL) {
-			nChilds++;
+			nChildLit++;
 		}
 	}
-	ln_dbgprintf(ctx, "%sSubtree %p (%d children)", indent, tree, nChilds);
+
+	ln_dbgprintf(ctx, "%ssubtree %p (children: %d literals, %d fields)",
+		     indent, tree, nChildLit, nChildField);
 	/* display char subtrees */
 	for(i = 0 ; i < 256 ; ++i) {
 		if(tree->subtree[i] != NULL) {
-			if(level < 10)
 			ln_dbgprintf(ctx, "%schar %2.2x(%c):", indent, i, i);
 			ln_displayPTree(ctx, tree->subtree[i], level + 1);
 		}
+	}
+
+	/* display field subtrees */
+	for(node = tree->froot ; node != NULL ; node = node->next ) {
+		cstr = es_str2cstr(node->name, NULL);
+		ln_dbgprintf(ctx, "%sfield %s:", indent, cstr);
+		free(cstr);
+		ln_displayPTree(ctx, node->subtree, level + 1);
 	}
 }

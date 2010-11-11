@@ -32,6 +32,7 @@
 #define	LIBLOGNORM_SAMPLES_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
 #include <stdio.h>	/* we need size_t */
+#include <libestr.h>
 
 
 /**
@@ -48,8 +49,7 @@ struct ln_sampRepos {
  * A single log sample.
  */
 struct ln_samp {
-	char *msg;
-	size_t lenMsg;
+	es_str_t *msg;
 };
 
 /**

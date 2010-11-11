@@ -28,21 +28,31 @@
  */
 #ifndef LIBLOGNORM_PTREE_H_INCLUDED
 #define	LIBLOGNORM_PTREE_H_INCLUDED
+#include <libestr.h>
 
 typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
 
-/* value list. This is a single-linked list. In a later stage, we should
+/**
+ * List of supported fields inside parse tree.
+ * This list holds all fields and their description. While normalizing,
+ * fields are tried in the order of this list. So the enqeue order
+ * dictates precedence during parsing.
+ *
+ * value list. This is a single-linked list. In a later stage, we should
  * optimize it so that frequently used fields are moved "up" towards
  * the root of the list. In any case, we do NOT expect this list to
  * be long, as the parser should already have gotten quite specific when
  * we hit a field.
  */
 struct ln_fieldList_s {
-	/* TODO: add syntax/names for fields */
-	ln_ptree *subtree;
-	ln_fieldList_t *next;
+	es_str_t *name;		/**< field name */
+	es_str_t *data;		/**< extra data to be passed to parser */
+	int (*parser)();	/**< parser to use */
+	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
+	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
 };
+
 
 /* parse tree object
  */
@@ -53,7 +63,8 @@ struct ln_ptree {
 	 * at the parse positon. This reduces the need to walk tree nodes
 	 * for common text.
 	 */
-	ln_fieldList_t	*fields; /* these will be parsed first */
+	ln_fieldList_t	*froot; /**< root of field list */
+	ln_fieldList_t	*ftail; /**< tail of field list */
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.
@@ -84,7 +95,23 @@ struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree* parent);
  * @param[in] ctx current library context
  * @param[in] tree pointer to ptree to free
  */
-void ln_freePTree(ln_ctx ctx, struct ln_ptree *tree);
+void ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree);
+
+
+/**
+ * Add a field description to the a tree.
+ * The field description will be added as last field. Fields are
+ * parsed in the order they have been added, so be sure to care
+ * about the order if that matters.
+ * @memberof ln_ptree
+ *
+ * @param[in] ctx current library context
+ * @param[in] tree pointer to ptree to modify
+ * @param[in] fielddescr a fully populated (and initialized) 
+ * 		field description node
+ * @returns 0 on success, something else otherwise
+ */
+int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree *tree, ln_fieldList_t *node);
 
 
 /**
@@ -100,14 +127,31 @@ void ln_freePTree(ln_ctx ctx, struct ln_ptree *tree);
  * inside that root.
  * @memberof ln_ptree
  *
+ * @param[in] ctx library context
  * @param[in] subtree root of subtree to traverse
  * @param[in] str string to parse
- * @param[in] lenStr length (in bytes) of the parse string
  * @param[out] parsedTo position of first matched byte
  *
  * @return pointer to found tree node or NULL if there was no match at all
  */
-struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str,
-                               int lenStr, int *parsedTo);
+struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
+                               es_str_t *str, size_t *parsedTo);
+
+
+
+/**
+ * Add a literal to a ptree.
+ * Creates new tree nodes as necessary.
+ * @memberof ln_ptree
+ *
+ * @param[in] ctx library context
+ * @param[in] tree root of tree where to add
+ * @param[in] str literal (string) to add
+ * @param[in] offs offset of where in literal adding should start
+ *
+ * @return NULL on error, otherwise pointer to deepest tree added
+ */
+struct ln_ptree*
+ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs);
 
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */
