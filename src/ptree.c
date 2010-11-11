@@ -238,7 +238,7 @@ static inline int
 checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
 	   struct ln_ptree **tree)
 {
-	int r = 1;
+	int r;
 	size_t i;
 	ln_fieldList_t *node;
 	struct ee_value *value;
@@ -265,8 +265,11 @@ checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
 		}
 		node = node->next;
 	}
+	r = 1; /* we failed! */
 
-done:	return r;
+done:
+	//ln_dbgprintf(ctx, "CheckFields returns %d\n", r);
+	return r;
 }
 
 
@@ -284,12 +287,12 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	while(tree != NULL && offs < es_strlen(str)) {
 		// TODO: implement commonPrefix
-		ln_dbgprintf(ctx, "traversePTree: tree %p, char %u", tree, c[offs]);
+		ln_dbgprintf(ctx, "normalize: tree %p, char '%c'", tree, c[offs]);
 		if(checkFields(ctx, str, event, &offs, &tree) == 1) {
 			/* field matching failed, on to next literal */
-			ln_dbgprintf(ctx, "traversePTree: trying literal tree %p, char %c", tree, c[offs]);
+			ln_dbgprintf(ctx, "normalize: trying literal tree %p, char '%c'", tree, c[offs]);
 			tree = tree->subtree[c[offs++]];
-			ln_dbgprintf(ctx, "traversePTree: next tree %p\n", tree);
+			ln_dbgprintf(ctx, "normalize: next tree %p", tree);
 		}
 	};
 
