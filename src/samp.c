@@ -92,6 +92,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	int done = 0;
 	char buf[10*1024]; /**< max size of log sample */ // TODO: make configurable
 	size_t lenBuf;
+	int parsedTo;
 
 	/* we ignore empty lines and lines that begin with "#" */
 	while(!done) {
@@ -131,6 +132,17 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	}
 
 	ln_dbgprintf(ctx, "actual sample is '%s'", buf+i);
+
+	struct ln_ptree* subtree;
+	int lenNew = lenBuf - i;
+	char *new = buf + i;
+	subtree = ln_traversePTree(ctx, ctx->ptree, new, lenNew, &parsedTo);
+		ln_dbgprintf(ctx, "parsed to %d", parsedTo);
+	if(parsedTo != lenNew) {
+		ln_addPTree(ctx, ctx->ptree, new+parsedTo, lenNew - parsedTo);
+	}
+
+	//ln_displayPTree(ctx, ctx->ptree, 0);
 done:
 	return samp;
 }

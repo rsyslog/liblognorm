@@ -52,7 +52,16 @@ ln_initCtx(void)
 
 	ctx->objID = ObjID_CTX;
 	ctx->dbgCB = NULL;
-	ctx->ptree = NULL;
+
+	/* we add an root for the empty word, this simplifies parse
+	 * tree handling.
+	 */
+	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
+		free(ctx);
+		ctx = NULL;
+		goto done;
+	}
+
 done:
 	return ctx;
 }

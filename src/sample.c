@@ -33,6 +33,7 @@
  */
 #include <stdio.h>
 #include "liblognorm.h"
+#include "lognorm.h" // TODO: remove!
 
 static ln_ctx ctx;
 
@@ -66,6 +67,8 @@ int main(int argc, char *argv[])
 
 	ln_loadSamples(ctx, argv[1]);
 
+printf("number of tree nodes: %d\n", ctx->nNodes);
+ln_displayPTree(ctx, ctx->ptree, 0);
 	ln_exitCtx(ctx);
 	return 0;
 }

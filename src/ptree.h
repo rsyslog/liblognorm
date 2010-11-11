@@ -59,7 +59,7 @@ struct ln_ptree {
 	 * where we ignore control characters. That should work quite well.
 	 * But we do not do this in the initial step.
 	 */
-	ln_ptree	*subtree[sizeof(char)];
+	ln_ptree	*subtree[256];
 };
 
 
@@ -70,10 +70,11 @@ struct ln_ptree {
  * @memberof ln_ptree
  *
  * @param[in] ctx current library context
+ * @param[in] parent parent node of the current tree (NULL if root)
  *
  * @return pointer to new node or NULL on error
  */
-struct ln_ptree* newPTreeNode(ln_ctx ctx);
+struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree* parent);
 
 
 /**
@@ -83,7 +84,7 @@ struct ln_ptree* newPTreeNode(ln_ctx ctx);
  * @param[in] ctx current library context
  * @param[in] tree pointer to ptree to free
  */
-void freePTreeNode(ln_ctx ctx, struct ln_ptree *tree);
+void ln_freePTree(ln_ctx ctx, struct ln_ptree *tree);
 
 
 /**
@@ -106,7 +107,7 @@ void freePTreeNode(ln_ctx ctx, struct ln_ptree *tree);
  *
  * @return pointer to found tree node or NULL if there was no match at all
  */
-void traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str, int lenStr,
-                   int *parsedTo);
+struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, char *str,
+                               int lenStr, int *parsedTo);
 
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

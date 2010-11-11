@@ -38,6 +38,7 @@ struct ln_ctx_s {
 		/**< user-provided debug output callback */
 	void *dbgCookie; /**< cookie to be passed to debug callback */
 	ln_ptree *ptree; /**< parse tree being used by this context */
+	unsigned nNodes; /**< number of nodes in our parse tree */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));
