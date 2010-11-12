@@ -246,8 +246,8 @@ checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
 
 	i = *offs;
 	node = (*tree)->froot;
-	ln_dbgprintf(ctx, "enter checkfields, node %p, offs %u, str %p",
-			node, (unsigned) i, str);
+//	ln_dbgprintf(ctx, "enter checkfields, node %p, offs %u, str %p",
+//			node, (unsigned) i, str);
 	while(node != NULL) {
 		cstr = es_str2cstr(node->name, NULL);
 		ln_dbgprintf(ctx, "trying parser for field '%s': %p",
@@ -287,12 +287,12 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	while(tree != NULL && offs < es_strlen(str)) {
 		// TODO: implement commonPrefix
-		ln_dbgprintf(ctx, "normalize: tree %p, char '%c'", tree, c[offs]);
+		//ln_dbgprintf(ctx, "normalize: tree %p, char '%c'", tree, c[offs]);
 		if(checkFields(ctx, str, event, &offs, &tree) == 1) {
 			/* field matching failed, on to next literal */
-			ln_dbgprintf(ctx, "normalize: trying literal tree %p, char '%c'", tree, c[offs]);
+			//ln_dbgprintf(ctx, "normalize: trying literal tree %p, char '%c'", tree, c[offs]);
 			tree = tree->subtree[c[offs++]];
-			ln_dbgprintf(ctx, "normalize: next tree %p", tree);
+			//ln_dbgprintf(ctx, "normalize: next tree %p", tree);
 		}
 	};
 

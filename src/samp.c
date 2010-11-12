@@ -152,11 +152,11 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 	}
 
 	if(!es_strconstcmp(*str, "date-rfc3164")) {
-ln_dbgprintf(ctx, "we have a date-rfc3164");
 		node->parser = ee_parseRFC3164Date;
 	} else if(!es_strconstcmp(*str, "number")) {
-ln_dbgprintf(ctx, "we have a number");
 		node->parser = ee_parseNumber;
+	} else if(!es_strconstcmp(*str, "word")) {
+		node->parser = ee_parseWord;
 	} else {
 		FAIL(LN_INVLDFDESCR);
 	}
