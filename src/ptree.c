@@ -86,19 +86,22 @@ ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, size_t *pa
 	struct ln_ptree *curr = subtree;
 	struct ln_ptree *prev = NULL;
 
+	ln_dbgprintf(ctx, "traversePTree: begin at %p", curr);
 	c = es_getBufAddr(str);
 	while(curr != NULL && i < es_strlen(str)) {
 		// TODO: implement commonPrefix
-		ln_dbgprintf(ctx, "traversePTree: curr %p, char %u", curr, c[i]);
+		ln_dbgprintf(ctx, "traversePTree: curr %p, char '%u'", curr, c[i]);
 		prev = curr;
 		curr = curr->subtree[c[i++]];
 	};
+	ln_dbgprintf(ctx, "traversePTree: after search %p", curr);
 
 	if(curr == NULL) {
 		curr = prev;
 	}
 
-	--i;
+	if(i == es_strlen(str))
+		--i;
 
 	*parsedTo = i;
 	ln_dbgprintf(ctx, "traversePTree: returns node %p, offset %u", curr, (unsigned) i);
@@ -135,26 +138,75 @@ done:	return r;
 }
 
 
+struct ln_ptree *
+ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str)
+{
+	struct ln_ptree *r;
+	unsigned char *c;
+	size_t i;
+	struct ln_ptree *curr = tree;
+
+	ln_dbgprintf(ctx, "buildPTree: begin at %p", curr);
+	c = es_getBufAddr(str);
+	for(i = 0 ; i < es_strlen(str) ;++i) {
+		// TODO: implement commonPrefix
+		ln_dbgprintf(ctx, "buildPTree: curr %p, i %d, char '%c'", curr, (int)i, c[i]);
+		if(curr->subtree[c[i]] == NULL)
+			break;	 /* last subtree found */
+
+		curr = curr->subtree[c[i]];
+	};
+	ln_dbgprintf(ctx, "buildPTree: after search, deepest tree %p", curr);
+
+	if(i == es_strlen(str)) {
+		r = curr;
+		goto done;
+	}
+	
+	/* we need to add nodes */
+	r = ln_addPTree(ctx, curr, str, i);
+
+done:	return r;
+}
+
+
 int 
-ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree *tree, ln_fieldList_t *node)
+ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node)
 {
 	int r;
+	ln_fieldList_t *curr;
 
-	assert(tree != NULL);
+	assert(tree != NULL);assert(*tree != NULL);
 	assert(node != NULL);
 
-	if((node->subtree = ln_newPTree(ctx, tree)) == NULL) {
+	if((node->subtree = ln_newPTree(ctx, *tree)) == NULL) {
 		r = -1;
 		goto done;
 	}
+	ln_dbgprintf(ctx, "got new subtree %p", node->subtree);
 
-	if(tree->froot == NULL) {
-		tree->froot = tree->ftail = node;
+	/* check if we already have this field, if so, merge
+	 * TODO: optimized, check logic
+	 */
+	for(curr = (*tree)->froot ; curr != NULL ; curr = curr->next) {
+		if(!es_strcmp(curr->name, node->name)) {
+			*tree = curr->subtree;
+			r = 0;
+			ln_dbgprintf(ctx, "merging with tree %p\n", *tree);
+			goto done;
+		}
+	}
+
+	if((*tree)->froot == NULL) {
+		(*tree)->froot = (*tree)->ftail = node;
 	} else {
-		tree->ftail->next = node;
-		tree->ftail = node;
+		(*tree)->ftail->next = node;
+		(*tree)->ftail = node;
 	}
 	r = 0;
+	ln_dbgprintf(ctx, "prev subtree %p", *tree);
+	*tree = node->subtree;
+	ln_dbgprintf(ctx, "new subtree %p", *tree);
 
 done:	return r;
 }
@@ -306,21 +358,17 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	while(tree != NULL && offs < es_strlen(str)) {
 		// TODO: implement commonPrefix
-		//ln_dbgprintf(ctx, "normalize: tree %p, char '%c'", tree, c[offs]);
 		if(checkFields(ctx, str, event, &offs, &tree) == 1) {
 			/* field matching failed, on to next literal */
-			//ln_dbgprintf(ctx, "normalize: trying literal tree %p, char '%c'", tree, c[offs]);
 			tree = tree->subtree[c[offs++]];
-			//ln_dbgprintf(ctx, "normalize: next tree %p", tree);
 		}
 	};
 
-	if(tree == NULL) {
+	if(tree == NULL && offs-1 < es_strlen(str)) {
 		/* we could not successfully parse, some unparsed items left */
-		ln_dbgprintf(ctx, "could not parse full string\n");
 		addUnparsedField(ctx, str, offs-1, event);
 	}
 	r = 0;
 
-done:	return r;
+	return r;
 }

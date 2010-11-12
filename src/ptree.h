@@ -113,7 +113,7 @@ void ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree);
  * 		field description node
  * @returns 0 on success, something else otherwise
  */
-int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree *tree, ln_fieldList_t *node);
+int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node);
 
 
 /**
@@ -160,4 +160,5 @@ ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs);
 #include <libee/libee.h>
 //TODO : find a correct place (and name)!
 int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
+struct ln_ptree * ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

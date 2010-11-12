@@ -68,6 +68,8 @@ normalize(void)
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
 		buf[strlen(buf)-1] = '\0';
+		if(buf[strlen(buf)-1] == '\r')
+			buf[strlen(buf)-1] = '\0';
 		printf("To normalize: '%s'\n", buf);
 		str = es_newStrFromCStr(buf, strlen(buf));
 		ln_normalize(ctx, str, &event);
@@ -108,7 +110,7 @@ int main(int argc, char *argv[])
 	ln_loadSamples(ctx, argv[1]);
 
 //printf("number of tree nodes: %d\n", ctx->nNodes);
-//ln_displayPTree(ctx, ctx->ptree, 0);
+ln_displayPTree(ctx, ctx->ptree, 0);
 fflush(stdout);
 
 	normalize();

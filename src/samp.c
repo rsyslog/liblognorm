@@ -111,6 +111,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 	size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
 
+ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
 	assert(subtree != NULL);
 	assert(buf != NULL);
 	assert(buf[i] == '%');
@@ -198,8 +199,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 
 
 	/* finished */
-	CHKR(ln_addFDescrToPTree(ctx, *subtree, node));
-	*subtree = node->subtree;
+	CHKR(ln_addFDescrToPTree(ctx, subtree, node));
 	*bufOffs = i;
 	r = 0;
 
@@ -251,11 +251,17 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 		free(cstr);
 	}
 
-	parsedTo = 0;
+	*subtree = ln_buildPTree(ctx, *subtree, *str);
+#if 0
 	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
-	if(parsedTo != es_strlen(*str)) {
+ln_dbgprintf(ctx, "in samp: ret tree %p, parsedTo %d / %d", newsubtree, (int)parsedTo, (int)es_strlen(*str));
+	if(parsedTo+1 != es_strlen(*str)) {
 		*subtree = ln_addPTree(ctx, newsubtree, *str, parsedTo);
+	} else {
+		if(newsubtree->subtree[es_getBufAddr(*str)[parsedTo]] != NULL)
+			*subtree = newsubtree->subtree[es_getBufAddr(*str)[parsedTo]];
 	}
+#endif
 	r = 0;
 	*bufOffs = i;
 
