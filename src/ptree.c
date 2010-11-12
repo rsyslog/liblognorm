@@ -281,49 +281,6 @@ done:	return r;
 }
 
 
-/* check fields, if any are present (fields take precedence over
- * literals).
- * Offset is only modified if some data could be processed.
- * @return 0 if a field was processed, 1 otherwise.
- */
-static inline int
-checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
-	   struct ln_ptree **tree)
-{
-	int r;
-	size_t i;
-	ln_fieldList_t *node;
-	struct ee_value *value;
-	char *cstr;
-
-	i = *offs;
-	node = (*tree)->froot;
-//	ln_dbgprintf(ctx, "enter checkfields, node %p, offs %u, str %p",
-//			node, (unsigned) i, str);
-	while(node != NULL) {
-		cstr = es_str2cstr(node->name, NULL);
-		//ln_dbgprintf(ctx, "trying parser for field '%s': %p", cstr, node->parser);
-		free(cstr);
-		if((r = node->parser(ctx->eectx, str, &i, node->data, &value)) == 0) {
-			/* got it! */
-			//ln_dbgprintf(ctx, "parser call was successful, offs now %u",
-				     //(unsigned) i);
-			CHKR(addField(ctx, event, node->name, value));
-			*offs = i;
-			*tree = node->subtree;
-			r = 0;
-			break;
-		}
-		node = node->next;
-	}
-	r = 1; /* we failed! */
-
-done:
-	//ln_dbgprintf(ctx, "CheckFields returns %d\n", r);
-	return r;
-}
-
-
 /**
  * add unparsed string to event.
  */
@@ -336,6 +293,12 @@ addUnparsedField(ln_ctx ctx, es_str_t *str, size_t offs, struct ee_event **event
 	int r;
 
 	CHKN(value = ee_newValue(ctx->eectx));
+	CHKN(namestr = es_newStrFromCStr("originalmsg", sizeof("originalmsg") - 1));
+	CHKN(valstr = es_strdup(str));
+	ee_setStrValue(value, valstr);
+	addField(ctx, event, namestr, value);
+
+	CHKN(value = ee_newValue(ctx->eectx));
 	CHKN(namestr = es_newStrFromCStr("unparsed-data", sizeof("unparsed-data") - 1));
 	CHKN(valstr = es_newStrFromSubStr(str, offs, es_strlen(str) - offs));
 	ee_setStrValue(value, valstr);
@@ -344,29 +307,74 @@ addUnparsedField(ln_ctx ctx, es_str_t *str, size_t offs, struct ee_event **event
 done:	return r;
 }
 
+
+/* Return number of characters left unparsed by following the subtree
+ */
+size_t
+ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs, struct ee_event **event)
+{
+	size_t r;
+	size_t i;
+	size_t left;
+	ln_fieldList_t *node;
+	struct ee_value *value;
+	char *cstr;
+	
+	if(offs == es_strlen(str)) {
+		r = 0;
+		goto done;
+	}
+
+	i = offs;
+	node = tree->froot;
+	r = es_strlen(str) - offs;
+	while(node != NULL) {
+		cstr = es_str2cstr(node->name, NULL);
+		ln_dbgprintf(ctx, "%d:trying parser for field '%s': %p", (int) offs, cstr, node->parser);
+		free(cstr);
+		if(node->parser(ctx->eectx, str, &i, node->data, &value) == 0) {
+			/* potential hit, need to verify */
+			ln_dbgprintf(ctx, "potential hit, trying subtree");
+			left = ln_normalizeRec(ctx, node->subtree, str, i, event);
+			if(left == 0) {
+				ln_dbgprintf(ctx, "%d: parser matches at %d", (int) offs, (int)i);
+				CHKR(addField(ctx, event, node->name, value));
+				r = 0;
+				goto done;
+			}
+			ln_dbgprintf(ctx, "%d nonmatch, backtracking required, left=%llu",
+					(int) offs, left);
+			if(left < r)
+				r = left;
+		}
+		node = node->next;
+	}
+
+	/* now let's see if we have a literal */
+	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
+		left = ln_normalizeRec(ctx, tree->subtree[es_getBufAddr(str)[offs]],
+				       str, offs + 1, event);
+		if(left < r)
+			r = left;
+	}
+
+	ln_dbgprintf(ctx, "%d returns %d", (int) offs, (int) r);
+done:	return r;
+}
+
+
 int
 ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 {
 	int r;
-	size_t offs;
-	struct ln_ptree *tree;
-	unsigned char *c;
+	size_t left;
 
-	offs = 0;
-	tree = ctx->ptree;
-	c = es_getBufAddr(str);
+	left = ln_normalizeRec(ctx, ctx->ptree, str, 0, event);
 
-	while(tree != NULL && offs < es_strlen(str)) {
-		// TODO: implement commonPrefix
-		if(checkFields(ctx, str, event, &offs, &tree) == 1) {
-			/* field matching failed, on to next literal */
-			tree = tree->subtree[c[offs++]];
-		}
-	};
-
-	if(tree == NULL && offs-1 < es_strlen(str)) {
+	ln_dbgprintf(ctx, "final result or normalizer: left %d", (int) left);
+	if(left != 0) {
 		/* we could not successfully parse, some unparsed items left */
-		addUnparsedField(ctx, str, offs-1, event);
+		addUnparsedField(ctx, str, left, event);
 	}
 	r = 0;
 

@@ -161,4 +161,5 @@ ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs);
 //TODO : find a correct place (and name)!
 int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
 struct ln_ptree * ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str);
+size_t ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

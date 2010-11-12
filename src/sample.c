@@ -73,6 +73,7 @@ normalize(void)
 		printf("To normalize: '%s'\n", buf);
 		str = es_newStrFromCStr(buf, strlen(buf));
 		ln_normalize(ctx, str, &event);
+		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
 		if(event != NULL){
 			es_emptyStr(str);
 			ee_fmtEventToJSON(event, &str);
@@ -103,7 +104,7 @@ int main(int argc, char *argv[])
 		errout("Could not initialize libee context");
 	}
 
-	ln_setDebugCB(ctx, dbgCallBack, NULL);
+	//ln_setDebugCB(ctx, dbgCallBack, NULL);
 	ln_setEECtx(ctx, eectx);
 	ln_enableDebug(ctx, 1);
 
