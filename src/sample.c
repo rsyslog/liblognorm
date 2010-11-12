@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
 	ln_loadSamples(ctx, argv[1]);
 
 //printf("number of tree nodes: %d\n", ctx->nNodes);
-ln_displayPTree(ctx, ctx->ptree, 0);
+//ln_displayPTree(ctx, ctx->ptree, 0);
 fflush(stdout);
 
 	normalize();

@@ -90,7 +90,9 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 /**
  * Extract a field description from a sample.
  * The field description is added to the tail of the current
- * subtree's field list.
+ * subtree's field list. The parse buffer must be position on the
+ * leading '%' that starts a field definition. It is a program error
+ * if this condition is not met.
  *
  * Note that we break up the object model and access ptree members
  * directly. Let's consider us a friend of ptree. This is necessary
@@ -111,7 +113,9 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 
 	assert(subtree != NULL);
 	assert(buf != NULL);
+	assert(buf[i] == '%');
 
+	++i;	/* "eat" ':' */
 	CHKN(node = malloc(sizeof(ln_fieldList_t)));
 	node->subtree = NULL;
 	node->next = NULL;
@@ -155,9 +159,17 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 		node->parser = ee_parseRFC3164Date;
 	} else if(!es_strconstcmp(*str, "number")) {
 		node->parser = ee_parseNumber;
+	} else if(!es_strconstcmp(*str, "ipv4")) {
+		node->parser = ee_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
 		node->parser = ee_parseWord;
+	} else if(!es_strconstcmp(*str, "char-to")) {
+		// TODO: check extra data!!!! (very important)
+		node->parser = ee_parseCharTo;
 	} else {
+		char *cstr = es_str2cstr(*str, NULL);
+		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
+		free(cstr);
 		FAIL(LN_INVLDFDESCR);
 	}
 
@@ -177,13 +189,13 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 			CHKR(es_addChar(&node->data, buf[i++]));
 		}
 		es_unescapeStr(node->data);
+		if(ctx->debug) {
+			cstr = es_str2cstr(node->data, NULL);
+			ln_dbgprintf(ctx, "parsed extra data: '%s'", cstr);
+			free(cstr);
+		}
 	}
 
-	if(ctx->debug) {
-		cstr = es_str2cstr(node->data, NULL);
-		ln_dbgprintf(ctx, "parsed extra data: '%s'", cstr);
-		free(cstr);
-	}
 
 	/* finished */
 	CHKR(ln_addFDescrToPTree(ctx, *subtree, node));
@@ -197,6 +209,16 @@ done:	return r;
 
 /**
  * Parse a Literal string out of the template and add it to the tree.
+ * @param[in] ctx the context
+ * @param[in/out] subtree on entry, current subtree, on exist newest
+ *    		deepest subtree
+ * @param[in] buf pointer to to-be-parsed buffer
+ * @param[in] lenBuf length of buffer
+ * @param[in/out] bufOffs parse pointer, up to which offset is parsed
+ * 		(is updated so that it points to first char after consumed
+ * 		string on exit).
+ * @param[out] str literal extracted (is empty, when no litral could be found)
+ * @return 0 on success, something else otherwise
  */
 static inline int
 parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
@@ -211,10 +233,10 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 	/* extract maximum length literal */
 	while(i < lenBuf) {
 		if(buf[i] == '%') {
-			++i;
-			if(i < lenBuf && buf[i] != '%') {
+			if(i+1 < lenBuf && buf[i+1] != '%') {
 				break; /* field start is end of literal */
 			}
+			++i;
 		}
 		CHKR(es_addChar(str, buf[i]));
 		++i;
@@ -270,7 +292,7 @@ addSampToTree(ln_ctx ctx, char *buf, size_t lenBuf)
 	i = 0;
 	while(i < lenBuf) {
 		CHKR(parseLiteral(ctx, &subtree, buf, lenBuf, &i, &str));
-		if(es_strlen(str) > 0) {
+		if(es_strlen(str) == 0) {
 			/* we had no literal, so let's parse a field description */
 			CHKR(parseFieldDescr(ctx, &subtree, buf, lenBuf, &i, &str));
 		}

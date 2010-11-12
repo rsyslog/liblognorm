@@ -49,7 +49,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(ee_ctx, es_str_t*, size_t*, struct ee_value**);
+	int (*parser)(ee_ctx, es_str_t*, size_t*, es_str_t*, struct ee_value**);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */

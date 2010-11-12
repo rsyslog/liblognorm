@@ -250,13 +250,12 @@ checkFields(ln_ctx ctx, es_str_t *str, struct ee_event **event, size_t *offs,
 //			node, (unsigned) i, str);
 	while(node != NULL) {
 		cstr = es_str2cstr(node->name, NULL);
-		ln_dbgprintf(ctx, "trying parser for field '%s': %p",
-			     cstr, node->parser);
+		//ln_dbgprintf(ctx, "trying parser for field '%s': %p", cstr, node->parser);
 		free(cstr);
-		if((r = node->parser(ctx->eectx, str, &i, &value)) == 0) {
+		if((r = node->parser(ctx->eectx, str, &i, node->data, &value)) == 0) {
 			/* got it! */
-			ln_dbgprintf(ctx, "parser call was successful, offs now %u",
-				     (unsigned) i);
+			//ln_dbgprintf(ctx, "parser call was successful, offs now %u",
+				     //(unsigned) i);
 			CHKR(addField(ctx, event, node->name, value));
 			*offs = i;
 			*tree = node->subtree;
@@ -272,6 +271,26 @@ done:
 	return r;
 }
 
+
+/**
+ * add unparsed string to event.
+ */
+static inline int
+addUnparsedField(ln_ctx ctx, es_str_t *str, size_t offs, struct ee_event **event)
+{
+	struct ee_value *value;
+	es_str_t *namestr;
+	es_str_t *valstr;
+	int r;
+
+	CHKN(value = ee_newValue(ctx->eectx));
+	CHKN(namestr = es_newStrFromCStr("unparsed-data", sizeof("unparsed-data") - 1));
+	CHKN(valstr = es_newStrFromSubStr(str, offs, es_strlen(str) - offs));
+	ee_setStrValue(value, valstr);
+	addField(ctx, event, namestr, value);
+	r = 0;
+done:	return r;
+}
 
 int
 ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
@@ -295,6 +314,13 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 			//ln_dbgprintf(ctx, "normalize: next tree %p", tree);
 		}
 	};
+
+	if(tree == NULL) {
+		/* we could not successfully parse, some unparsed items left */
+		ln_dbgprintf(ctx, "could not parse full string\n");
+		addUnparsedField(ctx, str, offs-1, event);
+	}
+	r = 0;
 
 done:	return r;
 }
