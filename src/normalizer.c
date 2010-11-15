@@ -33,6 +33,7 @@
  */
 #include <stdio.h>
 #include <string.h>
+#include <getopt.h>
 #include <libestr.h>
 #include <libee/libee.h>
 #include "liblognorm.h"
@@ -40,6 +41,9 @@
 
 static ln_ctx ctx;
 static ee_ctx eectx;
+
+static int verbose = 0;
+static enum { f_syslog, f_json, f_xml } outfmt = f_syslog;
 
 void
 dbgCallBack(void __attribute__((unused)) *cookie, char *msg,
@@ -76,7 +80,17 @@ normalize(void)
 		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
 		if(event != NULL){
 			es_emptyStr(str);
-			ee_fmtEventToJSON(event, &str);
+			switch(outfmt) {
+			case f_json:
+				ee_fmtEventToJSON(event, &str);
+				break;
+			case f_syslog:
+				ee_fmtEventToRFC5424(event, &str);
+				break;
+			case f_xml:
+				ee_fmtEventToXML(event, &str);
+				break;
+			}
 			cstr = es_str2cstr(str, NULL);
 			printf("normalized: '%s'\n", cstr);
 			free(cstr);
@@ -90,7 +104,28 @@ normalize(void)
 
 int main(int argc, char *argv[])
 {
-	if(argc != 2) {
+	int opt;
+	char *repository = NULL;
+	
+	while((opt = getopt(argc, argv, "o:r:v")) != -1) {
+		switch (opt) {
+		case 'v':
+			verbose = 1;
+			break;
+		case 'o': /* output format */
+			if(!strcmp(optarg, "json")) {
+				outfmt = f_json;
+			} else if(!strcmp(optarg, "xml")) {
+				outfmt = f_xml;
+			}
+			break;
+		case 'r': /* repository */
+			repository = optarg;
+			break;
+		}
+	}
+	
+	if(repository == NULL) {
 		errout("samples repository must be given");
 	}
 
@@ -108,7 +143,7 @@ int main(int argc, char *argv[])
 	ln_setEECtx(ctx, eectx);
 	ln_enableDebug(ctx, 1);
 
-	ln_loadSamples(ctx, argv[1]);
+	ln_loadSamples(ctx, repository);
 
 //printf("number of tree nodes: %d\n", ctx->nNodes);
 ln_displayPTree(ctx, ctx->ptree, 0);
