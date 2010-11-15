@@ -4,12 +4,12 @@ PTHREADS_CFLAGS = -pthread
 
 #CFLAGS += $(DEBUG)
 
-# we need to clean the sample up once we have reached a decent
+# we need to clean the normalizer up once we have reached a decent
 # milestone (latest at initial release!)
-bin_PROGRAMS = sample
-sample_SOURCES = sample.c
-sample_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
-sample_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+bin_PROGRAMS = normalizer
+normalizer_SOURCES = normalizer.c
+normalizer_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
+normalizer_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
 
 lib_LTLIBRARIES = liblognorm.la
 
