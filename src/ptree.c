@@ -350,6 +350,8 @@ ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs
 		node = node->next;
 	}
 
+char cc = es_getBufAddr(str)[offs];
+ln_dbgprintf(ctx, "%u no field, trying subtree char '%c': %p", offs, cc, tree->subtree[cc]);
 	/* now let's see if we have a literal */
 	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
 		left = ln_normalizeRec(ctx, tree->subtree[es_getBufAddr(str)[offs]],
@@ -374,7 +376,7 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 	ln_dbgprintf(ctx, "final result or normalizer: left %d", (int) left);
 	if(left != 0) {
 		/* we could not successfully parse, some unparsed items left */
-		addUnparsedField(ctx, str, left, event);
+		addUnparsedField(ctx, str, es_strlen(str) - left, event);
 	}
 	r = 0;
 

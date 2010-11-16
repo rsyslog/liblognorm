@@ -139,13 +139,15 @@ int main(int argc, char *argv[])
 		errout("Could not initialize libee context");
 	}
 
-	//ln_setDebugCB(ctx, dbgCallBack, NULL);
+	if(verbose)
+		ln_setDebugCB(ctx, dbgCallBack, NULL);
 	ln_setEECtx(ctx, eectx);
 	ln_enableDebug(ctx, 1);
 
 	ln_loadSamples(ctx, repository);
 
-//printf("number of tree nodes: %d\n", ctx->nNodes);
+	if(verbose)
+		printf("number of tree nodes: %d\n", ctx->nNodes);
 ln_displayPTree(ctx, ctx->ptree, 0);
 fflush(stdout);
 
