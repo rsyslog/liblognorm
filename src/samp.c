@@ -104,11 +104,11 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
  */
 static inline int
 parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
-	        size_t lenBuf, size_t *bufOffs, es_str_t **str)
+	        es_size_t lenBuf, es_size_t *bufOffs, es_str_t **str)
 {
 	int r;
 	ln_fieldList_t *node;
-	size_t i = *bufOffs;
+	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
 
 ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
@@ -168,7 +168,7 @@ ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
 		// TODO: check extra data!!!! (very important)
 		node->parser = ee_parseCharTo;
 	} else {
-		char *cstr = es_str2cstr(*str, NULL);
+		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
 		free(cstr);
 		FAIL(LN_INVLDFDESCR);
@@ -222,11 +222,11 @@ done:	return r;
  */
 static inline int
 parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
-	     size_t lenBuf, size_t *bufOffs, es_str_t **str)
+	     es_size_t lenBuf, es_size_t *bufOffs, es_str_t **str)
 {
 	int r;
-	size_t i = *bufOffs;
-	size_t parsedTo;
+	es_size_t i = *bufOffs;
+	es_size_t parsedTo;
 	struct ln_ptree *newsubtree;
 
 	es_emptyStr(*str);
@@ -284,14 +284,14 @@ done:	return r;
  * @returns the new subtree root (or NULL in case of error)
  */
 static inline int
-addSampToTree(ln_ctx ctx, char *buf, size_t lenBuf)
+addSampToTree(ln_ctx ctx, char *buf, es_size_t lenBuf)
 {
 	int r;
 	struct ln_ptree* subtree;
 	es_str_t *str;
-	size_t i;
+	es_size_t i;
 
-	ln_dbgprintf(ctx, "actual sample is '%s'", buf+i);
+	ln_dbgprintf(ctx, "actual sample is '%s'", buf);
 
 	subtree = ctx->ptree;
 	CHKN(str = es_newStr(256));
@@ -315,7 +315,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	unsigned i;
 	int done = 0;
 	char buf[10*1024]; /**< max size of log sample */ // TODO: make configurable
-	size_t lenBuf;
+	es_size_t lenBuf;
 
 	/* we ignore empty lines and lines that begin with "#" */
 	while(!done) {

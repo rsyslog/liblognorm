@@ -72,7 +72,7 @@ normalize(void)
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
 		buf[strlen(buf)-1] = '\0';
-		if(buf[strlen(buf)-1] == '\r')
+		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
 			buf[strlen(buf)-1] = '\0';
 		printf("To normalize: '%s'\n", buf);
 		str = es_newStrFromCStr(buf, strlen(buf));

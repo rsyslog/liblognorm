@@ -55,7 +55,7 @@ void
 ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree)
 {
 	ln_fieldList_t *node, *nodeDel;
-	size_t i;
+	es_size_t i;
 
 	if(tree == NULL)
 		goto done;
@@ -79,9 +79,9 @@ done:	return;
 
 
 struct ln_ptree*
-ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, size_t *parsedTo)
+ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, es_size_t *parsedTo)
 {
-	size_t i = 0;
+	es_size_t i = 0;
 	unsigned char *c;
 	struct ln_ptree *curr = subtree;
 	struct ln_ptree *prev = NULL;
@@ -110,7 +110,7 @@ ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree, es_str_t *str, size_t *pa
 
 
 struct ln_ptree *
-ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs)
+ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs)
 {
 	struct ln_ptree *r;
 	struct ln_ptree *new;
@@ -143,7 +143,7 @@ ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str)
 {
 	struct ln_ptree *r;
 	unsigned char *c;
-	size_t i;
+	es_size_t i;
 	struct ln_ptree *curr = tree;
 
 	ln_dbgprintf(ctx, "buildPTree: begin at %p", curr);
@@ -285,7 +285,7 @@ done:	return r;
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(ln_ctx ctx, es_str_t *str, size_t offs, struct ee_event **event)
+addUnparsedField(ln_ctx ctx, es_str_t *str, es_size_t offs, struct ee_event **event)
 {
 	struct ee_value *value;
 	es_str_t *namestr;
@@ -310,12 +310,12 @@ done:	return r;
 
 /* Return number of characters left unparsed by following the subtree
  */
-size_t
-ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs, struct ee_event **event)
+es_size_t
+ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event)
 {
-	size_t r;
-	size_t i;
-	size_t left;
+	es_size_t r;
+	es_size_t i;
+	es_size_t left;
 	ln_fieldList_t *node;
 	struct ee_value *value;
 	char *cstr;
@@ -342,8 +342,8 @@ ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs, s
 				r = 0;
 				goto done;
 			}
-			ln_dbgprintf(ctx, "%d nonmatch, backtracking required, left=%llu",
-					(int) offs, left);
+			ln_dbgprintf(ctx, "%d nonmatch, backtracking required, left=%d",
+					(int) offs, (int)left);
 			if(left < r)
 				r = left;
 		}
@@ -367,7 +367,7 @@ int
 ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 {
 	int r;
-	size_t left;
+	es_size_t left;
 
 	left = ln_normalizeRec(ctx, ctx->ptree, str, 0, event);
 

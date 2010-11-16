@@ -49,7 +49,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(ee_ctx, es_str_t*, size_t*, es_str_t*, struct ee_value**);
+	int (*parser)(ee_ctx, es_str_t*, es_size_t*, es_str_t*, struct ee_value**);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
@@ -138,7 +138,7 @@ int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node
  * @return pointer to found tree node or NULL if there was no match at all
  */
 struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
-                               es_str_t *str, size_t *parsedTo);
+                               es_str_t *str, es_size_t *parsedTo);
 
 
 
@@ -155,11 +155,11 @@ struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
  * @return NULL on error, otherwise pointer to deepest tree added
  */
 struct ln_ptree*
-ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs);
+ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs);
 
 #include <libee/libee.h>
 //TODO : find a correct place (and name)!
 int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
 struct ln_ptree * ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str);
-size_t ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, size_t offs, struct ee_event **event);
+es_size_t ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

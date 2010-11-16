@@ -30,8 +30,7 @@
  */
 #ifndef LIBLOGNORM_SAMPLES_H_INCLUDED
 #define	LIBLOGNORM_SAMPLES_H_INCLUDED
-#include <stdlib.h>	/* we need size_t */
-#include <stdio.h>	/* we need size_t */
+#include <stdio.h>	/* we need es_size_t */
 #include <libestr.h>
 
 
