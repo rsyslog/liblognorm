@@ -163,7 +163,7 @@ ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
  * @param tree ptree to display
  * @param level recursion level, must be set to 0 on initial call
  */
-void ln_displayPTRee(struct ln_ptree *tree, int level);
+void ln_displayPTree(struct ln_ptree *tree, int level);
 
 #include <libee/libee.h>
 //TODO : find a correct place (and name)!

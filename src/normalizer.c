@@ -37,7 +37,8 @@
 #include <libestr.h>
 #include <libee/libee.h>
 #include "liblognorm.h"
-#include "lognorm.h" // TODO: remove!
+#include "ptree.h"
+#include "lognorm.h"
 
 static ln_ctx ctx;
 static ee_ctx eectx;
