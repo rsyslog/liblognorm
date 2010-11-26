@@ -44,7 +44,6 @@
 static inline unsigned char*
 prefixBase(struct ln_ptree *tree)
 {
-	assert(tree != NULL);
 	return (tree->lenPrefix < sizeof(tree->prefix))
 	       ? tree->prefix.data : tree->prefix.ptr;
 }
@@ -142,7 +141,6 @@ ln_dbgprintf(tree->ctx, "setPrefix lenBuf %u, offs %d", lenBuf, offs);
 	if(tree->lenPrefix > sizeof(tree->prefix)) {
 		/* too-large for standard buffer, need to alloc one */
 		if((tree->prefix.ptr = malloc(tree->lenPrefix * sizeof(unsigned char))) == NULL) {
-			free(tree);
 			r = LN_NOMEM;
 			goto done; /* fail! */
 		}
@@ -252,6 +250,7 @@ splitTree(struct ln_ptree *tree, unsigned short offs)
 {
 	unsigned char *c;
 	struct ln_ptree *r;
+	unsigned short newlen;
 	ln_ptree **newparentptr;	 /**< pointer in parent that needs to be updated */
 
 	assert(offs < tree->lenPrefix);
@@ -263,6 +262,7 @@ splitTree(struct ln_ptree *tree, unsigned short offs)
 	 * care of inside the "branch table".
 	 */
 	c = prefixBase(tree);
+//ln_dbgprintf(tree->ctx, "splitTree new bb, *(c+offs): '%s'", c);
 	if(setPrefix(r, c, offs, 0) != 0) {
 		ln_deletePTree(r);
 		r = NULL;
@@ -277,15 +277,17 @@ ln_dbgprintf(tree->ctx, "splitTree new tree %p lenPrefix=%u, char '%c'", r, r->l
 	r->subtree[c[offs]] = tree;
 
 	/* finally fix existing common prefix */
-	if(tree->lenPrefix > sizeof(tree->prefix) && (offs <= sizeof(tree->prefix))) {
+	newlen = tree->lenPrefix - offs - 1;
+	if(tree->lenPrefix > sizeof(tree->prefix) && (newlen <= sizeof(tree->prefix))) {
 		/* note: c is a different pointer; the original
 		 * pointer is overwritten by memcpy! */
-ln_dbgprintf(tree->ctx, "splitTree new case one bb");
-		memcpy(tree->prefix.data, c+offs, tree->lenPrefix - offs - 1);
+ln_dbgprintf(tree->ctx, "splitTree new case one bb, offs %u, lenPrefix %u, newlen %u", offs, tree->lenPrefix, newlen);
+//ln_dbgprintf(tree->ctx, "splitTree new case one bb, *(c+offs): '%s'", c);
+		memcpy(tree->prefix.data, c+offs+1, newlen);
 		free(c);
 	} else {
-ln_dbgprintf(tree->ctx, "splitTree new case two bb, offs=%u", offs);
-		memmove(tree->prefix.data, tree->prefix.data+offs+1, tree->lenPrefix - offs - 1);
+ln_dbgprintf(tree->ctx, "splitTree new case two bb, offs=%u, newlen %u", offs, newlen);
+		memmove(c, c+offs+1, newlen);
 	}
 	tree->lenPrefix = tree->lenPrefix - offs - 1;
 
