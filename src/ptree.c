@@ -158,17 +158,17 @@ done:	return r;
 
 
 /**
- * Check if the provided tree is a true leaf. This means that it
- * does not contain any subtrees of any kind.
+ * Check if the provided tree is a leaf. This means that it
+ * does not contain any subtrees.
  * @return 1 if it is a leaf, 0 otherwise
  */
 static inline int
-isTrueLeaf(struct ln_ptree *tree)
+isLeaf(struct ln_ptree *tree)
 {
 	int r = 0;
 	int i;
 
-	if(tree->froot != NULL || tree->lenPrefix > 0)
+	if(tree->froot != NULL)
 		goto done;
 	
 	for(i = 0 ; i < 256 ; ++i) {
@@ -178,6 +178,18 @@ isTrueLeaf(struct ln_ptree *tree)
 	r = 1;
 
 done:	return r;
+}
+
+
+/**
+ * Check if the provided tree is a true leaf. This means that it
+ * does not contain any subtrees of any kind and no prefix.
+ * @return 1 if it is a leaf, 0 otherwise
+ */
+static inline int
+isTrueLeaf(struct ln_ptree *tree)
+{
+	return((tree->lenPrefix == 0) && isLeaf(tree));
 }
 
 
@@ -448,6 +460,74 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 		free(cstr);
 		ln_displayPTree(node->subtree, level + 1);
 	}
+}
+
+
+/* the following is a quick hack, which should be moved to the
+ * string class.
+ */
+static inline void dotAddPtr(es_str_t **str, void *p)
+{
+	char buf[64];
+	int i;
+	i = snprintf(buf, sizeof(buf), "%llu", (unsigned long long) p);
+	es_addBuf(str, buf, i);
+}
+/**
+ * recursive handler for DOT graph generator.
+ */
+static void
+ln_genDotPTreeGraphRec(struct ln_ptree *tree, es_str_t **str)
+{
+	int i;
+	ln_fieldList_t *node;
+
+
+	dotAddPtr(str, tree);
+	es_addBufConstcstr(str, " [label=\"");
+	if(tree->lenPrefix > 0) {
+		es_addChar(str, '\'');
+		es_addBuf(str, (char*) prefixBase(tree), tree->lenPrefix);
+		es_addChar(str, '\'');
+	}
+	es_addBufConstcstr(str, "\"");
+	if(isLeaf(tree)) {
+		es_addBufConstcstr(str, " style=\"bold\"");
+	}
+	es_addBufConstcstr(str, "]\n");
+
+	/* display char subtrees */
+	for(i = 0 ; i < 256 ; ++i) {
+		if(tree->subtree[i] != NULL) {
+			dotAddPtr(str, tree);
+			es_addBufConstcstr(str, " -> ");
+			dotAddPtr(str, tree->subtree[i]);
+			es_addBufConstcstr(str, " [label=\"");
+			es_addChar(str, (char) i);
+			es_addBufConstcstr(str, "\"]\n");
+			ln_genDotPTreeGraphRec(tree->subtree[i], str);
+		}
+	}
+
+	/* display field subtrees */
+	for(node = tree->froot ; node != NULL ; node = node->next ) {
+		dotAddPtr(str, tree);
+		es_addBufConstcstr(str, " -> ");
+		dotAddPtr(str, node->subtree);
+		es_addBufConstcstr(str, " [label=\"");
+		es_addStr(str, node->name);
+		es_addBufConstcstr(str, "\" style=\"dotted\"]\n");
+		ln_genDotPTreeGraphRec(node->subtree, str);
+	}
+}
+
+
+void
+ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
+{
+	es_addBufConstcstr(str, "digraph ptree {\n");
+	ln_genDotPTreeGraphRec(tree, str);
+	es_addBufConstcstr(str, "}\n");
 }
 
 

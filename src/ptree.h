@@ -166,6 +166,22 @@ ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
  */
 void ln_displayPTree(struct ln_ptree *tree, int level);
 
+
+/**
+ * Generate a DOT graph.
+ * Well, actually it does not generate the graph itself, but a
+ * control file that is suitable for the GNU DOT tool. Such a file
+ * can be very useful to understand complex sample databases
+ * (not to mention that it is probably fun for those creating
+ * samples).
+ * The dot commands are appended to the provided string.
+ *
+ * @param[in] tree ptree to display
+ * @param[out] str string which receives the DOT commands.
+ */
+void ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str);
+
+
 /**
  * Build a ptree based on the provided string, but only if necessary.
  * The passed-in tree is searched and traversed for str. If a node exactly

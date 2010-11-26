@@ -44,6 +44,7 @@ static ln_ctx ctx;
 static ee_ctx eectx;
 
 static int verbose = 0;
+static FILE *fpDOT;
 static enum { f_syslog, f_json, f_xml } outfmt = f_syslog;
 
 void
@@ -103,13 +104,35 @@ normalize(void)
 }
 
 
+/**
+ * Generate a command file for the GNU DOT tools.
+ */
+static void
+genDOT()
+{
+	es_str_t *str;
+
+	str = es_newStr(1024);
+	ln_genDotPTreeGraph(ctx->ptree, &str);
+	fwrite(es_getBufAddr(str), 1, es_strlen(str), fpDOT);
+}
+
+
 int main(int argc, char *argv[])
 {
 	int opt;
 	char *repository = NULL;
 	
-	while((opt = getopt(argc, argv, "o:r:v")) != -1) {
+	while((opt = getopt(argc, argv, "d:o:r:v")) != -1) {
 		switch (opt) {
+		case 'd': /* generate DOT file */
+			if(!strcmp(optarg, "")) {
+				fpDOT = stdout;
+			} else {
+				if((fpDOT = fopen(optarg, "w")) == NULL) {
+					errout("cannot open DOT file");
+				}
+			}
 		case 'v':
 			verbose = 1;
 			break;
@@ -130,8 +153,6 @@ int main(int argc, char *argv[])
 		errout("samples repository must be given");
 	}
 
-	printf("Using liblognorm version %s.\n", ln_version());
-
 	if((ctx = ln_initCtx()) == NULL) {
 		errout("Could not initialize liblognorm context");
 	}
@@ -150,6 +171,11 @@ int main(int argc, char *argv[])
 
 	if(verbose)
 		printf("number of tree nodes: %d\n", ctx->nNodes);
+
+	if(fpDOT != NULL) {
+		genDOT();
+		exit(1);
+	}
 ln_displayPTree(ctx->ptree, 0);
 fflush(stdout);
 
