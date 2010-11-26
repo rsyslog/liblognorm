@@ -51,19 +51,14 @@ prefixBase(struct ln_ptree *tree)
 
 
 struct ln_ptree*
-ln_newPTree(ln_ctx ctx, struct ln_ptree *parent)
+ln_newPTree(ln_ctx ctx, struct ln_ptree **parentptr)
 {
-	printf("newTree: parent: %p\n", parent);
-	if(parent != NULL)
-		printf("newTree: parent->ctx: %p, ctx: %p\n", parent->ctx, ctx);
-fflush(stdout);
-	assert((parent == NULL) || (parent->ctx == ctx));
 	struct ln_ptree *tree;
 
 	if((tree = calloc(1, sizeof(struct ln_ptree))) == NULL)
 		goto done;
 	
-	tree->parent = parent;
+	tree->parentptr = parentptr;
 	tree->ctx = ctx;
 	ctx->nNodes++;
 done:	return tree;
@@ -132,11 +127,80 @@ ln_traversePTree(struct ln_ptree *subtree, es_str_t *str, es_size_t *parsedTo)
 }
 
 
+
+/**
+ * Set the common prefix inside a note, taking into account the subtle
+ * issues associated with it.
+ * @return 0 on success, something else otherwise
+ */
+static int
+setPrefix(struct ln_ptree *tree, unsigned char *buf, es_size_t lenBuf, es_size_t offs)
+{
+	int r;
+ln_dbgprintf(tree->ctx, "setPrefix lenBuf %u, offs %d", lenBuf, offs); 
+	tree->lenPrefix = lenBuf - offs;
+	if(tree->lenPrefix > sizeof(tree->prefix)) {
+		/* too-large for standard buffer, need to alloc one */
+		if((tree->prefix.ptr = malloc(tree->lenPrefix * sizeof(unsigned char))) == NULL) {
+			free(tree);
+			r = LN_NOMEM;
+			goto done; /* fail! */
+		}
+		memcpy(tree->prefix.ptr, buf, tree->lenPrefix);
+	} else {
+		/* note: r->lenPrefix may be 0, but that is OK */
+		memcpy(tree->prefix.data, buf, tree->lenPrefix);
+	}
+	r = 0;
+
+done:	return r;
+}
+
+
+/**
+ * Check if the provided tree is a true leaf. This means that it
+ * does not contain any subtrees of any kind.
+ * @return 1 if it is a leaf, 0 otherwise
+ */
+static inline int
+isTrueLeaf(struct ln_ptree *tree)
+{
+	int r = 0;
+	int i;
+
+	if(tree->froot != NULL || tree->lenPrefix > 0)
+		goto done;
+	
+	for(i = 0 ; i < 256 ; ++i) {
+		if(tree->subtree[i] != NULL)
+			goto done;
+	}
+	r = 1;
+
+done:	return r;
+}
+
+
 struct ln_ptree *
 ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs)
 {
 	struct ln_ptree *r;
-	struct ln_ptree *new;
+	struct ln_ptree **parentptr;	 /**< pointer in parent that needs to be updated */
+
+ln_dbgprintf(tree->ctx, "addPTree: offs %u", offs);
+	parentptr = &(tree->subtree[es_getBufAddr(str)[offs]]);
+	/* First check if tree node is totaly empty. If so, we can simply add
+	 * the prefix to this node. This case is important, because it happens
+	 * every time with a new field.
+	 */
+	if(isTrueLeaf(tree)) {
+		if(setPrefix(tree, es_getBufAddr(str), es_strlen(str), offs) != 0) {
+			r = NULL;
+		} else {
+			r = tree;
+		}
+		goto done;
+	}
 
 	if(tree->ctx->debug) {
 		char * cstr = es_str2cstr(str, NULL);
@@ -145,50 +209,149 @@ ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs)
 		free(cstr);
 	}
 
-	if((new = ln_newPTree(tree->ctx, tree)) == NULL) {
+	if((r = ln_newPTree(tree->ctx, parentptr)) == NULL)
+		goto done;
+
+	if(setPrefix(r, es_getBufAddr(str) + offs + 1, es_strlen(str) - offs - 1, 0) != 0) {
+		free(r);
 		r = NULL;
 		goto done;
 	}
 
-	tree->subtree[es_getBufAddr(str)[offs]] = new;
-	if(offs + 1 < es_strlen(str)) { /* need another recursion step? */
-		r = ln_addPTree(new, str, offs + 1);
-	} else {
-		r = new;
+	*parentptr = r;
+
+done:	return r;
+}
+
+
+/**
+ * Split the provided tree (node) into two at the provided index into its
+ * common prefix. This function exists to support splitting nodes when
+ * a mismatch in the common prefix requires that. This function more or less
+ * keeps the tree as it is, just changes the structure. No new node is added.
+ * Usually, it is desired to add a new node. This must be made afterwards.
+ * Note that we need to create a new tree *in front of* the current one, as 
+ * the current one contains field etc. subtree pointers.
+ * @param[in] tree tree to split
+ * @param[in] offs offset into common prefix (must be less than prefix length!)
+ */
+static inline struct ln_ptree*
+splitTree(struct ln_ptree *tree, unsigned short offs)
+{
+	unsigned char *c;
+	struct ln_ptree *r;
+	ln_ptree **newparentptr;	 /**< pointer in parent that needs to be updated */
+
+	assert(offs < tree->lenPrefix);
+	if((r = ln_newPTree(tree->ctx, tree->parentptr)) == NULL)
+		goto done;
+
+	ln_dbgprintf(tree->ctx, "splitTree %p at offs %u", tree, offs);
+	/* note: the overall prefix is reduced by one char, which is now taken
+	 * care of inside the "branch table".
+	 */
+	c = prefixBase(tree);
+	if(setPrefix(r, c, offs, 0) != 0) {
+		ln_deletePTree(r);
+		r = NULL;
+		goto done; /* fail! */
 	}
+
+ln_dbgprintf(tree->ctx, "splitTree new tree %p lenPrefix=%u, char '%c'", r, r->lenPrefix, r->prefix.data[0]);
+	/* add the proper branch table entry for the new node. must be done
+	 * here, because the next step will destroy the required index char!
+	 */
+	newparentptr = &(r->subtree[c[offs]]);
+	r->subtree[c[offs]] = tree;
+
+	/* finally fix existing common prefix */
+	if(tree->lenPrefix > sizeof(tree->prefix) && (offs <= sizeof(tree->prefix))) {
+		/* note: c is a different pointer; the original
+		 * pointer is overwritten by memcpy! */
+ln_dbgprintf(tree->ctx, "splitTree new case one bb");
+		memcpy(tree->prefix.data, c+offs, tree->lenPrefix - offs - 1);
+		free(c);
+	} else {
+ln_dbgprintf(tree->ctx, "splitTree new case two bb, offs=%u", offs);
+		memmove(tree->prefix.data, tree->prefix.data+offs+1, tree->lenPrefix - offs - 1);
+	}
+	tree->lenPrefix = tree->lenPrefix - offs - 1;
+
+	if(tree->parentptr == 0)
+		tree->ctx->ptree = r;	/* root does not have a parent! */
+	else
+		*(tree->parentptr) = r;
+	tree->parentptr = newparentptr;
 
 done:	return r;
 }
 
 
 struct ln_ptree *
-ln_buildPTree(struct ln_ptree *tree, es_str_t *str)
+ln_buildPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs)
 {
 	struct ln_ptree *r;
 	unsigned char *c;
+	unsigned char *cpfix;
 	es_size_t i;
-	struct ln_ptree *curr = tree;
+	unsigned short ipfix;
 
-	ln_dbgprintf(tree->ctx, "buildPTree: begin at %p", curr);
+	assert(tree != NULL);
+	ln_dbgprintf(tree->ctx, "buildPTree: begin at %p, offs %u", tree, offs);
 	c = es_getBufAddr(str);
-	for(i = 0 ; i < es_strlen(str) ;++i) {
-		// TODO: implement commonPrefix
-		ln_dbgprintf(tree->ctx, "buildPTree: curr %p, i %d, char '%c'", curr, (int)i, c[i]);
-		if(curr->subtree[c[i]] == NULL)
-			break;	 /* last subtree found */
 
-		curr = curr->subtree[c[i]];
-	};
-	ln_dbgprintf(tree->ctx, "buildPTree: after search, deepest tree %p", curr);
-
-	if(i == es_strlen(str)) {
-		r = curr;
-		goto done;
+	/* check if the prefix matches and, if not, at what offset it is different */
+	ipfix = 0;
+	cpfix = prefixBase(tree);
+	for(  i = offs
+	    ; (i < es_strlen(str)) && (ipfix < tree->lenPrefix) && (c[i] == cpfix[ipfix])
+	    ; ++i, ++ipfix) {
+	    	; /*DO NOTHING - just find end of match */
+		ln_dbgprintf(tree->ctx, "buildPTree: tree %p, i %d, char '%c'", tree, (int)i, c[i]);
 	}
-	
-	/* we need to add nodes */
-	r = ln_addPTree(curr, str, i);
 
+	/* if we reach this point, we have processed as much of the common prefix
+	 * as we could. The following code now does the proper actions based on
+	 * the possible cases.
+	 */
+	if(i == es_strlen(str)) {
+		/* all of our input is consumed, no more recursion */
+		if(ipfix == tree->lenPrefix) {
+			ln_dbgprintf(tree->ctx, "case 1.1");
+			/* exact match, we are done! */
+			r = tree;
+		} else {
+			ln_dbgprintf(tree->ctx, "case 1.2");
+			/* we need to split the node at the current position */
+			r = splitTree(tree, ipfix);
+		}
+	} else if(ipfix < tree->lenPrefix) {
+			ln_dbgprintf(tree->ctx, "case 2, i=%u, ipfix=%u", i, ipfix);
+			/* we need to split the node at the current position */
+			if((r = splitTree(tree, ipfix)) == NULL)
+				goto done; /* fail */
+ln_dbgprintf(tree->ctx, "pre addPTree: i %u", i);
+			if((r = ln_addPTree(r, str, i)) == NULL)
+				goto done;
+			//r = ln_buildPTree(r, str, i + 1);
+	} else {
+		/* we could consume the current common prefix, but now need
+		 * to traverse the rest of the tree based on the next char.
+		 */
+		if(tree->subtree[c[i]] == NULL) {
+			ln_dbgprintf(tree->ctx, "case 3.1");
+			/* non-match, need new subtree */
+			r = ln_addPTree(tree, str, i);
+		} else {
+			ln_dbgprintf(tree->ctx, "case 3.2");
+			/* match, follow subtree */
+			r = ln_buildPTree(tree->subtree[c[i]], str, i + 1);
+		}
+	}
+
+ln_dbgprintf(tree->ctx, "---------------------------------------");
+ln_displayPTree(tree, 0);
+ln_dbgprintf(tree->ctx, "=======================================");
 done:	return r;
 }
 
@@ -202,7 +365,7 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 	assert(tree != NULL);assert(*tree != NULL);
 	assert(node != NULL);
 
-	if((node->subtree = ln_newPTree((*tree)->ctx, *tree)) == NULL) {
+	if((node->subtree = ln_newPTree((*tree)->ctx, &node->subtree)) == NULL) {
 		r = -1;
 		goto done;
 	}
@@ -241,6 +404,7 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 	int i;
 	int nChildLit;
 	int nChildField;
+	es_str_t *str;
 	char *cstr;
 	ln_fieldList_t *node;
 	char indent[2048];
@@ -262,8 +426,13 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 		}
 	}
 
-	ln_dbgprintf(tree->ctx, "%ssubtree %p (children: %d literals, %d fields)",
-		     indent, tree, nChildLit, nChildField);
+	str = es_newStr(sizeof(tree->prefix));
+	es_addBuf(&str, (char*) prefixBase(tree), tree->lenPrefix);
+	cstr = es_str2cstr(str, NULL);
+	es_deleteStr(str);
+	ln_dbgprintf(tree->ctx, "%ssubtree %p (prefix: '%s', children: %d literals, %d fields)",
+		     indent, tree, cstr, nChildLit, nChildField);
+	free(cstr);
 	/* display char subtrees */
 	for(i = 0 ; i < 256 ; ++i) {
 		if(tree->subtree[i] != NULL) {
@@ -331,7 +500,17 @@ done:	return r;
 }
 
 
-/* Return number of characters left unparsed by following the subtree
+/**
+ * Recursive step of the normalizer. It walks the parse tree and calls itself
+ * recursively when this is appropriate. It also implements backtracking in
+ * those (hopefully rare) cases where it is required.
+ *
+ * @param[in] tree current tree to process
+ * @param[in] string string to be matched against (the to-be-normalized data)
+ * @param[in] offs start position in input data
+ * @param[in/out] event handle to event that is being created during normalization
+ *
+ * @return number of characters left unparsed by following the subtree
  */
 es_size_t
 ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event)
@@ -342,19 +521,46 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	ln_fieldList_t *node;
 	struct ee_value *value;
 	char *cstr;
+	unsigned char *c;
+	unsigned char *cpfix;
+	unsigned ipfix;
 	
+ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u", (int) offs, es_strlen(str));
+	if(offs >= es_strlen(str)) {
+		r = 0;
+		goto done;
+	}
+ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) offs, es_strlen(str));
+
+	c = es_getBufAddr(str);
+	cpfix = prefixBase(tree);
+	node = tree->froot;
+	r = es_strlen(str) - offs;
+	/* first we need to check if the common prefix matches (and consume input data while we do) */
+	ipfix = 0;
+	while(offs < es_strlen(str) && ipfix < tree->lenPrefix) {
+		ln_dbgprintf(tree->ctx, "%d: prefix compare '%c', '%c'", (int) offs, c[offs], cpfix[ipfix]);
+		if(c[offs] != cpfix[ipfix]) {
+			r -= ipfix;
+			goto done;
+		}
+		++offs, ++ipfix;
+	}
+	r -= ipfix;
+	ln_dbgprintf(tree->ctx, "%d: prefix compare succeeded, still valid", (int) offs);
+
 	if(offs == es_strlen(str)) {
 		r = 0;
 		goto done;
 	}
 
-	i = offs;
-	node = tree->froot;
-	r = es_strlen(str) - offs;
+
+	/* now try the parsers */
 	while(node != NULL) {
 		cstr = es_str2cstr(node->name, NULL);
 		ln_dbgprintf(tree->ctx, "%d:trying parser for field '%s': %p", (int) offs, cstr, node->parser);
 		free(cstr);
+		i = offs;
 		if(node->parser(tree->ctx->eectx, str, &i, node->data, &value) == 0) {
 			/* potential hit, need to verify */
 			ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
@@ -373,8 +579,12 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 		node = node->next;
 	}
 
-char cc = es_getBufAddr(str)[offs];
+if(offs < es_strlen(str)) {
+unsigned char cc = es_getBufAddr(str)[offs];
 ln_dbgprintf(tree->ctx, "%u no field, trying subtree char '%c': %p", offs, cc, tree->subtree[cc]);
+} else {
+ln_dbgprintf(tree->ctx, "%u no field, offset already beyond end", offs);
+}
 	/* now let's see if we have a literal */
 	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
 		left = ln_normalizeRec(tree->subtree[es_getBufAddr(str)[offs]],
@@ -383,8 +593,9 @@ ln_dbgprintf(tree->ctx, "%u no field, trying subtree char '%c': %p", offs, cc, t
 			r = left;
 	}
 
+done:
 	ln_dbgprintf(tree->ctx, "%d returns %d", (int) offs, (int) r);
-done:	return r;
+	return r;
 }
 
 

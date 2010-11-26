@@ -226,8 +226,6 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 {
 	int r;
 	es_size_t i = *bufOffs;
-	es_size_t parsedTo;
-	struct ln_ptree *newsubtree;
 
 	es_emptyStr(*str);
 	/* extract maximum length literal */
@@ -251,19 +249,9 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 		free(cstr);
 	}
 
-	*subtree = ln_buildPTree(*subtree, *str);
-#if 0
-	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
-ln_dbgprintf(ctx, "in samp: ret tree %p, parsedTo %d / %d", newsubtree, (int)parsedTo, (int)es_strlen(*str));
-	if(parsedTo+1 != es_strlen(*str)) {
-		*subtree = ln_addPTree(ctx, newsubtree, *str, parsedTo);
-	} else {
-		if(newsubtree->subtree[es_getBufAddr(*str)[parsedTo]] != NULL)
-			*subtree = newsubtree->subtree[es_getBufAddr(*str)[parsedTo]];
-	}
-#endif
-	r = 0;
+	*subtree = ln_buildPTree(*subtree, *str, 0);
 	*bufOffs = i;
+	r = 0;
 
 done:	return r;
 }

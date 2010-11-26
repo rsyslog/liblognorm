@@ -60,7 +60,8 @@ struct ln_fieldList_s {
  */
 struct ln_ptree {
 	ln_ctx		ctx;	/**< our context */
-	ln_ptree	*parent;
+	ln_ptree	**parentptr; /**< pointer to *us* *inside* the parent 
+				BUT this is NOT a pointer to the parent! */
 	ln_fieldList_t	*froot; /**< root of field list */
 	ln_fieldList_t	*ftail; /**< tail of field list */
 	/* the respresentation below requires a lof of memory but is
@@ -85,11 +86,11 @@ struct ln_ptree {
  *
  * @param[in] ctx current library context. This MUST match the
  * 		context of the parent.
- * @param[in] parent parent node of the current tree (NULL if root)
+ * @param[in] parent pointer to the new node inside the parent
  *
  * @return pointer to new node or NULL on error
  */
-struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree* parent);
+struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree** parent);
 
 
 /**
@@ -165,9 +166,26 @@ ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
  */
 void ln_displayPTree(struct ln_ptree *tree, int level);
 
+/**
+ * Build a ptree based on the provided string, but only if necessary.
+ * The passed-in tree is searched and traversed for str. If a node exactly
+ * matching str is found, that node is returned. If no exact match is found,
+ * a new node is added. Existing nodes may be split, if a so-far common
+ * prefix needs to be split in order to add the new node.
+ *
+ * @param[in] tree root of the current tree
+ * @param[in] str string to be added
+ * @param[in] offs offset into str where match needs to start
+ *             (this is required for recursive calls to handle
+ *             common prefixes)
+ * @return NULL on error, otherwise the ptree leaf that
+ *         corresponds to the parameters passed.
+ */
+struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
+
+
 #include <libee/libee.h>
 //TODO : find a correct place (and name)!
 int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
-struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str);
 es_size_t ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */
