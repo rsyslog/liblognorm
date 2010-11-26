@@ -199,7 +199,7 @@ ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
 
 
 	/* finished */
-	CHKR(ln_addFDescrToPTree(ctx, subtree, node));
+	CHKR(ln_addFDescrToPTree(subtree, node));
 	*bufOffs = i;
 	r = 0;
 
@@ -251,7 +251,7 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
 		free(cstr);
 	}
 
-	*subtree = ln_buildPTree(ctx, *subtree, *str);
+	*subtree = ln_buildPTree(*subtree, *str);
 #if 0
 	newsubtree = ln_traversePTree(ctx, *subtree, *str, &parsedTo);
 ln_dbgprintf(ctx, "in samp: ret tree %p, parsedTo %d / %d", newsubtree, (int)parsedTo, (int)es_strlen(*str));

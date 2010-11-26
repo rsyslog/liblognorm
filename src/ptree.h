@@ -59,12 +59,8 @@ struct ln_fieldList_s {
 /* parse tree object
  */
 struct ln_ptree {
+	ln_ctx		ctx;	/**< our context */
 	ln_ptree	*parent;
-	char		*commonPrefix;
-	/**< if non-NULL, text that must be present in the input string
-	 * at the parse positon. This reduces the need to walk tree nodes
-	 * for common text.
-	 */
 	ln_fieldList_t	*froot; /**< root of field list */
 	ln_fieldList_t	*ftail; /**< tail of field list */
 	/* the respresentation below requires a lof of memory but is
@@ -73,6 +69,11 @@ struct ln_ptree {
 	 * But we do not do this in the initial step.
 	 */
 	ln_ptree	*subtree[256];
+	unsigned short	lenPrefix;	/**< length of common prefix, 0->none */
+	union {
+		unsigned char *ptr;	/**< use if data element is too large */
+		unsigned char data[16]; /**< fast lookup for small string */
+	} prefix;	/**< a common prefix string for all of this node */
 };
 
 
@@ -82,7 +83,8 @@ struct ln_ptree {
  * Allocates and initializes a new parse tree node.
  * @memberof ln_ptree
  *
- * @param[in] ctx current library context
+ * @param[in] ctx current library context. This MUST match the
+ * 		context of the parent.
  * @param[in] parent parent node of the current tree (NULL if root)
  *
  * @return pointer to new node or NULL on error
@@ -94,10 +96,9 @@ struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree* parent);
  * Free a parse tree node and destruct all members.
  * @memberof ln_ptree
  *
- * @param[in] ctx current library context
  * @param[in] tree pointer to ptree to free
  */
-void ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree);
+void ln_deletePTree(struct ln_ptree *tree);
 
 
 /**
@@ -107,13 +108,12 @@ void ln_deletePTree(ln_ctx ctx, struct ln_ptree *tree);
  * about the order if that matters.
  * @memberof ln_ptree
  *
- * @param[in] ctx current library context
  * @param[in] tree pointer to ptree to modify
  * @param[in] fielddescr a fully populated (and initialized) 
  * 		field description node
  * @returns 0 on success, something else otherwise
  */
-int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node);
+int ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node);
 
 
 /**
@@ -129,7 +129,6 @@ int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node
  * inside that root.
  * @memberof ln_ptree
  *
- * @param[in] ctx library context
  * @param[in] subtree root of subtree to traverse
  * @param[in] str string to parse
  * @param[in/out] parsedTo on entry: start position within string,
@@ -137,9 +136,8 @@ int ln_addFDescrToPTree(ln_ctx ctx, struct ln_ptree **tree, ln_fieldList_t *node
  *
  * @return pointer to found tree node or NULL if there was no match at all
  */
-struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
+struct ln_ptree* ln_traversePTree(struct ln_ptree *subtree,
                                es_str_t *str, es_size_t *parsedTo);
-
 
 
 /**
@@ -147,7 +145,6 @@ struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
  * Creates new tree nodes as necessary.
  * @memberof ln_ptree
  *
- * @param[in] ctx library context
  * @param[in] tree root of tree where to add
  * @param[in] str literal (string) to add
  * @param[in] offs offset of where in literal adding should start
@@ -155,11 +152,22 @@ struct ln_ptree* ln_traversePTree(ln_ctx ctx, struct ln_ptree *subtree,
  * @return NULL on error, otherwise pointer to deepest tree added
  */
 struct ln_ptree*
-ln_addPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs);
+ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
+
+
+/**
+ * Display the content of a ptree (debug function).
+ * This is a debug aid that spits out a textual representation
+ * of the provided ptree via multiple calls of the debug callback.
+ *
+ * @param tree ptree to display
+ * @param level recursion level, must be set to 0 on initial call
+ */
+void ln_displayPTRee(struct ln_ptree *tree, int level);
 
 #include <libee/libee.h>
 //TODO : find a correct place (and name)!
 int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
-struct ln_ptree * ln_buildPTree(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str);
-es_size_t ln_normalizeRec(ln_ctx ctx, struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event);
+struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str);
+es_size_t ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */
