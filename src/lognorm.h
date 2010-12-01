@@ -40,7 +40,7 @@ struct ln_ctx_s {
 	ee_ctx eectx;
 	ln_ptree *ptree; /**< parse tree being used by this context */
 	unsigned nNodes; /**< number of nodes in our parse tree */
-	unsigned char debug; /**< are we in debug mode? */
+	unsigned char debug; /**< boolean: are we in debug mode? */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

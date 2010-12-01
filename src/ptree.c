@@ -77,12 +77,13 @@ ln_deletePTree(struct ln_ptree *tree)
 		ln_deletePTree(node->subtree);
 		nodeDel = node;
 		es_deleteStr(node->name);
-		es_deleteStr(node->data);
+		if(node->data != NULL)
+			es_deleteStr(node->data);
 		node = node->next;
 		free(nodeDel);
 	}
 
-	/* need to free a (large) prefix buffer? */
+	/* need to free a large prefix buffer? */
 	if(tree->lenPrefix >= sizeof(tree->prefix))
 		free(tree->prefix.ptr);
 
@@ -363,9 +364,9 @@ ln_dbgprintf(tree->ctx, "pre addPTree: i %u", i);
 		}
 	}
 
-ln_dbgprintf(tree->ctx, "---------------------------------------");
-ln_displayPTree(tree, 0);
-ln_dbgprintf(tree->ctx, "=======================================");
+//ln_dbgprintf(tree->ctx, "---------------------------------------");
+//ln_displayPTree(tree, 0);
+//ln_dbgprintf(tree->ctx, "=======================================");
 done:	return r;
 }
 
@@ -571,12 +572,14 @@ addUnparsedField(ln_ctx ctx, es_str_t *str, es_size_t offs, struct ee_event **ev
 	CHKN(valstr = es_strdup(str));
 	ee_setStrValue(value, valstr);
 	addField(ctx, event, namestr, value);
+	es_deleteStr(namestr);
 
 	CHKN(value = ee_newValue(ctx->eectx));
 	CHKN(namestr = es_newStrFromCStr("unparsed-data", sizeof("unparsed-data") - 1));
 	CHKN(valstr = es_newStrFromSubStr(str, offs, es_strlen(str) - offs));
 	ee_setStrValue(value, valstr);
 	addField(ctx, event, namestr, value);
+	es_deleteStr(namestr);
 	r = 0;
 done:	return r;
 }
@@ -652,6 +655,8 @@ ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) o
 				CHKR(addField(tree->ctx, event, node->name, value));
 				r = 0;
 				goto done;
+			} else {
+				ee_deleteValue(value); /* was created, now not needed */
 			}
 			ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
 					(int) offs, (int)left);

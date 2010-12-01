@@ -120,6 +120,7 @@ ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
 	CHKN(node = malloc(sizeof(ln_fieldList_t)));
 	node->subtree = NULL;
 	node->next = NULL;
+	node->data = NULL;
 	CHKN(node->name = es_newStr(16));
 
 	while(i < lenBuf && buf[i] != ':') {
@@ -276,7 +277,7 @@ addSampToTree(ln_ctx ctx, char *buf, es_size_t lenBuf)
 {
 	int r;
 	struct ln_ptree* subtree;
-	es_str_t *str;
+	es_str_t *str = NULL;
 	es_size_t i;
 
 	ln_dbgprintf(ctx, "actual sample is '%s'", buf);
@@ -292,7 +293,10 @@ addSampToTree(ln_ctx ctx, char *buf, es_size_t lenBuf)
 		}
 	}
 
-done:	return r;
+done:
+	if(str != NULL)
+		es_deleteStr(str);
+	return r;
 }
 
 

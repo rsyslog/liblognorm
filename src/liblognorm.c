@@ -75,6 +75,8 @@ ln_exitCtx(ln_ctx ctx)
 	CHECK_CTX;
 
 	ctx->objID = LN_ObjID_None; /* prevent double free */
+	if(ctx->ptree != NULL)
+		ln_deletePTree(ctx->ptree);
 	free(ctx);
 done:
 	return r;
