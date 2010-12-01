@@ -176,8 +176,8 @@ int main(int argc, char *argv[])
 		genDOT();
 		exit(1);
 	}
-ln_displayPTree(ctx->ptree, 0);
-fflush(stdout);
+//ln_displayPTree(ctx->ptree, 0);
+//fflush(stdout);
 
 	normalize();
 

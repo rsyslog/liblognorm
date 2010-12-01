@@ -594,7 +594,7 @@ done:	return r;
  *
  * @return number of characters left unparsed by following the subtree
  */
-es_size_t
+static es_size_t
 ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event)
 {
 	es_size_t r;

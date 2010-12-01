@@ -21,10 +21,7 @@ AC_PROG_LIBTOOL
 save_LIBS=$LIBS
 LIBS=
 AC_SEARCH_LIBS(clock_gettime, rt)
-rt_libs=$LIBS
 LIBS=$save_LIBS
-
-AC_SUBST(rt_libs)
 
 # Checks for header files.
 AC_HEADER_STDC

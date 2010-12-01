@@ -6,5 +6,5 @@ includedir=@includedir@
 Name: lognorm
 Description: fast samples-based log normalization library
 Version: @VERSION@
-Libs: -L${libdir} -lrelp @rt_libs@
+Libs: -L${libdir} -llognorm -lee -lestr
 Cflags: -I${includedir}

@@ -208,5 +208,6 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, event_t *event);
+int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

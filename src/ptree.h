@@ -199,9 +199,4 @@ void ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str);
  */
 struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
 
-
-#include <libee/libee.h>
-//TODO : find a correct place (and name)!
-int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
-es_size_t ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event);
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */
