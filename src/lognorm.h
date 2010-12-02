@@ -41,6 +41,11 @@ struct ln_ctx_s {
 	ln_ptree *ptree; /**< parse tree being used by this context */
 	unsigned nNodes; /**< number of nodes in our parse tree */
 	unsigned char debug; /**< boolean: are we in debug mode? */
+	es_str_t *rulePrefix; /**< work variable for loading rule bases
+			       * this is the prefix string that will be prepended
+			       * to all rules before they are submitted to tree
+			       * building.
+			       */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

@@ -103,19 +103,21 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
  * @returns 0 on success, something else otherwise
  */
 static inline int
-parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
-	        es_size_t lenBuf, es_size_t *bufOffs, es_str_t **str)
+parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
+	        es_size_t *bufOffs, es_str_t **str)
 {
 	int r;
 	ln_fieldList_t *node;
 	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
+	unsigned char *buf;
+	es_size_t lenBuf;
 
-ln_dbgprintf(ctx, "parseField, on entry, tree %p", *subtree);
 	assert(subtree != NULL);
-	assert(buf != NULL);
-	assert(buf[i] == '%');
 
+	buf = es_getBufAddr(rule);
+	lenBuf = es_strlen(rule);
+	assert(buf[i] == '%');
 	++i;	/* "eat" ':' */
 	CHKN(node = malloc(sizeof(ln_fieldList_t)));
 	node->subtree = NULL;
@@ -213,8 +215,7 @@ done:	return r;
  * @param[in] ctx the context
  * @param[in/out] subtree on entry, current subtree, on exist newest
  *    		deepest subtree
- * @param[in] buf pointer to to-be-parsed buffer
- * @param[in] lenBuf length of buffer
+ * @param[in] rule string with current rule
  * @param[in/out] bufOffs parse pointer, up to which offset is parsed
  * 		(is updated so that it points to first char after consumed
  * 		string on exit).
@@ -222,13 +223,17 @@ done:	return r;
  * @return 0 on success, something else otherwise
  */
 static inline int
-parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, char *buf,
-	     es_size_t lenBuf, es_size_t *bufOffs, es_str_t **str)
+parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
+	     es_size_t *bufOffs, es_str_t **str)
 {
 	int r;
 	es_size_t i = *bufOffs;
+	unsigned char *buf;
+	es_size_t lenBuf;
 
 	es_emptyStr(*str);
+	buf = es_getBufAddr(rule);
+	lenBuf = es_strlen(rule);
 	/* extract maximum length literal */
 	while(i < lenBuf) {
 		if(buf[i] == '%') {
@@ -273,23 +278,21 @@ done:	return r;
  * @returns the new subtree root (or NULL in case of error)
  */
 static inline int
-addSampToTree(ln_ctx ctx, char *buf, es_size_t lenBuf)
+addSampToTree(ln_ctx ctx, es_str_t *rule)
 {
 	int r;
 	struct ln_ptree* subtree;
 	es_str_t *str = NULL;
 	es_size_t i;
 
-	ln_dbgprintf(ctx, "actual sample is '%s'", buf);
-
 	subtree = ctx->ptree;
 	CHKN(str = es_newStr(256));
 	i = 0;
-	while(i < lenBuf) {
-		CHKR(parseLiteral(ctx, &subtree, buf, lenBuf, &i, &str));
+	while(i < es_strlen(rule)) {
+		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
 		if(es_strlen(str) == 0) {
 			/* we had no literal, so let's parse a field description */
-			CHKR(parseFieldDescr(ctx, &subtree, buf, lenBuf, &i, &str));
+			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
 		}
 	}
 
@@ -300,14 +303,115 @@ done:
 }
 
 
+
+/**
+ * get the initial word of a rule line that tells us the type of the
+ * line.
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[out] offs offset after "="
+ * @param[out] str string with "linetype-word" (newly created)
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+getLineType(char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
+{
+	int r;
+	es_size_t i;
+
+	*str = es_newStr(16);
+	for(i = 0 ; i < lenBuf && buf[i] != '=' ; ++i) {
+		CHKR(es_addChar(str, buf[i]));
+	}
+
+	if(i < lenBuf)
+		++i; /* skip over '=' */
+	*offs = i;
+
+done:	return r;
+}
+
+
+/**
+ * Get a new common prefix from the config file. That is actually everything from
+ * the current offset to the end of line.
+ *
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in] offs offset after "="
+ * @param[in/out] str string to store common offset. If NULL, it is created,
+ * 	 	otherwise it is emptied.
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
+{
+	int r;
+
+	if(*str == NULL) {
+		CHKN(*str = es_newStr(64));
+	} else {
+		es_emptyStr(*str);
+	}
+		
+	r = es_addBuf(str, buf, lenBuf- offs);
+done:	return r;
+}
+
+
+/**
+ * Process a new rule and add it to tree.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in] offs offset where rule starts
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+{
+	int r = -1;
+	es_str_t *str;
+
+	ln_dbgprintf(ctx, "sample line to add; '%s'\n", buf+offs);
+	/* skip tags, which we do not currently support (as we miss libcee) */
+	for( ; offs < lenBuf && buf[offs] != ':' ; )
+		offs++;
+	if(offs == lenBuf) {
+		ln_dbgprintf(ctx, "error, tag part is missing");
+		// TODO: provide some error indicator to app? We definitely must do (a callback?)
+		goto done;
+	}
+
+	++offs;
+	if(offs == lenBuf) {
+		ln_dbgprintf(ctx, "error, actual message sample part is missing");
+		// TODO: provide some error indicator to app? We definitely must do (a callback?)
+		goto done;
+	}
+	if(ctx->rulePrefix == NULL) {
+		CHKN(str = es_newStr(lenBuf));
+	} else {
+		CHKN(str = es_strdup(ctx->rulePrefix));
+	}
+	CHKR(es_addBuf(&str, buf, lenBuf));
+	addSampToTree(ctx, str);
+	es_deleteStr(str);
+	r = 0;
+done:	return r;
+}
+
+
 struct ln_samp *
 ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 {
 	struct ln_samp *samp = NULL;
-	unsigned i;
+	es_size_t offs;
 	int done = 0;
-	char buf[10*1024]; /**< max size of log sample */ // TODO: make configurable
+	char buf[10*1024]; /**< max size of rule */ // TODO: make configurable
 	es_size_t lenBuf;
+	es_str_t *typeStr = NULL;
 
 	/* we ignore empty lines and lines that begin with "#" */
 	while(!done) {
@@ -327,27 +431,22 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 		}
 		done = 1; /* we found a valid line */
 	}
-
 	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
 
-	/* skip tags, which we do not currently support (as we miss libcee) */
-	for(i = 0 ; i < lenBuf && buf[i] != ':' ; )
-		i++;
-	if(i == lenBuf) {
-		ln_dbgprintf(ctx, "error, tag part is missing");
-		// TODO: provide some error indicator to app? We definitely must do (a callback?)
+	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0) goto done;
+	if(!es_strconstcmp(typeStr, "prefix")) {
+		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
+	} else if(!es_strconstcmp(typeStr, "rule")) {
+		if(processRule(ctx, buf,lenBuf, offs) != 0) goto done;
+	} else {
+		// TODO error reporting
 		goto done;
 	}
 
-	++i;
-	if(i == lenBuf) {
-		ln_dbgprintf(ctx, "error, actual message sample part is missing");
-		// TODO: provide some error indicator to app? We definitely must do (a callback?)
-		goto done;
-	}
-	addSampToTree(ctx, buf+i, lenBuf - i);
 
 	//ln_displayPTree(ctx, ctx->ptree, 0);
 done:
+	if(typeStr != NULL)
+		es_deleteStr(typeStr);
 	return samp;
 }
