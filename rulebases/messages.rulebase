@@ -1,4 +1,4 @@
-prefix:%date:date-rfc3164% %host:word% %tag:char-to:\x3a%:
+prefix=%date:date-rfc3164% %host:word% %tag:char-to:\x3a%:
 rule=: restart.
 rule=: Bad line received from identity server at %ip:ipv4%: %port:number% 
 rule=: FTP session closed
