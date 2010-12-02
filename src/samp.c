@@ -349,13 +349,31 @@ getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 	int r;
 
 	if(*str == NULL) {
-		CHKN(*str = es_newStr(64));
+		CHKN(*str = es_newStr(lenBuf - offs));
 	} else {
 		es_emptyStr(*str);
 	}
 		
-	r = es_addBuf(str, buf, lenBuf- offs);
+	r = es_addBuf(str, buf + offs, lenBuf - offs);
 done:	return r;
+}
+
+
+/**
+ * Extend the common prefix. This means that the line is concatenated
+ * to the prefix. This is useful if the same rulebase is to be used with
+ * different prefixes (well, not strictly necessary, but probably useful).
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in] offs offset to-be-added text starts
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+extendPrefix(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+{
+	return es_addBuf(&ctx->rulePrefix, buf+offs, lenBuf - offs);
 }
 
 
@@ -395,7 +413,7 @@ processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	} else {
 		CHKN(str = es_strdup(ctx->rulePrefix));
 	}
-	CHKR(es_addBuf(&str, buf, lenBuf));
+	CHKR(es_addBuf(&str, buf + offs, lenBuf - offs));
 	addSampToTree(ctx, str);
 	es_deleteStr(str);
 	r = 0;
@@ -436,6 +454,8 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0) goto done;
 	if(!es_strconstcmp(typeStr, "prefix")) {
 		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
+	} else if(!es_strconstcmp(typeStr, "extendprefix")) {
+		if(extendPrefix(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "rule")) {
 		if(processRule(ctx, buf,lenBuf, offs) != 0) goto done;
 	} else {
