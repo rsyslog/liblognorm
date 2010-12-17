@@ -1,5 +1,8 @@
 ----------------------------------------------------------------------
 Version 0.2.0 (rgerhards), 2010-12-??
+- added -E option to normalizer tool, permits to specify data for
+  encoders
+- support for csv encoding added
 - added -p option to normalizer tool (output only correctly parsed
   entries)
 ----------------------------------------------------------------------

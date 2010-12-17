@@ -47,7 +47,8 @@ static ee_ctx eectx;
 static int verbose = 0;
 static int parsedOnly = 0;	/**< output unparsed messages? */
 static FILE *fpDOT;
-static enum { f_syslog, f_json, f_xml } outfmt = f_syslog;
+static es_str_t *encFmt = NULL; /**< a format string for encoder use */
+static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
 
 void
 dbgCallBack(void __attribute__((unused)) *cookie, char *msg,
@@ -101,6 +102,9 @@ normalize(void)
 				case f_xml:
 					ee_fmtEventToXML(event, &str);
 					break;
+				case f_csv:
+					ee_fmtEventToCSV(event, &str, encFmt);
+					break;
 				}
 				cstr = es_str2cstr(str, NULL);
 				if(verbose > 0) printf("normalized: '%s'\n", cstr);
@@ -136,7 +140,7 @@ int main(int argc, char *argv[])
 	int opt;
 	char *repository = NULL;
 	
-	while((opt = getopt(argc, argv, "d:o:r:vp")) != -1) {
+	while((opt = getopt(argc, argv, "d:e:r:E:vp")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -149,14 +153,19 @@ int main(int argc, char *argv[])
 		case 'v':
 			verbose++;
 			break;
+		case 'E': /* encoder-specific format string (will be validated by encoder) */ 
+			encFmt = es_newStrFromCStr(optarg, strlen(optarg));
+			break;
 		case 'p':
 			parsedOnly = 1;
 			break;
-		case 'o': /* output format */
+		case 'e': /* encoder to use */
 			if(!strcmp(optarg, "json")) {
 				outfmt = f_json;
 			} else if(!strcmp(optarg, "xml")) {
 				outfmt = f_xml;
+			} else if(!strcmp(optarg, "csv")) {
+				outfmt = f_csv;
 			}
 			break;
 		case 'r': /* rule base to use */
