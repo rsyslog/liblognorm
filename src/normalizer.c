@@ -1,11 +1,12 @@
 /**
- * @file sample.c
- * @brief A very basic, yet complete, sample of how to use liblognorm.
+ * @file normalizer.c
+ * @brief A small tool to normalize data.
  *
  * This is the most basic example demonstrating how to use liblognorm.
  * It loads log samples from the files specified on the command line,
  * reads to-be-normalized data from stdin and writes the normalized
- * form to stdout.
+ * form to stdout. Besides being an example, it also carries out useful
+ * processing.
  *
  * @author Rainer Gerhards <rgerhards@adiscon.com>
  *
@@ -44,6 +45,7 @@ static ln_ctx ctx;
 static ee_ctx eectx;
 
 static int verbose = 0;
+static int parsedOnly = 0;	/**< output unparsed messages? */
 static FILE *fpDOT;
 static enum { f_syslog, f_json, f_xml } outfmt = f_syslog;
 
@@ -71,36 +73,47 @@ normalize(void)
 	es_str_t *str;
 	struct ee_event *event = NULL;
 	char *cstr;
+	es_str_t *constUnparsed;
+	long long unsigned numUnparsed = 0;
+
+	constUnparsed = es_newStrFromBuf("unparsed-data", sizeof("unparsed-data") - 1);
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
 		buf[strlen(buf)-1] = '\0';
 		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
 			buf[strlen(buf)-1] = '\0';
-		printf("To normalize: '%s'\n", buf);
+		if(verbose > 0) printf("To normalize: '%s'\n", buf);
 		str = es_newStrFromCStr(buf, strlen(buf));
 		ln_normalize(ctx, str, &event);
 		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
-		if(event != NULL){
-			es_emptyStr(str);
-			switch(outfmt) {
-			case f_json:
-				ee_fmtEventToJSON(event, &str);
-				break;
-			case f_syslog:
-				ee_fmtEventToRFC5424(event, &str);
-				break;
-			case f_xml:
-				ee_fmtEventToXML(event, &str);
-				break;
+		if(event != NULL) {
+			if(parsedOnly == 1 && ee_getEventField(event, constUnparsed) != NULL){
+				numUnparsed++;
+			} else {
+				es_emptyStr(str);
+				switch(outfmt) {
+				case f_json:
+					ee_fmtEventToJSON(event, &str);
+					break;
+				case f_syslog:
+					ee_fmtEventToRFC5424(event, &str);
+					break;
+				case f_xml:
+					ee_fmtEventToXML(event, &str);
+					break;
+				}
+				cstr = es_str2cstr(str, NULL);
+				if(verbose > 0) printf("normalized: '%s'\n", cstr);
+				printf("%s\n", cstr);
+				free(cstr);
 			}
-			cstr = es_str2cstr(str, NULL);
-			printf("normalized: '%s'\n", cstr);
-			free(cstr);
 			ee_deleteEvent(event);
 			event = NULL;
 		}
 		es_deleteStr(str);
 	}
+	if(numUnparsed > 0)
+		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 }
 
 
@@ -123,7 +136,7 @@ int main(int argc, char *argv[])
 	int opt;
 	char *repository = NULL;
 	
-	while((opt = getopt(argc, argv, "d:o:r:v")) != -1) {
+	while((opt = getopt(argc, argv, "d:o:r:vp")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -134,7 +147,10 @@ int main(int argc, char *argv[])
 				}
 			}
 		case 'v':
-			verbose = 1;
+			verbose++;
+			break;
+		case 'p':
+			parsedOnly = 1;
 			break;
 		case 'o': /* output format */
 			if(!strcmp(optarg, "json")) {
@@ -143,7 +159,7 @@ int main(int argc, char *argv[])
 				outfmt = f_xml;
 			}
 			break;
-		case 'r': /* repository */
+		case 'r': /* rule base to use */
 			repository = optarg;
 			break;
 		}
@@ -169,15 +185,15 @@ int main(int argc, char *argv[])
 
 	ln_loadSamples(ctx, repository);
 
-	if(verbose)
+	if(verbose > 0)
 		printf("number of tree nodes: %d\n", ctx->nNodes);
 
 	if(fpDOT != NULL) {
 		genDOT();
 		exit(1);
 	}
-//ln_displayPTree(ctx->ptree, 0);
-//fflush(stdout);
+
+	if(verbose > 2) ln_displayPTree(ctx->ptree, 0);
 
 	normalize();
 
