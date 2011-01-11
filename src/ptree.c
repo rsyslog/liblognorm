@@ -44,7 +44,7 @@
 static inline unsigned char*
 prefixBase(struct ln_ptree *tree)
 {
-	return (tree->lenPrefix < sizeof(tree->prefix))
+	return (tree->lenPrefix <= sizeof(tree->prefix))
 	       ? tree->prefix.data : tree->prefix.ptr;
 }
 
@@ -84,7 +84,7 @@ ln_deletePTree(struct ln_ptree *tree)
 	}
 
 	/* need to free a large prefix buffer? */
-	if(tree->lenPrefix >= sizeof(tree->prefix))
+	if(tree->lenPrefix > sizeof(tree->prefix))
 		free(tree->prefix.ptr);
 
 	for(i = 0 ; i < 256 ; ++i)
