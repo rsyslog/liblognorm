@@ -167,6 +167,14 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ee_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
 		node->parser = ee_parseWord;
+	} else if(!es_strconstcmp(*str, "quoted-string")) {
+		node->parser = ee_parseQuotedString;
+	} else if(!es_strconstcmp(*str, "date-iso")) {
+		node->parser = ee_parseISODate;
+	} else if(!es_strconstcmp(*str, "time-24hr")) {
+		node->parser = ee_parseTime24hr;
+	} else if(!es_strconstcmp(*str, "time-12hr")) {
+		node->parser = ee_parseTime12hr;
 	} else if(!es_strconstcmp(*str, "char-to")) {
 		// TODO: check extra data!!!! (very important)
 		node->parser = ee_parseCharTo;
