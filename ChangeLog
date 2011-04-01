@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 0.2.0 (rgerhards), 2010-12-??
+Version 0.2.0 (rgerhards), 2011-04-01
 - added -E option to normalizer tool, permits to specify data for
   encoders
 - support for new libee parsers:
