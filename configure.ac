@@ -46,7 +46,7 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(LIBEE, libee >= 0.0.0)
+PKG_CHECK_MODULES(LIBEE, libee >= 0.3.0)
 
 # debug mode settings
 AC_ARG_ENABLE(debug,

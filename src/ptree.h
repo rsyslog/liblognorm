@@ -64,6 +64,9 @@ struct ln_ptree {
 				BUT this is NOT a pointer to the parent! */
 	ln_fieldList_t	*froot; /**< root of field list */
 	ln_fieldList_t	*ftail; /**< tail of field list */
+	struct {
+		unsigned isTerminal:1;	/**< designates this node a terminal sequence? */
+	} flags;
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.

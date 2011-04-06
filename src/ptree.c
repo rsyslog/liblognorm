@@ -445,8 +445,8 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 	es_addBuf(&str, (char*) prefixBase(tree), tree->lenPrefix);
 	cstr = es_str2cstr(str, NULL);
 	es_deleteStr(str);
-	ln_dbgprintf(tree->ctx, "%ssubtree %p (prefix: '%s', children: %d literals, %d fields)",
-		     indent, tree, cstr, nChildLit, nChildField);
+	ln_dbgprintf(tree->ctx, "%ssubtree%s %p (prefix: '%s', children: %d literals, %d fields)",
+		     indent, tree->flags.isTerminal ? " TERM" : "", tree, cstr, nChildLit, nChildField);
 	free(cstr);
 	/* display char subtrees */
 	for(i = 0 ; i < 256 ; ++i) {
@@ -594,15 +594,19 @@ done:	return r;
  * @param[in] string string to be matched against (the to-be-normalized data)
  * @param[in] offs start position in input data
  * @param[in/out] event handle to event that is being created during normalization
+ * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
- * @return number of characters left unparsed by following the subtree
+ * @return number of characters left unparsed by following the subtree, negative if
+ *         the to-be-parsed message is shorter than the rule sample by this number of
+ *         characters.
  */
-static es_size_t
-ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event)
+static int
+ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event,
+		struct ln_ptree **endNode)
 {
-	es_size_t r;
+	int r;
 	es_size_t i;
-	es_size_t left;
+	int left;
 	ln_fieldList_t *node;
 	struct ee_value *value;
 	char *cstr;
@@ -612,7 +616,9 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	
 ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u", (int) offs, es_strlen(str));
 	if(offs >= es_strlen(str)) {
-		r = 0;
+ln_dbgprintf(tree->ctx, "%d:found offs %u >= %u es_strlen(str)", (int) offs, offs, es_strlen(str));
+		*endNode = tree;
+		r = -tree->lenPrefix;
 		goto done;
 	}
 ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) offs, es_strlen(str));
@@ -631,10 +637,18 @@ ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) o
 		}
 		++offs, ++ipfix;
 	}
+	
+	if(ipfix != tree->lenPrefix) {
+		/* incomplete prefix match --> to-be-normalized string too short */
+		r = ipfix - tree->lenPrefix;
+		goto done;
+	}
+
 	r -= ipfix;
 	ln_dbgprintf(tree->ctx, "%d: prefix compare succeeded, still valid", (int) offs);
 
 	if(offs == es_strlen(str)) {
+		*endNode = tree;
 		r = 0;
 		goto done;
 	}
@@ -649,8 +663,8 @@ ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) o
 		if(node->parser(tree->ctx->eectx, str, &i, node->data, &value) == 0) {
 			/* potential hit, need to verify */
 			ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-			left = ln_normalizeRec(node->subtree, str, i, event);
-			if(left == 0) {
+			left = ln_normalizeRec(node->subtree, str, i, event, endNode);
+			if(left == 0 && (*endNode)->flags.isTerminal) {
 				ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 				CHKR(addField(tree->ctx, event, node->name, value));
 				r = 0;
@@ -675,7 +689,7 @@ ln_dbgprintf(tree->ctx, "%u no field, offset already beyond end", offs);
 	/* now let's see if we have a literal */
 	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
 		left = ln_normalizeRec(tree->subtree[es_getBufAddr(str)[offs]],
-				       str, offs + 1, event);
+				       str, offs + 1, event, endNode);
 		if(left < r)
 			r = left;
 	}
@@ -690,14 +704,21 @@ int
 ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 {
 	int r;
-	es_size_t left;
+	int left;
+	struct ln_ptree *endNode;
 
-	left = ln_normalizeRec(ctx->ptree, str, 0, event);
+	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
 
-	ln_dbgprintf(ctx, "final result or normalizer: left %d", (int) left);
-	if(left != 0) {
+	ln_dbgprintf(ctx, "final result or normalizer: left %d, endNode %p, isTerminal %d",
+		     left, endNode, left == 0 ? endNode->flags.isTerminal : 0);
+	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
-		addUnparsedField(ctx, str, es_strlen(str) - left, event);
+		if(left < 0) {
+			;//addUnparsedField(ctx, str, "[*incomplete message*]", event);
+			addUnparsedField(ctx, str, es_strlen(str), event);
+		} else {
+			addUnparsedField(ctx, str, es_strlen(str) - left, event);
+		}
 	}
 	r = 0;
 

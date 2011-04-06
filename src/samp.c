@@ -286,7 +286,7 @@ done:	return r;
  * @returns the new subtree root (or NULL in case of error)
  */
 static inline int
-addSampToTree(ln_ctx ctx, es_str_t *rule)
+addSampToTree(ln_ctx ctx, es_str_t *rule, struct ee_tagbucket *tagBucket)
 {
 	int r;
 	struct ln_ptree* subtree;
@@ -297,12 +297,16 @@ addSampToTree(ln_ctx ctx, es_str_t *rule)
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
+ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
 		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
 		if(es_strlen(str) == 0) {
 			/* we had no literal, so let's parse a field description */
 			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
 		}
 	}
+ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
+	/* we are at the end of rule processing, so this node is a terminal */
+	subtree->flags.isTerminal = 1;
 
 done:
 	if(str != NULL)
@@ -366,7 +370,6 @@ getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 done:	return r;
 }
 
-
 /**
  * Extend the common prefix. This means that the line is concatenated
  * to the prefix. This is useful if the same rulebase is to be used with
@@ -386,6 +389,83 @@ extendPrefix(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 
 
 /**
+ * Add a tag to the tag bucket. Helper to processTags.
+ * @param[in] ctx current context
+ * @param[in] tagname string with tag name
+ * @param[out] tagBucket tagbucket to which new tags shall be added
+ *                       the tagbucket is created if it is NULL
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct ee_tagbucket **tagBucket)
+{
+	int r = -1;
+	char *cstr;
+
+	if(*tagBucket == NULL) {
+		CHKN(*tagBucket = ee_newTagbucket(ctx->eectx));
+	}
+	cstr = es_str2cstr(tagname, NULL);
+	ln_dbgprintf(ctx, "tag found: '%s'", cstr);
+	free(cstr);
+	CHKR(ee_addTagToBucket(*tagBucket, tagname));
+	r = 0;
+
+done:	return r;
+}
+
+
+/**
+ * Extract the tags and create a tag bucket out of them
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in,out] poffs offset where tags start, on exit and success
+ *                      offset after tag part (excluding ':')
+ * @param[out] tagBucket tagbucket to which new tags shall be added
+ *                       the tagbucket is created if it is NULL
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct ee_tagbucket **tagBucket)
+{
+	int r = -1;
+	es_str_t *str = NULL;
+	es_size_t i;
+
+	assert(poffs != NULL);
+	i = *poffs;
+	while(i < lenBuf && buf[i] != ':') {
+		if(buf[i] == ',') {
+			/* end of this tag */
+			CHKR(addTagStrToBucket(ctx, str, tagBucket));
+			str = NULL;
+		} else {
+			if(str == NULL) {
+				CHKN(str = es_newStr(32));
+			}
+			CHKR(es_addChar(&str, buf[i]));
+		}
+		++i;
+	}
+
+	if(buf[i] != ':')
+		goto done;
+	++i; /* skip ':' */
+
+	if(str != NULL) {
+		CHKR(addTagStrToBucket(ctx, str, tagBucket));
+	}
+
+	*poffs = i;
+	r = 0;
+
+done:	return r;
+}
+
+
+/**
  * Process a new rule and add it to tree.
  *
  * @param[in] ctx current context
@@ -399,18 +479,11 @@ processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
 	es_str_t *str;
+	struct ee_tagbucket *tagBucket = NULL;
 
-	ln_dbgprintf(ctx, "sample line to add; '%s'\n", buf+offs);
-	/* skip tags, which we do not currently support (as we miss libcee) */
-	for( ; offs < lenBuf && buf[offs] != ':' ; )
-		offs++;
-	if(offs == lenBuf) {
-		ln_dbgprintf(ctx, "error, tag part is missing");
-		// TODO: provide some error indicator to app? We definitely must do (a callback?)
-		goto done;
-	}
+	ln_dbgprintf(ctx, "sample line to add: '%s'\n", buf+offs);
+	CHKR(processTags(ctx, buf, lenBuf, &offs, &tagBucket));
 
-	++offs;
 	if(offs == lenBuf) {
 		ln_dbgprintf(ctx, "error, actual message sample part is missing");
 		// TODO: provide some error indicator to app? We definitely must do (a callback?)
@@ -422,7 +495,7 @@ processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 		CHKN(str = es_strdup(ctx->rulePrefix));
 	}
 	CHKR(es_addBuf(&str, buf + offs, lenBuf - offs));
-	addSampToTree(ctx, str);
+	addSampToTree(ctx, str, tagBucket);
 	es_deleteStr(str);
 	r = 0;
 done:	return r;
