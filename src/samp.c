@@ -307,6 +307,7 @@ ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
 ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
 	subtree->flags.isTerminal = 1;
+	subtree->tags = tagBucket;
 
 done:
 	if(str != NULL)

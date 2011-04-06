@@ -614,14 +614,11 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	unsigned char *cpfix;
 	unsigned ipfix;
 	
-ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u", (int) offs, es_strlen(str));
 	if(offs >= es_strlen(str)) {
-ln_dbgprintf(tree->ctx, "%d:found offs %u >= %u es_strlen(str)", (int) offs, offs, es_strlen(str));
 		*endNode = tree;
 		r = -tree->lenPrefix;
 		goto done;
 	}
-ln_dbgprintf(tree->ctx, "%d:enter normalizeRec, strlen %u keep running", (int) offs, es_strlen(str));
 
 	c = es_getBufAddr(str);
 	cpfix = prefixBase(tree);
@@ -709,18 +706,23 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
 
-	ln_dbgprintf(ctx, "final result or normalizer: left %d, endNode %p, isTerminal %d",
-		     left, endNode, left == 0 ? endNode->flags.isTerminal : 0);
+	ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, isTerminal %d, tagbucket %p",
+		     left, endNode, left == 0 ? endNode->flags.isTerminal : 0, endNode->tags);
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {
-			;//addUnparsedField(ctx, str, "[*incomplete message*]", event);
 			addUnparsedField(ctx, str, es_strlen(str), event);
 		} else {
 			addUnparsedField(ctx, str, es_strlen(str) - left, event);
 		}
+	} else {
+		/* success, finalize event */
+		if(endNode->tags != NULL) {
+			CHKR(ee_assignTagbucketToEvent(*event, ee_addRefTagbucket(endNode->tags)));
+		}
 	}
+
 	r = 0;
 
-	return r;
+done:	return r;
 }

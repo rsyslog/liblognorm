@@ -67,6 +67,7 @@ struct ln_ptree {
 	struct {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence? */
 	} flags;
+	struct ee_tagbucket *tags;	/* tags to assign to events of this type */
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.
