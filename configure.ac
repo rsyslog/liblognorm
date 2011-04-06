@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([liblognorm], [0.2.0], [rgerhards@adiscon.com])
+AC_INIT([liblognorm], [0.3.0], [rgerhards@adiscon.com])
 AM_INIT_AUTOMAKE
 AM_SILENT_RULES([yes])
 AC_CONFIG_SRCDIR([src/lognorm.c])

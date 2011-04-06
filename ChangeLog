@@ -1,6 +1,6 @@
 ----------------------------------------------------------------------
-Version 0.3.0 (rgerhards), 2011-04-??
-- support for tagging (classification) messages added
+Version 0.3.0 (rgerhards), 2011-04-06
+- support for message classification via tags added
 - bugfix: partial messages were invalidly matched
   closes: http://bugzilla.adiscon.com/show_bug.cgi?id=247
 ----------------------------------------------------------------------
