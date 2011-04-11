@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 0.3.1 (rgerhards), 2011-04-??
+- added -t option to normalizer so that only messages with a 
+  specified tag will be output
+----------------------------------------------------------------------
 Version 0.3.0 (rgerhards), 2011-04-06
 - support for message classification via tags added
 - bugfix: partial messages were invalidly matched
