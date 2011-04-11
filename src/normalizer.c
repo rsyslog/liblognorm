@@ -48,6 +48,8 @@ static int verbose = 0;
 static int parsedOnly = 0;	/**< output unparsed messages? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
+static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will
+					   be output. NULL=all */
 static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
 
 void
@@ -64,6 +66,35 @@ void errout(char *errmsg)
 }
 
 
+/* param str is just a performance enhancement, which saves us re-creation
+ * of the string on every call.
+ */
+static inline void
+outputEvent(struct ee_event *event, es_str_t **str)
+{
+	char *cstr;
+	es_emptyStr(*str);
+	switch(outfmt) {
+	case f_json:
+		ee_fmtEventToJSON(event, str);
+		break;
+	case f_syslog:
+		ee_fmtEventToRFC5424(event, str);
+		break;
+	case f_xml:
+		ee_fmtEventToXML(event, str);
+		break;
+	case f_csv:
+		ee_fmtEventToCSV(event, str, encFmt);
+		break;
+	}
+	cstr = es_str2cstr(*str, NULL);
+	if(verbose > 0) printf("normalized: '%s'\n", cstr);
+	printf("%s\n", cstr);
+	free(cstr);
+}
+
+
 /* normalize input data
  */
 void
@@ -73,9 +104,9 @@ normalize(void)
 	char buf[10*1024];
 	es_str_t *str;
 	struct ee_event *event = NULL;
-	char *cstr;
 	es_str_t *constUnparsed;
 	long long unsigned numUnparsed = 0;
+	long long unsigned numWrongTag = 0;
 
 	constUnparsed = es_newStrFromBuf("unparsed-data", sizeof("unparsed-data") - 1);
 
@@ -88,28 +119,16 @@ normalize(void)
 		ln_normalize(ctx, str, &event);
 		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
 		if(event != NULL) {
-			if(parsedOnly == 1 && ee_getEventField(event, constUnparsed) != NULL){
-				numUnparsed++;
-			} else {
-				es_emptyStr(str);
-				switch(outfmt) {
-				case f_json:
-					ee_fmtEventToJSON(event, &str);
-					break;
-				case f_syslog:
-					ee_fmtEventToRFC5424(event, &str);
-					break;
-				case f_xml:
-					ee_fmtEventToXML(event, &str);
-					break;
-				case f_csv:
-					ee_fmtEventToCSV(event, &str, encFmt);
-					break;
+			if(   mandatoryTag == NULL
+			   || (mandatoryTag != NULL && ee_EventHasTag(event, mandatoryTag))) {
+				if(   parsedOnly == 1
+				   && ee_getEventField(event, constUnparsed) != NULL){
+					numUnparsed++;
+				} else {
+					outputEvent(event, &str);
 				}
-				cstr = es_str2cstr(str, NULL);
-				if(verbose > 0) printf("normalized: '%s'\n", cstr);
-				printf("%s\n", cstr);
-				free(cstr);
+			} else {
+				numWrongTag++;
 			}
 			ee_deleteEvent(event);
 			event = NULL;
@@ -118,6 +137,8 @@ normalize(void)
 	}
 	if(numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
+	if(numWrongTag > 0)
+		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
 }
 
 
@@ -140,7 +161,7 @@ int main(int argc, char *argv[])
 	int opt;
 	char *repository = NULL;
 	
-	while((opt = getopt(argc, argv, "d:e:r:E:vp")) != -1) {
+	while((opt = getopt(argc, argv, "d:e:r:E:vpt:")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -170,6 +191,10 @@ int main(int argc, char *argv[])
 			break;
 		case 'r': /* rule base to use */
 			repository = optarg;
+			break;
+		case 't': /* if given, only messages tagged with the argument
+			     are output */
+			mandatoryTag = es_newStrFromCStr(optarg, strlen(optarg));
 			break;
 		}
 	}
