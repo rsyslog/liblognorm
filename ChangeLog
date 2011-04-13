@@ -1,5 +1,9 @@
 ----------------------------------------------------------------------
 Version 0.3.1 (rgerhards), 2011-04-??
+- bugfix: abort if a tag was assigned to a message without any 
+  fields parsed out (uncommon scenario)
+- bugfix: mem leak on parse tree destruct -- associated tags were
+  not deleted
 - added -t option to normalizer so that only messages with a 
   specified tag will be output
 ----------------------------------------------------------------------

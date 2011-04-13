@@ -73,6 +73,8 @@ ln_deletePTree(struct ln_ptree *tree)
 	if(tree == NULL)
 		goto done;
 
+	if(tree->tags != NULL)
+		ee_deleteTagbucket(tree->tags);
 	for(node = tree->froot ; node != NULL ; ) {
 		ln_deletePTree(node->subtree);
 		nodeDel = node;
@@ -718,6 +720,9 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 	} else {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
+			if(*event == NULL) {
+				CHKN(*event = ee_newEvent(ctx->eectx));
+			}
 			CHKR(ee_assignTagbucketToEvent(*event, ee_addRefTagbucket(endNode->tags)));
 		}
 	}
