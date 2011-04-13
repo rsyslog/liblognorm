@@ -708,8 +708,14 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
 
-	ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, isTerminal %d, tagbucket %p",
-		     left, endNode, left == 0 ? endNode->flags.isTerminal : 0, endNode->tags);
+	if(left != 0) {
+		ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p",
+			     left, endNode);
+	} else {
+		ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, "
+			     "isTerminal %d, tagbucket %p",
+			     left, endNode, endNode->flags.isTerminal, endNode->tags);
+	}
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {

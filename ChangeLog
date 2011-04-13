@@ -1,11 +1,13 @@
 ----------------------------------------------------------------------
 Version 0.3.1 (rgerhards), 2011-04-??
+- added -t option to normalizer so that only messages with a 
+  specified tag will be output
 - bugfix: abort if a tag was assigned to a message without any 
   fields parsed out (uncommon scenario)
 - bugfix: mem leak on parse tree destruct -- associated tags were
   not deleted
-- added -t option to normalizer so that only messages with a 
-  specified tag will be output
+- bugfix: potential abort in normalizer due to misadressing in debug
+  message generation
 ----------------------------------------------------------------------
 Version 0.3.0 (rgerhards), 2011-04-06
 - support for message classification via tags added
