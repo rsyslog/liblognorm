@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 0.3.1 (rgerhards), 2011-04-??
+Version 0.3.1 (rgerhards), 2011-04-18
 - added -t option to normalizer so that only messages with a 
   specified tag will be output
 - bugfix: abort if a tag was assigned to a message without any 
