@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 0.3.2 (rgerhards), 2011-11-??
+- special handling for iptables log via %iptables% parser added 
+  (currently experimental pending practical verification)
+----------------------------------------------------------------------
 Version 0.3.1 (rgerhards), 2011-04-18
 - added -t option to normalizer so that only messages with a 
   specified tag will be output

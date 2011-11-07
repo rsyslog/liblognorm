@@ -159,6 +159,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		FAIL(LN_INVLDFDESCR);
 	}
 
+	node->isIPTables = 0; /* first assume no special parser is used */
 	if(!es_strconstcmp(*str, "date-rfc3164")) {
 		node->parser = ee_parseRFC3164Date;
 	} else if(!es_strconstcmp(*str, "number")) {
@@ -175,6 +176,9 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ee_parseTime24hr;
 	} else if(!es_strconstcmp(*str, "time-12hr")) {
 		node->parser = ee_parseTime12hr;
+	} else if(!es_strconstcmp(*str, "iptables")) {
+		node->parser = NULL;
+		node->isIPTables = 1;
 	} else if(!es_strconstcmp(*str, "char-to")) {
 		// TODO: check extra data!!!! (very important)
 		node->parser = ee_parseCharTo;

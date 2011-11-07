@@ -29,6 +29,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 #include <libestr.h>
 
 #include "liblognorm.h"
@@ -588,6 +589,77 @@ done:	return r;
 
 
 /**
+ * Special parser for iptables-like name/value pairs.
+ * The pull multiple fields. Note that once this parser has been selected,
+ * it is very unlikely to be left, as it is *very* generic. This parser is
+ * required because practice shows that already-structured data like iptables
+ * can otherwise not be processed by liblognorm in a meaningful way.
+ *
+ * @param[in] tree current tree to process
+ * @param[in] string string to be matched against (the to-be-normalized data)
+ * @param[in/out] offs start position in input data, on exit first unparsed position
+ * @param[in/out] event handle to event that is being created during normalization
+ *
+ * @return 0 if parser was successfully, something else on error
+ */
+static int
+ln_iptablesParser(struct ln_ptree *tree, es_str_t *str, es_size_t *offs,
+		  struct ee_event **event)
+{
+	int r;
+	es_size_t o = *offs;
+	es_str_t *fname;
+	es_str_t *fval;
+	struct ee_value *value;
+	unsigned char *pstr;
+	unsigned char *end;
+
+ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es_strlen(str));
+	if(o == es_strlen(str)) {
+		r = -1; /* can not be, we have no n/v pairs! */
+		goto done;
+	}
+	
+	end = es_getBufAddr(str) + es_strlen(str);
+	pstr = es_getBufAddr(str) + o;
+	while(pstr < end) {
+		while(isspace(*pstr))
+			++pstr;
+		fname = es_newStr(16);
+		while(!isspace(*pstr) && *pstr != '=') {
+			es_addChar(&fname, *pstr);
+			++pstr;
+		}
+		if(*pstr == '=') {
+			fval = es_newStr(16);
+			++pstr;
+			/* error on space */
+			while(!isspace(*pstr) && pstr < end) {
+				es_addChar(&fval, *pstr);
+				++pstr;
+			}
+		} else {
+			fval = es_newStrFromCStr("[*PRESENT*]", sizeof("[*PRESENT*]")-1);
+		}
+		char *cn, *cv;
+		cn = es_str2cstr(fname, NULL);
+		cv = es_str2cstr(fval, NULL);
+ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
+		value = ee_newValue(tree->ctx->eectx);
+		ee_setStrValue(value, fval);
+		CHKR(addField(tree->ctx, event, fname, value));
+	}
+
+	r = 0;
+	*offs = es_strlen(str);
+
+done:
+	ln_dbgprintf(tree->ctx, "%d iptable parser returns %d", (int) *offs, (int) r);
+	return r;
+}
+
+
+/**
  * Recursive step of the normalizer. It walks the parse tree and calls itself
  * recursively when this is appropriate. It also implements backtracking in
  * those (hopefully rare) cases where it is required.
@@ -607,6 +679,7 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 		struct ln_ptree **endNode)
 {
 	int r;
+	int localR;
 	es_size_t i;
 	int left;
 	ln_fieldList_t *node;
@@ -659,22 +732,43 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 		ln_dbgprintf(tree->ctx, "%d:trying parser for field '%s': %p", (int) offs, cstr, node->parser);
 		free(cstr);
 		i = offs;
-		if(node->parser(tree->ctx->eectx, str, &i, node->data, &value) == 0) {
-			/* potential hit, need to verify */
-			ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-			left = ln_normalizeRec(node->subtree, str, i, event, endNode);
-			if(left == 0 && (*endNode)->flags.isTerminal) {
-				ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
-				CHKR(addField(tree->ctx, event, node->name, value));
-				r = 0;
-				goto done;
-			} else {
-				ee_deleteValue(value); /* was created, now not needed */
+		if(node->isIPTables) {
+			localR = ln_iptablesParser(tree, str, &i, event);
+			ln_dbgprintf(tree->ctx, "%d iptables parser return, i=%d",
+						(int) offs, (int)i);
+			if(localR == 0) {
+				/* potential hit, need to verify */
+				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
+				left = ln_normalizeRec(node->subtree, str, i, event, endNode);
+				if(left == 0 && (*endNode)->flags.isTerminal) {
+					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
+					r = 0;
+					goto done;
+				}
+				ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
+						(int) offs, (int)left);
+				if(left < r)
+					r = left;
 			}
-			ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
-					(int) offs, (int)left);
-			if(left < r)
-				r = left;
+		} else {
+			localR = node->parser(tree->ctx->eectx, str, &i, node->data, &value);
+			if(localR == 0) {
+				/* potential hit, need to verify */
+				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
+				left = ln_normalizeRec(node->subtree, str, i, event, endNode);
+				if(left == 0 && (*endNode)->flags.isTerminal) {
+					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
+					CHKR(addField(tree->ctx, event, node->name, value));
+					r = 0;
+					goto done;
+				} else {
+					ee_deleteValue(value); /* was created, now not needed */
+				}
+				ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
+						(int) offs, (int)left);
+				if(left < r)
+					r = left;
+			}
 		}
 		node = node->next;
 	}

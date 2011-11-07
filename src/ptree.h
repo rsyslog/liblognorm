@@ -53,6 +53,7 @@ struct ln_fieldList_s {
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
+	unsigned char isIPTables; /**< special parser: iptables! */
 };
 
 
