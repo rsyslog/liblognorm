@@ -162,6 +162,8 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	node->isIPTables = 0; /* first assume no special parser is used */
 	if(!es_strconstcmp(*str, "date-rfc3164")) {
 		node->parser = ee_parseRFC3164Date;
+	} else if(!es_strconstcmp(*str, "date-rfc5424")) {
+		node->parser = ee_parseRFC5424Date;
 	} else if(!es_strconstcmp(*str, "number")) {
 		node->parser = ee_parseNumber;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
