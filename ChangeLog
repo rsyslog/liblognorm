@@ -1,5 +1,8 @@
 ----------------------------------------------------------------------
 Version 0.3.2 (rgerhards), 2011-11-??
+- added rfc5424 parser (requires libee >= 0.3.2)
+- added "-" to serve as name for filler fields. Value is extracted,
+  but no field is written
 - special handling for iptables log via %iptables% parser added 
   (currently experimental pending practical verification)
 ----------------------------------------------------------------------

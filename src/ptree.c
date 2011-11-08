@@ -728,9 +728,12 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 
 	/* now try the parsers */
 	while(node != NULL) {
-		cstr = es_str2cstr(node->name, NULL);
-		ln_dbgprintf(tree->ctx, "%d:trying parser for field '%s': %p", (int) offs, cstr, node->parser);
-		free(cstr);
+		if(tree->ctx->debug) {
+			cstr = es_str2cstr(node->name, NULL);
+			ln_dbgprintf(tree->ctx, "%d:trying parser for field '%s': %p",
+					(int) offs, cstr, node->parser);
+			free(cstr);
+		}
 		i = offs;
 		if(node->isIPTables) {
 			localR = ln_iptablesParser(tree, str, &i, event);
@@ -758,7 +761,10 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 				left = ln_normalizeRec(node->subtree, str, i, event, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
-					CHKR(addField(tree->ctx, event, node->name, value));
+					if(!es_strbufcmp(node->name, (unsigned char*)"-", 1))
+						ee_deleteValue(value); /* filler, discard */
+					else
+						CHKR(addField(tree->ctx, event, node->name, value));
 					r = 0;
 					goto done;
 				} else {
