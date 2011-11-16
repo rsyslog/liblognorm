@@ -566,9 +566,12 @@ skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, 
  * followed (if plus) by an equal sign and the field value. On entry,
  * offs must be positioned on the first unprocessed field (after ':' for
  * the initial field!). Extra whitespace is detected and, if present,
- * skipped.
+ * skipped. The obtained operation is added to the annotation set provided.
+ * Note that extracted string objects are passed to the annotation; thus it
+ * is vital NOT to free them (most importantly, this is *not* a memory leak).
  *
  * @param[in] ctx current context
+ * @param[in] annot active annotation set to which the operation is to be added
  * @param[in] buf line buffer
  * @param[in] len length of buffer
  * @param[in/out] offs on entry: offset where tag starts,
@@ -577,13 +580,13 @@ skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, 
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getAnnotationOp(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
+getAnnotationOp(ln_ctx ctx, ln_annot *annot, char *buf, es_size_t lenBuf, es_size_t *offs)
 {
 	int r = -1;
 	es_size_t i;
 	es_str_t *fieldName = NULL;
 	es_str_t *fieldVal = NULL;
-	char mode;
+	ln_annot_opcode opc;
 
 	i = *offs;
 	skipWhitespace(ctx, buf, lenBuf, &i);
@@ -592,7 +595,17 @@ getAnnotationOp(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
 		goto done; /* nothing left to process (no error!) */
 	}
 
-	mode = buf[i++];
+	if(buf[i] == '+') {
+		opc = ln_annot_ADD;
+	} else if(buf[i] == '-') {
+		ln_dbgprintf(ctx, "annotate op '-' not yet implemented - failing");
+		goto fail;
+	} else {
+		ln_dbgprintf(ctx, "invalid annotate opcode '%c' - failing" , buf[i]);
+		goto fail;
+	}
+	i++;
+
 	if(i == lenBuf) goto fail; /* nothing left to process */
 
 	CHKR(getFieldName(ctx, buf, lenBuf, &i, &fieldName));
@@ -612,11 +625,12 @@ getAnnotationOp(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
 		++i;
 	}
 	*offs = (i == lenBuf) ? i : i+1;
+	CHKR(ln_addAnnotOp(annot, opc, fieldName, fieldVal));
 	r = 0;
 char *x1,*x2;
 x1 = es_str2cstr(fieldName, NULL);
 x2 = es_str2cstr(fieldVal, NULL);
-ln_dbgprintf(ctx, "annotate op found: %c%s=%s", mode, x1,x2);
+ln_dbgprintf(ctx, "annotate op found: %s=%s", x1,x2);
 free(x1);
 free(x2);
 done:	return r;
@@ -638,6 +652,7 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
 	es_str_t *tag = NULL;
+	ln_annot *annot;
 
 	ln_dbgprintf(ctx, "sample annotation to add: '%s'", buf+offs);
 	CHKR(getFieldName(ctx, buf, lenBuf, &offs, &tag));
@@ -648,8 +663,11 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	}
 	++offs;
 
+	/* we got an annotation! */
+	CHKN(annot = ln_newAnnot(ctx));
+
 	while(offs < lenBuf) {
-		CHKR(getAnnotationOp(ctx, buf, lenBuf, &offs));
+		CHKR(getAnnotationOp(ctx, annot, buf, lenBuf, &offs));
 	}
 	
 	r = 0;

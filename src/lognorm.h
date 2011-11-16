@@ -28,6 +28,7 @@
 #define	LIBLOGNORM_LOGNORM_HINCLUDED
 #include <stdlib.h>	/* we need size_t */
 #include "ptree.h"
+#include "annot.h"
 
 #define LN_ObjID_None 0xFEFE0001
 #define LN_ObjID_CTX 0xFEFE0001
@@ -39,6 +40,7 @@ struct ln_ctx_s {
 	void *dbgCookie; /**< cookie to be passed to debug callback */
 	ee_ctx eectx;
 	ln_ptree *ptree; /**< parse tree being used by this context */
+	ln_annot *pannot; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */
 	unsigned char debug; /**< boolean: are we in debug mode? */
 	es_str_t *rulePrefix; /**< work variable for loading rule bases

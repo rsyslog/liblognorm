@@ -16,6 +16,7 @@ lib_LTLIBRARIES = liblognorm.la
 liblognorm_la_SOURCES = \
 	liblognorm.c \
 	ptree.c \
+	annot.c \
 	samp.c \
 	lognorm.c
 
@@ -28,6 +29,7 @@ EXTRA_DIST = \
 	liblognorm.h \
 	lognorm.h \
 	ptree.h \
+	annot.h \
 	samp.h
 
 include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h
