@@ -26,6 +26,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <assert.h>
+#include <ctype.h>
 #include <libee/libee.h>
 #include <libee/primitivetype.h>
 
@@ -509,6 +510,153 @@ done:	return r;
 }
 
 
+/**
+ * Obtain a field name from a rule base line.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in/out] offs on entry: offset where tag starts,
+ * 		       on exit: updated offset AFTER TAG and (':')
+ * @param [out] strTag obtained tag, if successful
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+getFieldName(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
+{
+	int r = -1;
+	es_size_t i;
+
+	i = *offs;
+	while(i < lenBuf && 
+	       (isalnum(buf[i]) || buf[i] == '_' || buf[i] == '.')) {
+		if(*strTag == NULL) {
+			CHKN(*strTag = es_newStr(32));
+		}
+		CHKR(es_addChar(strTag, buf[i]));
+		++i;
+	}
+	*offs = i;
+	r = 0;
+done:	return r;
+}
+
+
+/**
+ * Skip over whitespace.
+ * Skips any whitespace present at the offset.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in/out] offs on entry: offset first unprocessed position
+ */
+static inline void
+skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
+{
+	while(*offs < lenBuf && isspace(buf[*offs])) {
+		(*offs)++;
+	}
+}
+
+
+/**
+ * Obtain an annotation (field) operation.
+ * This usually is a plus or minus sign followed by a field name 
+ * followed (if plus) by an equal sign and the field value. On entry,
+ * offs must be positioned on the first unprocessed field (after ':' for
+ * the initial field!). Extra whitespace is detected and, if present,
+ * skipped.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in/out] offs on entry: offset where tag starts,
+ * 		       on exit: updated offset AFTER TAG and (':')
+ * @param [out] strTag obtained tag, if successful
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+getAnnotationOp(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
+{
+	int r = -1;
+	es_size_t i;
+	es_str_t *fieldName = NULL;
+	es_str_t *fieldVal = NULL;
+	char mode;
+
+	i = *offs;
+	skipWhitespace(ctx, buf, lenBuf, &i);
+	if(i == lenBuf) {
+		r = 0;
+		goto done; /* nothing left to process (no error!) */
+	}
+
+	mode = buf[i++];
+	if(i == lenBuf) goto fail; /* nothing left to process */
+
+	CHKR(getFieldName(ctx, buf, lenBuf, &i, &fieldName));
+	if(i == lenBuf) goto fail; /* nothing left to process */
+	if(buf[i] != '=') goto fail; /* format error */
+	i++;
+
+	skipWhitespace(ctx, buf, lenBuf, &i);
+	if(buf[i] != '"') goto fail; /* format error */
+	++i;
+
+	while(i < lenBuf && buf[i] != '"') {
+		if(fieldVal == NULL) {
+			CHKN(fieldVal = es_newStr(32));
+		}
+		CHKR(es_addChar(&fieldVal, buf[i]));
+		++i;
+	}
+	*offs = (i == lenBuf) ? i : i+1;
+	r = 0;
+char *x1,*x2;
+x1 = es_str2cstr(fieldName, NULL);
+x2 = es_str2cstr(fieldVal, NULL);
+ln_dbgprintf(ctx, "annotate op found: %c%s=%s", mode, x1,x2);
+free(x1);
+free(x2);
+done:	return r;
+fail:	return -1;
+}
+
+
+/**
+ * Process a new annotation and add it to the annotation list.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in] offs offset where annotation starts
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+{
+	int r = -1;
+	es_str_t *tag = NULL;
+
+	ln_dbgprintf(ctx, "sample annotation to add: '%s'", buf+offs);
+	CHKR(getFieldName(ctx, buf, lenBuf, &offs, &tag));
+	skipWhitespace(ctx, buf, lenBuf, &offs);
+	if(buf[offs] != ':') {
+		ln_dbgprintf(ctx, "invalid tag field in annotation, line is '%s'", buf);
+		goto done;
+	}
+	++offs;
+
+	while(offs < lenBuf) {
+		CHKR(getAnnotationOp(ctx, buf, lenBuf, &offs));
+	}
+	
+	r = 0;
+done:	return r;
+}
+
+
 struct ln_samp *
 ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 {
@@ -545,9 +693,15 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	} else if(!es_strconstcmp(typeStr, "extendprefix")) {
 		if(extendPrefix(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "rule")) {
-		if(processRule(ctx, buf,lenBuf, offs) != 0) goto done;
+		if(processRule(ctx, buf, lenBuf, offs) != 0) goto done;
+	} else if(!es_strconstcmp(typeStr, "annotate")) {
+		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else {
 		// TODO error reporting
+		char *str;
+		str = es_str2cstr(typeStr, NULL);
+		ln_dbgprintf(ctx, "invalid record type detected: '%s'", str);
+		free(str);
 		goto done;
 	}
 
