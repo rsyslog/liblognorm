@@ -627,12 +627,6 @@ getAnnotationOp(ln_ctx ctx, ln_annot *annot, char *buf, es_size_t lenBuf, es_siz
 	*offs = (i == lenBuf) ? i : i+1;
 	CHKR(ln_addAnnotOp(annot, opc, fieldName, fieldVal));
 	r = 0;
-char *x1,*x2;
-x1 = es_str2cstr(fieldName, NULL);
-x2 = es_str2cstr(fieldVal, NULL);
-ln_dbgprintf(ctx, "annotate op found: %s=%s", x1,x2);
-free(x1);
-free(x2);
 done:	return r;
 fail:	return -1;
 }

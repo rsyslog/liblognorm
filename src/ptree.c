@@ -36,6 +36,7 @@
 #include "lognorm.h"
 #include "samp.h"
 #include "ptree.h"
+#include "annot.h"
 #include "internal.h"
 
 /**
@@ -808,13 +809,15 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 
 	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
 
-	if(left != 0) {
-		ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p",
-			     left, endNode);
-	} else {
-		ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, "
-			     "isTerminal %d, tagbucket %p",
-			     left, endNode, endNode->flags.isTerminal, endNode->tags);
+	if(ctx->debug) {
+		if(left == 0) {
+			ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, "
+				     "isTerminal %d, tagbucket %p",
+				     left, endNode, endNode->flags.isTerminal, endNode->tags);
+		} else {
+			ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p",
+				     left, endNode);
+		}
 	}
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
@@ -830,6 +833,7 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 				CHKN(*event = ee_newEvent(ctx->eectx));
 			}
 			CHKR(ee_assignTagbucketToEvent(*event, ee_addRefTagbucket(endNode->tags)));
+			CHKR(ln_annotateEvent(ctx, *event));
 		}
 	}
 

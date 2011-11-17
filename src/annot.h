@@ -156,4 +156,16 @@ void ln_deleteAnnot(ln_annot *annot);
  */
 int ln_addAnnotOp(ln_annot *anot, ln_annot_opcode opc, es_str_t *name, es_str_t *value);
 
+
+/**
+ * Annotate an event.
+ * This adds anotations based on the event's tagbucket.
+ * @memberof ln_annot
+ *
+ * @param[in] ctx current context
+ * @param[in] event event to annotate (updated with anotations on exit)
+ * @returns 0 on success, something else otherwise
+ */
+int ln_annotateEvent(ln_ctx ctx, struct ee_event *event);
+
 #endif /* #ifndef LOGNORM_ANNOT_H_INCLUDED */

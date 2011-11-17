@@ -31,6 +31,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <libestr.h>
+#include <libee/libee.h>
+#include <libee/event.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -77,7 +79,7 @@ ln_findAnnot(ln_annotSet *as, es_str_t *tag)
 	}
 
 	for(  annot = as->aroot
-	    ; annot != NULL && !es_strcmp(annot->tag, tag)
+	    ; annot != NULL && es_strcmp(annot->tag, tag)
 	    ; annot = annot->next) {
 		; /* do nothing, just search... */
 	}
@@ -175,6 +177,59 @@ ln_addAnnotOp(ln_annot *annot, ln_annot_opcode opc, es_str_t *name, es_str_t *va
 	}
 	annot->oproot = node;
 	r = 0;
+
+done:	return r;
+}
+
+
+/* annotate the event with a specific tag. helper to keep code
+ * small and easy to follow.
+ */
+static inline int
+ln_annotateEventWithTag(ln_ctx ctx, struct ee_event *event, es_str_t *tag)
+{
+	int r=0;
+	ln_annot *annot;
+	ln_annot_op *op;
+	struct ee_field *field;
+
+	annot = ln_findAnnot(ctx->pas, tag);
+	for(op = annot->oproot ; op != NULL ; op = op->next) {
+		if(op->opc == ln_annot_ADD) {
+			CHKN(field = ee_newField(ctx->eectx));
+			CHKR(ee_nameField(field, op->name));
+			CHKR(ee_addStrValueToField(field, op->value));
+			CHKR(ee_addFieldToEvent(event, field));
+		} else {
+			// TODO: implement
+		}
+	}
+
+done: 	return r;
+}
+
+
+int
+ln_annotateEvent(ln_ctx ctx, struct ee_event *event)
+{
+	int r = 0;
+	void *cookie;
+	struct ee_tagbucket *tagbucket;
+	es_str_t *tag;
+
+	/* shortcut: terminate immediately if nothing to do... */
+	if(ctx->pas->aroot == NULL)
+		goto done;
+
+	/* iterate over tagbucket */
+	ee_EventGetTagbucket(event, &tagbucket);
+	cookie = NULL;
+	while(1) {
+		CHKR(ee_TagbucketGetNextTag(tagbucket, &cookie, &tag));
+		if(cookie == NULL)
+			break;	/* end iteration */
+		CHKR(ln_annotateEventWithTag(ctx, event, tag));
+	}
 
 done:	return r;
 }
