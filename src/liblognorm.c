@@ -26,6 +26,7 @@
 
 #include "liblognorm.h"
 #include "lognorm.h"
+#include "annot.h"
 #include "samp.h"
 
 #define ERR_ABORT {r = 1; goto done; }
@@ -57,6 +58,13 @@ ln_initCtx(void)
 	 * tree handling.
 	 */
 	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
+		free(ctx);
+		ctx = NULL;
+		goto done;
+	}
+	/* same for annotation set */
+	if((ctx->pas = ln_newAnnotSet(ctx)) == NULL) {
+		ln_deletePTree(ctx->ptree);
 		free(ctx);
 		ctx = NULL;
 		goto done;

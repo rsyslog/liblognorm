@@ -639,7 +639,7 @@ fail:	return -1;
 
 
 /**
- * Process a new annotation and add it to the annotation list.
+ * Process a new annotation and add it to the annotation set.
  *
  * @param[in] ctx current context
  * @param[in] buf line buffer
@@ -650,7 +650,7 @@ fail:	return -1;
 static inline int
 processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 {
-	int r = -1;
+	int r;
 	es_str_t *tag = NULL;
 	ln_annot *annot;
 
@@ -659,18 +659,20 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	skipWhitespace(ctx, buf, lenBuf, &offs);
 	if(buf[offs] != ':') {
 		ln_dbgprintf(ctx, "invalid tag field in annotation, line is '%s'", buf);
+		r=-1;
 		goto done;
 	}
 	++offs;
 
 	/* we got an annotation! */
-	CHKN(annot = ln_newAnnot(ctx));
+	CHKN(annot = ln_newAnnot(tag));
 
 	while(offs < lenBuf) {
 		CHKR(getAnnotationOp(ctx, annot, buf, lenBuf, &offs));
 	}
-	
-	r = 0;
+
+	r = ln_addAnnotToSet(ctx->pas, annot);
+
 done:	return r;
 }
 

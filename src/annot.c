@@ -38,13 +38,102 @@
 #include "annot.h"
 #include "internal.h"
 
+ln_annotSet*
+ln_newAnnotSet(ln_ctx ctx)
+{
+	ln_annotSet *as;
+
+	if((as = calloc(1, sizeof(struct ln_annotSet_s))) == NULL)
+		goto done;
+	as->ctx = ctx;
+done:	return as;
+}
+
+
+void
+ln_deleteAnnotSet(ln_annotSet *as)
+{
+	ln_annot *node, *nodeDel;
+	if(as == NULL)
+		goto done;
+
+	for(node = as->aroot ; node != NULL ; ) {
+		nodeDel = node;
+		node = node->next;
+		ln_deleteAnnot(nodeDel);
+	}
+	free(as);
+done:	return;
+}
+
+
 ln_annot*
-ln_newAnnot(ln_ctx ctx)
+ln_findAnnot(ln_annotSet *as, es_str_t *tag)
+{
+	ln_annot *annot;
+	if(as == NULL) {
+		annot = NULL;
+		goto done;
+	}
+
+	for(  annot = as->aroot
+	    ; annot != NULL && !es_strcmp(annot->tag, tag)
+	    ; annot = annot->next) {
+		; /* do nothing, just search... */
+	}
+done:	return annot;
+}
+
+
+/**
+ * Combine two annotations.
+ * @param[in] annot currently existing and surviving annotation
+ * @param[in] add   annotation to be added. This will be destructed
+ *                  as part of the process.
+ * @returns 0 if ok, something else otherwise
+ */
+inline int
+ln_combineAnnot(ln_annot *annot, ln_annot *add)
+{
+	int r = 0;
+	ln_annot_op *op, *opdel;
+
+	for(op = add->oproot ; op != NULL ; ) {
+		CHKR(ln_addAnnotOp(annot, op->opc, op->name, op->value));
+		opdel = op;
+		op = op->next;
+		free(opdel);
+	}
+done:	return r;
+}
+
+
+int
+ln_addAnnotToSet(ln_annotSet *as, ln_annot *annot)
+{
+	int r = 0;
+	ln_annot *aexist;
+	assert(annot->tag != NULL);
+	aexist = ln_findAnnot(as, annot->tag);
+	if(aexist == NULL) {
+		/* does not yet exist, simply store new annot */
+		annot->next = as->aroot;
+		as->aroot = annot;
+	} else { /* annotation already exists, combine */
+		r = ln_combineAnnot(aexist, annot);
+	}
+	return r;
+}
+
+
+ln_annot*
+ln_newAnnot(es_str_t *tag)
 {
 	ln_annot *annot;
 
 	if((annot = calloc(1, sizeof(struct ln_annot_s))) == NULL)
 		goto done;
+	annot->tag = tag;
 done:	return annot;
 }
 

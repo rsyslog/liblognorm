@@ -31,28 +31,44 @@
 #include <libestr.h>
 #include <libee/libee.h>
 
-typedef struct ln_annot_s ln_annot; /**< the parse tree object */
-typedef struct ln_annot_op_s ln_annot_op; /**< the parse tree object */
+typedef struct ln_annotSet_s ln_annotSet;
+typedef struct ln_annot_s ln_annot;
+typedef struct ln_annot_op_s ln_annot_op;
 typedef enum {ln_annot_ADD=0, ln_annot_RM=1} ln_annot_opcode;
 
 /**
  * List of annotation operations.
  */
 struct ln_annot_op_s {
+	ln_annot_op *next;
 	ln_annot_opcode opc; /**< opcode */
 	es_str_t *name;
 	es_str_t *value;
-	ln_annot_op *next;
 };
 
-/* annotation set object
+/**
+ * annotation object
  */
 struct ln_annot_s {
+	ln_annot *next;	/**< used for chaining annotations */
 	es_str_t *tag;	/**< tag associated for this annotation */
 	ln_annot_op *oproot;
 };
 
+/**
+ * annotation set object
+ * 
+ * Note: we do not (yet) use a hash table. However, performance should
+ * be gained by pre-processing rules so that tags directly point into
+ * the annotation. This is even faster than hash table access.
+ */
+struct ln_annotSet_s {
+	ln_annot *aroot;
+	ln_ctx ctx;	/**< save our context for easy dbgprintf et al... */
+};
+
 /* Methods */
+
 
 /**
  * Allocates and initializes a new annotation set.
@@ -63,11 +79,62 @@ struct ln_annot_s {
  *
  * @return pointer to new node or NULL on error
  */
-ln_annot* ln_newAnnot(ln_ctx ctx);
+ln_annotSet* ln_newAnnotSet(ln_ctx ctx);
 
 
 /**
  * Free annotation set and destruct all members.
+ * @memberof ln_annot
+ *
+ * @param[in] tree pointer to annot to free
+ */
+void ln_deleteAnnotSet(ln_annotSet *as);
+
+
+/**
+ * Find annotation inside set based on given tag name.
+ * @memberof ln_annot
+ *
+ * @param[in] as annotation set
+ * @param[in] tag tag name to look for
+ *
+ * @returns NULL if not found, ptr to object otherwise
+ */
+ln_annot* ln_findAnnot(ln_annotSet *as, es_str_t *tag);
+
+
+/**
+ * Add annotation to set.
+ * If an annotation associated with this tag already exists, these
+ * are combined. If not, a new annotation is added. Note that the
+ * caller must not access any of the objects passed in to this method
+ * after it has finished (objects may become deallocated during the
+ * method).
+ * @memberof ln_annot
+ *
+ * @param[in] as annotation set
+ * @param[in] annot annotation to add
+ *
+ * @returns 0 on success, something else otherwise
+ */
+int ln_addAnnotToSet(ln_annotSet *as, ln_annot *annot);
+
+
+/**
+ * Allocates and initializes a new annotation.
+ * The tag passed in identifies the new annotation. The caller
+ * no longer owns the tag string after calling this method, so
+ * it must not access the same copy when the method returns.
+ * @memberof ln_annot
+ *
+ * @param[in] tag tag associated to annot (must not be NULL)
+ * @return pointer to new node or NULL on error
+ */
+ln_annot* ln_newAnnot(es_str_t *tag);
+
+
+/**
+ * Free annotation and destruct all members.
  * @memberof ln_annot
  *
  * @param[in] tree pointer to annot to free
