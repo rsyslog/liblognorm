@@ -12,7 +12,7 @@
  *
  *//*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2011 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of liblognorm.
  *
@@ -46,6 +46,7 @@ static ee_ctx eectx;
 
 static int verbose = 0;
 static int parsedOnly = 0;	/**< output unparsed messages? */
+static int flatTags = 0;	/**< output unparsed messages? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
 static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will
@@ -161,7 +162,7 @@ int main(int argc, char *argv[])
 	int opt;
 	char *repository = NULL;
 	
-	while((opt = getopt(argc, argv, "d:e:r:E:vpt:")) != -1) {
+	while((opt = getopt(argc, argv, "d:e:r:E:vpt:T")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -179,6 +180,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'p':
 			parsedOnly = 1;
+			break;
+		case 'T':
+			flatTags = 1;
 			break;
 		case 'e': /* encoder to use */
 			if(!strcmp(optarg, "json")) {
@@ -209,6 +213,9 @@ int main(int argc, char *argv[])
 
 	if((eectx = ee_initCtx()) == NULL) {
 		errout("Could not initialize libee context");
+	}
+	if(flatTags) {
+		ee_setFlags(eectx, EE_CTX_FLAG_INCLUDE_FLAT_TAGS);
 	}
 
 	if(verbose) {
