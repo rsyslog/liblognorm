@@ -32,4 +32,4 @@ EXTRA_DIST = \
 	annot.h \
 	samp.h
 
-include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h
+include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h

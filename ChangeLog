@@ -1,4 +1,9 @@
 ----------------------------------------------------------------------
+Version 0.3.3 (rgerhards), 2012-02-06
+- required header file was not installed, resulting in compile error
+  closes: http://bugzilla.adiscon.com/show_bug.cgi?id=307
+  Thanks to Andreis Vinogradovs for alerting us on this bug.
+----------------------------------------------------------------------
 Version 0.3.2 (rgerhards), 2011-11-21
 - added rfc5424 parser (requires libee >= 0.3.2)
 - added "-" to serve as name for filler fields. Value is extracted,
