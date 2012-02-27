@@ -1,4 +1,7 @@
 ----------------------------------------------------------------------
+Version 0.4.0 (rgerhards), 2012-02-06
+- now supports the new libee with libcollection implementation
+----------------------------------------------------------------------
 Version 0.3.3 (rgerhards), 2012-02-06
 - required header file was not installed, resulting in compile error
   closes: http://bugzilla.adiscon.com/show_bug.cgi?id=307

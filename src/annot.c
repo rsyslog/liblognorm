@@ -191,15 +191,14 @@ ln_annotateEventWithTag(ln_ctx ctx, struct ee_event *event, es_str_t *tag)
 	int r=0;
 	ln_annot *annot;
 	ln_annot_op *op;
-	struct ee_field *field;
+	char *nam;
 
 	annot = ln_findAnnot(ctx->pas, tag);
 	for(op = annot->oproot ; op != NULL ; op = op->next) {
 		if(op->opc == ln_annot_ADD) {
-			CHKN(field = ee_newField(ctx->eectx));
-			CHKR(ee_nameField(field, op->name));
-			CHKR(ee_addStrValueToField(field, op->value));
-			CHKR(ee_addFieldToEvent(event, field));
+			nam = es_str2cstr(op->name, NULL);
+			CHKR(ee_addStrFieldToEvent(event, nam, op->value));
+			free(nam);
 		} else {
 			// TODO: implement
 		}

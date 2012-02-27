@@ -32,6 +32,7 @@
 #include <ctype.h>
 #include <libestr.h>
 
+#include "libestr.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
@@ -541,22 +542,29 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
 /* TODO: Move to a better location? */
 
 static inline int
-addField(ln_ctx ctx, struct ee_event **event, es_str_t *name, struct ee_value *value)
+addFieldCStr(ln_ctx ctx, struct ee_event **event, char *name, es_str_t *value)
 {
 	int r;
-	struct ee_field *field;
 
 	if(*event == NULL) {
 		CHKN(*event = ee_newEvent(ctx->eectx));
 	}
 
-	CHKN(field = ee_newField(ctx->eectx));
-	CHKR(ee_nameField(field, name));
-	CHKR(ee_addValueToField(field, value));
-	CHKR(ee_addFieldToEvent(*event, field));
+	CHKR(ee_addStrFieldToEvent(*event, name, value));
 	r = 0;
 
 done:	return r;
+}
+/* TODO: combine these two functions during interface cleanup! */
+static inline int
+addField(ln_ctx ctx, struct ee_event **event, es_str_t *name, es_str_t *value)
+{
+	int r;
+	char *nam;
+	nam = es_str2cstr(name, NULL);
+	r = addFieldCStr(ctx, event, nam, value);
+	free(nam);
+	return r;
 }
 
 
@@ -566,24 +574,13 @@ done:	return r;
 static inline int
 addUnparsedField(ln_ctx ctx, es_str_t *str, es_size_t offs, struct ee_event **event)
 {
-	struct ee_value *value;
-	es_str_t *namestr;
 	es_str_t *valstr;
 	int r;
 
-	CHKN(value = ee_newValue(ctx->eectx));
-	CHKN(namestr = es_newStrFromCStr("originalmsg", sizeof("originalmsg") - 1));
-	CHKN(valstr = es_strdup(str));
-	ee_setStrValue(value, valstr);
-	addField(ctx, event, namestr, value);
-	es_deleteStr(namestr);
-
-	CHKN(value = ee_newValue(ctx->eectx));
-	CHKN(namestr = es_newStrFromCStr("unparsed-data", sizeof("unparsed-data") - 1));
+	addFieldCStr(ctx, event, "originalmsg", str);
 	CHKN(valstr = es_newStrFromSubStr(str, offs, es_strlen(str) - offs));
-	ee_setStrValue(value, valstr);
-	addField(ctx, event, namestr, value);
-	es_deleteStr(namestr);
+	addFieldCStr(ctx, event, "unparsed-data", valstr);
+	es_deleteStr(valstr);
 	r = 0;
 done:	return r;
 }
@@ -611,7 +608,6 @@ ln_iptablesParser(struct ln_ptree *tree, es_str_t *str, es_size_t *offs,
 	es_size_t o = *offs;
 	es_str_t *fname;
 	es_str_t *fval;
-	struct ee_value *value;
 	unsigned char *pstr;
 	unsigned char *end;
 
@@ -646,9 +642,8 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 		cn = es_str2cstr(fname, NULL);
 		cv = es_str2cstr(fval, NULL);
 ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
-		value = ee_newValue(tree->ctx->eectx);
-		ee_setStrValue(value, fval);
-		CHKR(addField(tree->ctx, event, fname, value));
+free(cn);free(cv);
+		CHKR(addField(tree->ctx, event, fname, fval));
 	}
 
 	r = 0;
@@ -684,7 +679,7 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	es_size_t i;
 	int left;
 	ln_fieldList_t *node;
-	struct ee_value *value;
+	es_str_t *value;
 	char *cstr;
 	unsigned char *c;
 	unsigned char *cpfix;
@@ -763,13 +758,13 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(!es_strbufcmp(node->name, (unsigned char*)"-", 1))
-						ee_deleteValue(value); /* filler, discard */
+						es_deleteStr(value); /* filler, discard */
 					else
 						CHKR(addField(tree->ctx, event, node->name, value));
 					r = 0;
 					goto done;
 				} else {
-					ee_deleteValue(value); /* was created, now not needed */
+					es_deleteStr(value); /* was created, now not needed */
 				}
 				ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
 						(int) offs, (int)left);

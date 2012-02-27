@@ -12,7 +12,7 @@
  *
  *//*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2011 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2012 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of liblognorm.
  *
