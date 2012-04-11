@@ -71,28 +71,30 @@ void errout(char *errmsg)
  * of the string on every call.
  */
 static inline void
-outputEvent(struct ee_event *event, es_str_t **str)
+outputEvent(struct ee_event *event)
 {
 	char *cstr;
-	es_emptyStr(*str);
+	es_str_t *str = NULL;
+
 	switch(outfmt) {
 	case f_json:
-		ee_fmtEventToJSON(event, str);
+		ee_fmtEventToJSON(event, &str);
 		break;
 	case f_syslog:
-		ee_fmtEventToRFC5424(event, str);
+		ee_fmtEventToRFC5424(event, &str);
 		break;
 	case f_xml:
-		ee_fmtEventToXML(event, str);
+		ee_fmtEventToXML(event, &str);
 		break;
 	case f_csv:
-		ee_fmtEventToCSV(event, str, encFmt);
+		ee_fmtEventToCSV(event, &str, encFmt);
 		break;
 	}
-	cstr = es_str2cstr(*str, NULL);
+	cstr = es_str2cstr(str, NULL);
 	if(verbose > 0) printf("normalized: '%s'\n", cstr);
 	printf("%s\n", cstr);
 	free(cstr);
+	es_deleteStr(str);
 }
 
 
@@ -126,7 +128,7 @@ normalize(void)
 				   && ee_getEventField(event, constUnparsed) != NULL){
 					numUnparsed++;
 				} else {
-					outputEvent(event, &str);
+					outputEvent(event);
 				}
 			} else {
 				numWrongTag++;
@@ -140,6 +142,7 @@ normalize(void)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
+	es_deleteStr(constUnparsed);
 }
 
 

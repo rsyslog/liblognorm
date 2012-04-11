@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 0.3.4 (rgerhards), 2012-0?-??
+- bugfix: normalizer tool had a memory leak
+  Thanks to Brian Know for alerting me and helping to debug
+----------------------------------------------------------------------
 Version 0.3.3 (rgerhards), 2012-02-06
 - required header file was not installed, resulting in compile error
   closes: http://bugzilla.adiscon.com/show_bug.cgi?id=307
