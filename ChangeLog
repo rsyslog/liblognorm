@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 0.3.4 (rgerhards), 2012-0?-??
+Version 0.3.4 (rgerhards), 2012-04-16
 - bugfix: normalizer tool had a memory leak
   Thanks to Brian Know for alerting me and helping to debug
 ----------------------------------------------------------------------
