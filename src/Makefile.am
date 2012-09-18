@@ -6,10 +6,10 @@ PTHREADS_CFLAGS = -pthread
 
 # we need to clean the normalizer up once we have reached a decent
 # milestone (latest at initial release!)
-bin_PROGRAMS = normalizer
-normalizer_SOURCES = normalizer.c
-normalizer_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
-normalizer_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+bin_PROGRAMS = lognormalizer
+lognormalizer_SOURCES = lognormalizer.c
+lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
+lognormalizer_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
 
 lib_LTLIBRARIES = liblognorm.la
 
