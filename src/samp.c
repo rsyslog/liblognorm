@@ -241,7 +241,7 @@ static inline int
 parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	     es_size_t *bufOffs, es_str_t **str)
 {
-	int r;
+	int r = 0;
 	es_size_t i = *bufOffs;
 	unsigned char *buf;
 	es_size_t lenBuf;
