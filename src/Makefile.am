@@ -10,6 +10,7 @@ bin_PROGRAMS = lognormalizer
 lognormalizer_SOURCES = lognormalizer.c
 lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
 lognormalizer_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+lognormalizer_DEPENDENCIES = liblognorm.la
 
 lib_LTLIBRARIES = liblognorm.la
 
