@@ -1,4 +1,7 @@
 ----------------------------------------------------------------------
+Version 0.3.6, 2013-03-22
+- bugfix: unitialized variable could lead to rulebase load error
+----------------------------------------------------------------------
 Version 0.3.5 (rgerhards), 2012-09-18
 - renamed "normalizer" tool to "lognormalizer" to solve name clashes
   Thanks to the Fedora folks for pointing this out.
