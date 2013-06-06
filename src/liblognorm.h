@@ -9,9 +9,9 @@
  * For lognorm library files themselves, include "lognorm.h".
  *//**
  * @mainpage
- * Liblognorm is an easy to use and fast samples-based log normalization 
+ * Liblognorm is an easy to use and fast samples-based log normalization
  * library.
- * 
+ *
  * It can be passed a stream of arbitrary log messages, one at a time, and for
  * each message it will output well-defined name-value pairs and a set of
  * tags describing the message.
@@ -73,7 +73,7 @@ typedef void * event_t;
 /**
  * The library context descriptor.
  * This is used to permit multiple independednt instances of the
- * library to be called within a single program. This is most 
+ * library to be called within a single program. This is most
  * useful for plugin-based architectures.
  */
 typedef struct ln_ctx_s* ln_ctx;
@@ -167,6 +167,21 @@ int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie);
 void ln_enableDebug(ln_ctx ctx, int i);
 
 /**
+ * Reads a sample stored in buffer buf and creates a new ln_samp object
+ * out of it.
+ *
+ * @note
+ * It is the caller's responsibility to delete the newly
+ * created ln_samp object if it is no longer needed.
+ *
+ * @param[ctx] ctx current library context
+ * @param[buf] NULL terminated cstr containing the contents of the sample
+ * @return Returns zero on success, something else otherwise.
+ */
+int
+ln_loadSample(ln_ctx ctx, char *buf);
+
+/**
  * Load a (log) sample file.
  *
  * The file must contain log samples in syntactically correct format. Samples are added
@@ -188,7 +203,7 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  * to normalize and will return a normalized in-memory representation
  * of it.
  *
- * If an error occurs, the function returns -1. In that case, an 
+ * If an error occurs, the function returns -1. In that case, an
  * in-memory event representation has been generated if event is
  * non-NULL. In that case, the event contains further error details in
  * normalized form.
@@ -202,7 +217,7 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  * @param[in] ctx The library context to use.
  * @param[in] msg The message string (see note above).
  * @param[in] lenmsg The length of the message in bytes.
- * @param[out] event A new event record or NULL if an error occured. <b>Must be 
+ * @param[out] event A new event record or NULL if an error occured. <b>Must be
  *                   destructed if no longer needed.</b>
  *
  * @return Returns zero on success, something else otherwise.

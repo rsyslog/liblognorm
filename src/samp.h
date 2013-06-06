@@ -73,10 +73,27 @@ ln_sampClose(ln_ctx ctx, struct ln_sampRepos *repo);
 
 
 /**
+ * Reads a sample stored in buffer buf and creates a new ln_samp object
+ * out of it.
+ *
+ * @note
+ * It is the caller's responsibility to delete the newly
+ * created ln_samp object if it is no longer needed.
+ *
+ * @param[ctx] ctx current library context
+ * @param[buf] cstr buffer containing the string contents of the sample
+ * @param[lenBuf] length of the sample contained within buf
+ * @return Newly create object or NULL if an error occured.
+ */
+struct ln_samp *
+ln_processSamp(ln_ctx ctx, char *buf, es_size_t lenBuf);
+
+
+/**
  * Read a sample from repository (sequentially).
  *
  * Reads a sample starting with the current file position and
- * creates a new ln_samp object out of it. 
+ * creates a new ln_samp object out of it.
  *
  * @note
  * It is the caller's responsibility to delete the newly

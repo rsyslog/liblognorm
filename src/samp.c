@@ -75,7 +75,7 @@ ln_sampCreate(ln_ctx __attribute__((unused)) ctx)
 
 	if((samp = calloc(1, sizeof(struct ln_samp))) == NULL)
 		goto done;
-	
+
 	/* place specific init code here (none at this time) */
 
 done:	return samp;
@@ -132,7 +132,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 
 	if(es_strlen(node->name) == 0) {
 		FAIL(LN_INVLDFDESCR);
-	} 
+	}
 
 	if(ctx->debug) {
 		cstr = es_str2cstr(node->name, NULL);
@@ -281,11 +281,11 @@ done:	return r;
 /* Implementation note:
  * We read in the sample, and split it into chunks of literal text and
  * fields. Each literal text is added as whole to the tree, as is each
- * field individually. To do so, we keep track of our current subtree 
+ * field individually. To do so, we keep track of our current subtree
  * root, which changes whenever a new part of the tree is build. It is
  * set to the then-lowest part of the tree, where the next step sample
  * data is to be added.
- * 
+ *
  * This function processes the whole string or returns an error.
  *
  * format: literal1%field:type:extra-data%literal2
@@ -373,7 +373,7 @@ getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 	} else {
 		es_emptyStr(*str);
 	}
-		
+
 	r = es_addBuf(str, buf + offs, lenBuf - offs);
 done:	return r;
 }
@@ -522,13 +522,13 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getFieldName(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
+getFieldName(char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
 {
 	int r = -1;
 	es_size_t i;
 
 	i = *offs;
-	while(i < lenBuf && 
+	while(i < lenBuf &&
 	       (isalnum(buf[i]) || buf[i] == '_' || buf[i] == '.')) {
 		if(*strTag == NULL) {
 			CHKN(*strTag = es_newStr(32));
@@ -562,7 +562,7 @@ skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, 
 
 /**
  * Obtain an annotation (field) operation.
- * This usually is a plus or minus sign followed by a field name 
+ * This usually is a plus or minus sign followed by a field name
  * followed (if plus) by an equal sign and the field value. On entry,
  * offs must be positioned on the first unprocessed field (after ':' for
  * the initial field!). Extra whitespace is detected and, if present,
@@ -608,7 +608,7 @@ getAnnotationOp(ln_ctx ctx, ln_annot *annot, char *buf, es_size_t lenBuf, es_siz
 
 	if(i == lenBuf) goto fail; /* nothing left to process */
 
-	CHKR(getFieldName(ctx, buf, lenBuf, &i, &fieldName));
+	CHKR(getFieldName(buf, lenBuf, &i, &fieldName));
 	if(i == lenBuf) goto fail; /* nothing left to process */
 	if(buf[i] != '=') goto fail; /* format error */
 	i++;
@@ -649,7 +649,7 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	ln_annot *annot;
 
 	ln_dbgprintf(ctx, "sample annotation to add: '%s'", buf+offs);
-	CHKR(getFieldName(ctx, buf, lenBuf, &offs, &tag));
+	CHKR(getFieldName(buf, lenBuf, &offs, &tag));
 	skipWhitespace(ctx, buf, lenBuf, &offs);
 	if(buf[offs] != ':') {
 		ln_dbgprintf(ctx, "invalid tag field in annotation, line is '%s'", buf);
@@ -670,38 +670,16 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 done:	return r;
 }
 
-
 struct ln_samp *
-ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
+ln_processSamp(ln_ctx ctx, char *buf, es_size_t lenBuf)
 {
 	struct ln_samp *samp = NULL;
-	es_size_t offs;
-	int done = 0;
-	char buf[10*1024]; /**< max size of rule */ // TODO: make configurable
-	es_size_t lenBuf;
-	es_str_t *typeStr = NULL;
+    es_str_t *typeStr = NULL;
+    es_size_t offs;
 
-	/* we ignore empty lines and lines that begin with "#" */
-	while(!done) {
-		if(feof(repo->fp)) {
-			*isEof = 1;
-			goto done;
-		}
+    if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
+        goto done;
 
-		buf[0] = '\0'; /* fgets does not empty its buffer! */
-		fgets(buf, sizeof(buf), repo->fp);
-		lenBuf = strlen(buf);
-		if(lenBuf == 0 || buf[0] == '#' || buf[0] == '\n')
-			continue;
-		if(buf[lenBuf - 1] == '\n') {
-			buf[lenBuf - 1] = '\0';
-			lenBuf--;
-		}
-		done = 1; /* we found a valid line */
-	}
-	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
-
-	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0) goto done;
 	if(!es_strconstcmp(typeStr, "prefix")) {
 		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "extendprefix")) {
@@ -719,10 +697,45 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 		goto done;
 	}
 
-
-	//ln_displayPTree(ctx, ctx->ptree, 0);
 done:
 	if(typeStr != NULL)
 		es_deleteStr(typeStr);
+
+	return samp;
+}
+
+
+struct ln_samp *
+ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
+{
+	struct ln_samp *samp = NULL;
+	int done = 0;
+	char buf[10*1024]; /**< max size of rule */ // TODO: make configurable
+	es_size_t lenBuf;
+
+	/* we ignore empty lines and lines that begin with "#" */
+	while(!done) {
+		if(feof(repo->fp)) {
+			*isEof = 1;
+			goto done;
+		}
+
+		buf[0] = '\0'; /* fgets does not empty its buffer! */
+		if (fgets(buf, sizeof(buf), repo->fp) != NULL) {
+            lenBuf = strlen(buf);
+            if(lenBuf == 0 || buf[0] == '#' || buf[0] == '\n')
+                continue;
+            if(buf[lenBuf - 1] == '\n') {
+                buf[lenBuf - 1] = '\0';
+                lenBuf--;
+            }
+            done = 1; /* we found a valid line */
+		}
+	}
+
+	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
+    ln_processSamp(ctx, buf, lenBuf);
+
+done:
 	return samp;
 }

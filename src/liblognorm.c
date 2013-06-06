@@ -107,6 +107,17 @@ done:
 
 
 int
+ln_loadSample(ln_ctx ctx, char *buf)
+{
+    // Something bad happened - no new sample
+    if (ln_processSamp(ctx, buf, strlen(buf)) == NULL) {
+        return 1;
+    }
+    return 0;
+}
+
+
+int
 ln_loadSamples(ln_ctx ctx, char *file)
 {
 	int r = 0;
