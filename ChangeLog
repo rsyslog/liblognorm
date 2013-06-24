@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 0.3.7, 2013-06-??
+- added support to load single samples
+  Thanks to John Hopper for the patch
+----------------------------------------------------------------------
 Version 0.3.6, 2013-03-22
 - bugfix: unitialized variable could lead to rulebase load error
 ----------------------------------------------------------------------
