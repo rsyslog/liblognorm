@@ -522,7 +522,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getFieldName(char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
+getFieldName(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
 {
 	int r = -1;
 	es_size_t i;
@@ -608,7 +608,7 @@ getAnnotationOp(ln_ctx ctx, ln_annot *annot, char *buf, es_size_t lenBuf, es_siz
 
 	if(i == lenBuf) goto fail; /* nothing left to process */
 
-	CHKR(getFieldName(buf, lenBuf, &i, &fieldName));
+	CHKR(getFieldName(ctx, buf, lenBuf, &i, &fieldName));
 	if(i == lenBuf) goto fail; /* nothing left to process */
 	if(buf[i] != '=') goto fail; /* format error */
 	i++;
@@ -649,7 +649,7 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	ln_annot *annot;
 
 	ln_dbgprintf(ctx, "sample annotation to add: '%s'", buf+offs);
-	CHKR(getFieldName(buf, lenBuf, &offs, &tag));
+	CHKR(getFieldName(ctx, buf, lenBuf, &offs, &tag));
 	skipWhitespace(ctx, buf, lenBuf, &offs);
 	if(buf[offs] != ':') {
 		ln_dbgprintf(ctx, "invalid tag field in annotation, line is '%s'", buf);
