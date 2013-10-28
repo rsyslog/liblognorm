@@ -87,6 +87,8 @@ ln_exitCtx(ln_ctx ctx)
 		ln_deletePTree(ctx->ptree);
 	if(ctx->rulePrefix != NULL)
 		es_deleteStr(ctx->rulePrefix);
+	if(ctx->pas != NULL)
+		ln_deleteAnnotSet(ctx->pas);
 	free(ctx);
 done:
 	return r;
