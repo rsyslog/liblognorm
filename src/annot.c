@@ -61,6 +61,7 @@ ln_deleteAnnotSet(ln_annotSet *as)
 
 	for(node = as->aroot ; node != NULL ; ) {
 		nodeDel = node;
+		es_deleteStr(node->tag);
 		node = node->next;
 		ln_deleteAnnot(nodeDel);
 	}
