@@ -651,7 +651,7 @@ processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	ln_dbgprintf(ctx, "sample annotation to add: '%s'", buf+offs);
 	CHKR(getFieldName(ctx, buf, lenBuf, &offs, &tag));
 	skipWhitespace(ctx, buf, lenBuf, &offs);
-	if(buf[offs] != ':') {
+	if(buf[offs] != ':' || tag == NULL) {
 		ln_dbgprintf(ctx, "invalid tag field in annotation, line is '%s'", buf);
 		r=-1;
 		goto done;
