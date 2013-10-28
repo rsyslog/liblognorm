@@ -242,5 +242,6 @@ int main(int argc, char *argv[])
 	normalize();
 
 	ln_exitCtx(ctx);
+	ee_exitCtx(eectx);
 	return 0;
 }
