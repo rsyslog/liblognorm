@@ -201,9 +201,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		while(i < lenBuf) {
 			if(buf[i] == '%') {
 				++i;
-				if(i == lenBuf || buf[i] != '%') {
-					break; /* end of field */
-				}
+				break; /* end of field */
 			}
 			CHKR(es_addChar(&node->data, buf[i++]));
 		}
@@ -260,8 +258,6 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		CHKR(es_addChar(str, buf[i]));
 		++i;
 	}
-	if(es_strlen(*str) == 0)
-		goto done;
 
 	es_unescapeStr(*str);
 	if(ctx->debug) {

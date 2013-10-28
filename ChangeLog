@@ -1,3 +1,7 @@
+- added support for glueing two fields together, without literal 
+  between them. It allows for constructs like:
+  %volume:number%%unit:word%
+  which matches string "1000Kbps"
 ----------------------------------------------------------------------
 Version 0.3.7, 2013-07-17
 - added support to load single samples
