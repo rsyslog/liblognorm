@@ -814,7 +814,7 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 {
 	int r;
 	int left;
-	struct ln_ptree *endNode;
+	struct ln_ptree *endNode = NULL;
 
 	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
 
