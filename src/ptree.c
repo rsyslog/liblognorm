@@ -65,11 +65,20 @@ ln_newPTree(ln_ctx ctx, struct ln_ptree **parentptr)
 done:	return tree;
 }
 
+static void
+ln_deletePTreeNode(ln_fieldList_t *node)
+{
+	ln_deletePTree(node->subtree);
+	es_deleteStr(node->name);
+	if(node->data != NULL)
+		es_deleteStr(node->data);
+	free(node);
+}
 
 void
 ln_deletePTree(struct ln_ptree *tree)
 {
-	ln_fieldList_t *node, *nodeDel;
+	ln_fieldList_t *node, *nextnode;
 	es_size_t i;
 
 	if(tree == NULL)
@@ -77,14 +86,9 @@ ln_deletePTree(struct ln_ptree *tree)
 
 	if(tree->tags != NULL)
 		ee_deleteTagbucket(tree->tags);
-	for(node = tree->froot ; node != NULL ; ) {
-		ln_deletePTree(node->subtree);
-		nodeDel = node;
-		es_deleteStr(node->name);
-		if(node->data != NULL)
-			es_deleteStr(node->data);
-		node = node->next;
-		free(nodeDel);
+	for(node = tree->froot; node != NULL; node = nextnode) {
+		nextnode = node->next;
+		ln_deletePTreeNode(node);
 	}
 
 	/* need to free a large prefix buffer? */
@@ -400,6 +404,7 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 					|| (curr->data != NULL && node->data != NULL
 						&& !es_strcmp(curr->data, node->data)))) {
 			*tree = curr->subtree;
+			ln_deletePTreeNode(node);
 			r = 0;
 			ln_dbgprintf((*tree)->ctx, "merging with tree %p\n", *tree);
 			goto done;
