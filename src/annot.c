@@ -195,7 +195,8 @@ ln_annotateEventWithTag(ln_ctx ctx, struct ee_event *event, es_str_t *tag)
 	struct ee_field *field;
 	es_str_t *value;
 
-	annot = ln_findAnnot(ctx->pas, tag);
+	if (NULL == (annot = ln_findAnnot(ctx->pas, tag)))
+		goto done;
 	for(op = annot->oproot ; op != NULL ; op = op->next) {
 		if(op->opc == ln_annot_ADD) {
 			CHKN(field = ee_newField(ctx->eectx));
