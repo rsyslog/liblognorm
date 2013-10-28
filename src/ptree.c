@@ -394,7 +394,11 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 	 * TODO: optimized, check logic
 	 */
 	for(curr = (*tree)->froot ; curr != NULL ; curr = curr->next) {
-		if(!es_strcmp(curr->name, node->name)) {
+		if(!es_strcmp(curr->name, node->name) 
+				&& curr->parser == node->parser
+				&& ((curr->data == NULL && node->data == NULL)
+					|| (curr->data != NULL && node->data != NULL
+						&& !es_strcmp(curr->data, node->data)))) {
 			*tree = curr->subtree;
 			r = 0;
 			ln_dbgprintf((*tree)->ctx, "merging with tree %p\n", *tree);
