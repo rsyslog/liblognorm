@@ -59,11 +59,13 @@
 #ifndef LIBLOGNORM_H_INCLUDED
 #define	LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
-#include <libee/libee.h>
+#include <json-c/json.h>
+#include <libestr.h>
 
 /* error codes */
 #define LN_NOMEM -1
 #define LN_INVLDFDESCR -1
+#define LN_WRONGPARSER -1000
 
 /* event_t needs to come from libcee, or whatever it will be called. We
  * provide a dummy to be able to compile the initial skeletons.
@@ -112,15 +114,6 @@ ln_ctx ln_initCtx(void);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_exitCtx(ln_ctx ctx);
-
-
-/**
- * Set the libee context to be used by this liblognorm context.
- *
- * @param ctx context to be modified
- * @param eectx	libee context
- */
-void ln_setEECtx(ln_ctx ctx, ee_ctx eectx);
 
 
 /**
@@ -223,6 +216,6 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, event_t *event);
-int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
+int ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

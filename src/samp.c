@@ -27,13 +27,12 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
-#include <libee/libee.h>
-#include <libee/primitivetype.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
 #include "internal.h"
+#include "parser.h"
 
 struct ln_sampRepos*
 ln_sampOpen(ln_ctx __attribute((unused)) ctx, char *name)
@@ -162,29 +161,29 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 
 	node->isIPTables = 0; /* first assume no special parser is used */
 	if(!es_strconstcmp(*str, "date-rfc3164")) {
-		node->parser = ee_parseRFC3164Date;
+		node->parser = ln_parseRFC3164Date;
 	} else if(!es_strconstcmp(*str, "date-rfc5424")) {
-		node->parser = ee_parseRFC5424Date;
+		node->parser = ln_parseRFC5424Date;
 	} else if(!es_strconstcmp(*str, "number")) {
-		node->parser = ee_parseNumber;
+		node->parser = ln_parseNumber;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
-		node->parser = ee_parseIPv4;
+		node->parser = ln_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
-		node->parser = ee_parseWord;
+		node->parser = ln_parseWord;
 	} else if(!es_strconstcmp(*str, "quoted-string")) {
-		node->parser = ee_parseQuotedString;
+		node->parser = ln_parseQuotedString;
 	} else if(!es_strconstcmp(*str, "date-iso")) {
-		node->parser = ee_parseISODate;
+		node->parser = ln_parseISODate;
 	} else if(!es_strconstcmp(*str, "time-24hr")) {
-		node->parser = ee_parseTime24hr;
+		node->parser = ln_parseTime24hr;
 	} else if(!es_strconstcmp(*str, "time-12hr")) {
-		node->parser = ee_parseTime12hr;
+		node->parser = ln_parseTime12hr;
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;
 	} else if(!es_strconstcmp(*str, "char-to")) {
 		// TODO: check extra data!!!! (very important)
-		node->parser = ee_parseCharTo;
+		node->parser = ln_parseCharTo;
 	} else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
@@ -289,7 +288,7 @@ done:	return r;
  * @returns the new subtree root (or NULL in case of error)
  */
 static inline int
-addSampToTree(ln_ctx ctx, es_str_t *rule, struct ee_tagbucket *tagBucket)
+addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 {
 	int r;
 	struct ln_ptree* subtree;
@@ -300,14 +299,14 @@ addSampToTree(ln_ctx ctx, es_str_t *rule, struct ee_tagbucket *tagBucket)
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
-ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
+		ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
 		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
 		if(es_strlen(str) == 0) {
 			/* we had no literal, so let's parse a field description */
 			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
 		}
 	}
-ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
+	ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
 	subtree->flags.isTerminal = 1;
 	subtree->tags = tagBucket;
@@ -401,18 +400,20 @@ extendPrefix(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
  * @returns 0 on success, something else otherwise
  */
 static inline int
-addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct ee_tagbucket **tagBucket)
+addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct json_object **tagBucket)
 {
 	int r = -1;
 	char *cstr;
+	struct json_object *tag; 
 
 	if(*tagBucket == NULL) {
-		CHKN(*tagBucket = ee_newTagbucket(ctx->eectx));
+		CHKN(*tagBucket = json_object_new_array());
 	}
 	cstr = es_str2cstr(tagname, NULL);
 	ln_dbgprintf(ctx, "tag found: '%s'", cstr);
+	CHKN(tag = json_object_new_string(cstr));
+	json_object_array_add(*tagBucket, tag);
 	free(cstr);
-	CHKR(ee_addTagToBucket(*tagBucket, tagname));
 	r = 0;
 
 done:	return r;
@@ -432,7 +433,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct ee_tagbucket **tagBucket)
+processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct json_object **tagBucket)
 {
 	int r = -1;
 	es_str_t *str = NULL;
@@ -483,7 +484,7 @@ processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
 	es_str_t *str;
-	struct ee_tagbucket *tagBucket = NULL;
+	struct json_object *tagBucket = NULL;
 
 	ln_dbgprintf(ctx, "sample line to add: '%s'\n", buf+offs);
 	CHKR(processTags(ctx, buf, lenBuf, &offs, &tagBucket));

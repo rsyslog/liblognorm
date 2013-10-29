@@ -38,7 +38,6 @@ struct ln_ctx_s {
 	void (*dbgCB)(void *cookie, char *msg, size_t lenMsg);
 		/**< user-provided debug output callback */
 	void *dbgCookie; /**< cookie to be passed to debug callback */
-	ee_ctx eectx;
 	ln_ptree *ptree; /**< parse tree being used by this context */
 	ln_annotSet *pas; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */
