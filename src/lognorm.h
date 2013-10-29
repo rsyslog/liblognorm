@@ -27,6 +27,7 @@
 #ifndef LIBLOGNORM_LOGNORM_HINCLUDED
 #define	LIBLOGNORM_LOGNORM_HINCLUDED
 #include <stdlib.h>	/* we need size_t */
+#include "liblognorm.h"
 #include "ptree.h"
 #include "annot.h"
 

@@ -20,7 +20,8 @@ liblognorm_la_SOURCES = \
 	annot.c \
 	samp.c \
 	lognorm.c \
-	parser.c
+	parser.c \
+	enc_syslog.c
 
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr

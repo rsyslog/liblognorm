@@ -445,6 +445,7 @@ processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct js
 		if(buf[i] == ',') {
 			/* end of this tag */
 			CHKR(addTagStrToBucket(ctx, str, tagBucket));
+			es_deleteStr(str);
 			str = NULL;
 		} else {
 			if(str == NULL) {
@@ -461,6 +462,7 @@ processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct js
 
 	if(str != NULL) {
 		CHKR(addTagStrToBucket(ctx, str, tagBucket));
+		es_deleteStr(str);
 	}
 
 	*poffs = i;

@@ -40,6 +40,7 @@
 #include "liblognorm.h"
 #include "ptree.h"
 #include "lognorm.h"
+#include "enc.h"
 
 static ln_ctx ctx;
 
@@ -72,26 +73,29 @@ void errout(char *errmsg)
 static inline void
 outputEvent(struct json_object *json)
 {
-	const char *cstr;
+	char *cstr;
 	es_str_t *str = NULL;
 
-/*	switch(outfmt) {
-	case f_json: */
-		cstr = json_object_to_json_string(json);
-/*		break;
-	case f_syslog:
-		ee_fmtEventToRFC5424(event, &str);
+	switch(outfmt) {
+	case f_json:
+		cstr = (char*)json_object_to_json_string(json);
 		break;
+	case f_syslog:
+		ln_fmtEventToRFC5424(json, &str);
+		break;/*
 	case f_xml:
 		ee_fmtEventToXML(event, &str);
 		break;
 	case f_csv:
 		ee_fmtEventToCSV(event, &str, encFmt);
-		break;
+		break;*/
 	}
-	cstr = es_str2cstr(str, NULL); */
+	if (str != NULL)
+		cstr = es_str2cstr(str, NULL);
 	if(verbose > 0) printf("normalized: '%s'\n", cstr);
 	printf("%s\n", cstr);
+	if (str != NULL)
+		free(cstr);
 	es_deleteStr(str);
 }
 

@@ -30,8 +30,6 @@
 #include "liblognorm.h"
 #include "parser.h"
 
-#define ERR_ABORT {r = 1; goto done; }
-
 /* some helpers */
 static inline int
 hParseInt(unsigned char **buf, es_size_t *lenBuf)
@@ -75,7 +73,8 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
 int ln_parse##ParserName(es_str_t *str, es_size_t *offs, \
                       __attribute__((unused)) es_str_t *ed, es_size_t *parsed) \
 { \
-	es_size_t r = LN_WRONGPARSER;
+	es_size_t r = LN_WRONGPARSER; \
+	*parsed = 0;
 
 #define ENDParser \
 	goto done; /* supress warnings */ \
@@ -462,7 +461,7 @@ BEGINParser(Word)
 		i++;
 
 	if(i == *offs) {
-		goto done;
+		goto fail;
 	}
 
 	/* success, persist */
@@ -499,7 +498,7 @@ BEGINParser(CharTo)
 
 	if(i == *offs || i == es_strlen(str) || c[i] != cTerm) {
 		r = LN_WRONGPARSER;
-		goto done;
+		goto fail;
 	}
 
 	/* success, persist */
@@ -541,7 +540,7 @@ BEGINParser(QuotedString)
 	i = *offs;
 
 	if(c[i] != '"')
-		goto done;
+		goto fail;
 	++i;
 
 	/* search end of string */
@@ -550,7 +549,7 @@ BEGINParser(QuotedString)
 
 	if(i == es_strlen(str) || c[i] != '"') {
 		r = LN_WRONGPARSER;
-		goto done;
+		goto fail;
 	}
 
 	/* success, persist */
@@ -575,32 +574,32 @@ BEGINParser(ISODate)
 	i = *offs;
 
 	if(*offs+10 > es_strlen(str))
-		goto done;	/* if it is not 10 chars, it can't be an ISO date */
+		goto fail;	/* if it is not 10 chars, it can't be an ISO date */
 
 	/* year */
-	if(!isdigit(c[i])) goto done;
-	if(!isdigit(c[i+1])) goto done;
-	if(!isdigit(c[i+2])) goto done;
-	if(!isdigit(c[i+3])) goto done;
-	if(c[i+4] != '-') goto done;
+	if(!isdigit(c[i])) goto fail;
+	if(!isdigit(c[i+1])) goto fail;
+	if(!isdigit(c[i+2])) goto fail;
+	if(!isdigit(c[i+3])) goto fail;
+	if(c[i+4] != '-') goto fail;
 	/* month */
 	if(c[i+5] == '0') {
-		if(c[i+6] < '1' || c[i+6] > '9') goto done;
+		if(c[i+6] < '1' || c[i+6] > '9') goto fail;
 	} else if(c[i+5] == '1') {
-		if(c[i+6] < '0' || c[i+6] > '2') goto done;
+		if(c[i+6] < '0' || c[i+6] > '2') goto fail;
 	} else {
-		goto done;
+		goto fail;
 	}
-	if(c[i+7] != '-') goto done;
+	if(c[i+7] != '-') goto fail;
 	/* day */
 	if(c[i+8] == '0') {
-		if(c[i+9] < '1' || c[i+9] > '9') goto done;
+		if(c[i+9] < '1' || c[i+9] > '9') goto fail;
 	} else if(c[i+8] == '1' || c[i+8] == '2') {
-		if(!isdigit(c[i+9])) goto done;
+		if(!isdigit(c[i+9])) goto fail;
 	} else if(c[i+8] == '3') {
-		if(c[i+9] != '0' && c[i+9] != '1') goto done;
+		if(c[i+9] != '0' && c[i+9] != '1') goto fail;
 	} else {
-		goto done;
+		goto fail;
 	}
 
 	/* success, persist */
@@ -624,23 +623,23 @@ BEGINParser(Time24hr)
 	i = *offs;
 
 	if(*offs+8 > es_strlen(str))
-		goto done;	/* if it is not 8 chars, it can't be us */
+		goto fail;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
 	if(c[i] == '0' || c[i] == '1') {
-		if(!isdigit(c[i+1])) goto done;
+		if(!isdigit(c[i+1])) goto fail;
 	} else if(c[i] == '2') {
-		if(c[i+1] < '0' || c[i+1] > '3') goto done;
+		if(c[i+1] < '0' || c[i+1] > '3') goto fail;
 	} else {
-		goto done;
+		goto fail;
 	}
 	/* TODO: the code below is a duplicate of 24hr parser - create common function */
-	if(c[i+2] != ':') goto done;
-	if(c[i+3] < '0' || c[i+3] > '5') goto done;
-	if(!isdigit(c[i+4])) goto done;
-	if(c[i+5] != ':') goto done;
-	if(c[i+6] < '0' || c[i+6] > '5') goto done;
-	if(!isdigit(c[i+7])) goto done;
+	if(c[i+2] != ':') goto fail;
+	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
+	if(!isdigit(c[i+4])) goto fail;
+	if(c[i+5] != ':') goto fail;
+	if(c[i+6] < '0' || c[i+6] > '5') goto fail;
+	if(!isdigit(c[i+7])) goto fail;
 
 	/* success, persist */
 	*parsed = 8;
@@ -664,22 +663,22 @@ BEGINParser(Time12hr)
 	i = *offs;
 
 	if(*offs+8 > es_strlen(str))
-		goto done;	/* if it is not 8 chars, it can't be us */
+		goto fail;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
 	if(c[i] == '0') {
-		if(!isdigit(c[i+1])) goto done;
+		if(!isdigit(c[i+1])) goto fail;
 	} else if(c[i] == '1') {
-		if(c[i+1] < '0' || c[i+1] > '2') goto done;
+		if(c[i+1] < '0' || c[i+1] > '2') goto fail;
 	} else {
-		goto done;
+		goto fail;
 	}
-	if(c[i+2] != ':') goto done;
-	if(c[i+3] < '0' || c[i+3] > '5') goto done;
-	if(!isdigit(c[i+4])) goto done;
-	if(c[i+5] != ':') goto done;
-	if(c[i+6] < '0' || c[i+6] > '5') goto done;
-	if(!isdigit(c[i+7])) goto done;
+	if(c[i+2] != ':') goto fail;
+	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
+	if(!isdigit(c[i+4])) goto fail;
+	if(c[i+5] != ':') goto fail;
+	if(c[i+6] < '0' || c[i+6] > '5') goto fail;
+	if(!isdigit(c[i+7])) goto fail;
 
 	/* success, persist */
 	*parsed = 8;
@@ -733,21 +732,21 @@ BEGINParser(IPv4)
 	i = *offs;
 	if(es_strlen(str) - i + 1 < 7) {
 		/* IPv4 addr requires at least 7 characters */
-		goto done;
+		goto fail;
 	}
 	c = es_getBufAddr(str);
 
 	/* byte 1*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto done;
-	if(i == es_strlen(str) || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
+	if(i == es_strlen(str) || c[i++] != '.') goto fail;
 	/* byte 2*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto done;
-	if(i == es_strlen(str) || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
+	if(i == es_strlen(str) || c[i++] != '.') goto fail;
 	/* byte 3*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto done;
-	if(i == es_strlen(str) || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
+	if(i == es_strlen(str) || c[i++] != '.') goto fail;
 	/* byte 4 - we do NOT need any char behind it! */
-	if(chkIPv4AddrByte(str, &i) != 0) goto done;
+	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;

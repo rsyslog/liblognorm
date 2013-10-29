@@ -748,17 +748,18 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 			}
 		} else {
 			localR = node->parser(str, &i, node->data, &parsed);
+			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %d", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, i, json, endNode);
+				left = ln_normalizeRec(node->subtree, str, i + parsed, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
 						/* Store the value here */
 						namestr = es_str2cstr(node->name, NULL);
 						valstr = es_str2cstr(str, NULL);
-						value = json_object_new_string_len(valstr + i, strlen(valstr) - i);
+						value = json_object_new_string_len(valstr + i, parsed);
 						if (value == NULL) {
 							ln_dbgprintf(tree->ctx, "unable to create json");
 							goto done;
@@ -833,6 +834,8 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
 			/* add tags to an event CHKR(ee_assignTagbucketToEvent(*json_p, ee_addRefTagbucket(endNode->tags))); */
+			json_object_get(endNode->tags);
+			json_object_object_add(*json_p, "event.tags", endNode->tags);
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
 	}
