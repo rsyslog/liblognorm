@@ -302,8 +302,8 @@ addSampToTree(ln_ctx ctx, es_str_t *rule, struct ee_tagbucket *tagBucket)
 	while(i < es_strlen(rule)) {
 ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
 		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
-		if(es_strlen(str) == 0) {
-			/* we had no literal, so let's parse a field description */
+		/* After the literal there can be field only*/
+		if (i < es_strlen(rule)) {
 			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
 		}
 	}
