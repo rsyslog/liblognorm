@@ -29,7 +29,6 @@
 #ifndef LIBLOGNORM_ANNOT_H_INCLUDED
 #define	LIBLOGNORM_ANNOT_H_INCLUDED
 #include <libestr.h>
-#include <libee/libee.h>
 
 typedef struct ln_annotSet_s ln_annotSet;
 typedef struct ln_annot_s ln_annot;
@@ -159,13 +158,13 @@ int ln_addAnnotOp(ln_annot *anot, ln_annot_opcode opc, es_str_t *name, es_str_t 
 
 /**
  * Annotate an event.
- * This adds anotations based on the event's tagbucket.
+ * This adds annotations based on the event's tagbucket.
  * @memberof ln_annot
  *
  * @param[in] ctx current context
  * @param[in] event event to annotate (updated with anotations on exit)
  * @returns 0 on success, something else otherwise
  */
-int ln_annotateEvent(ln_ctx ctx, struct ee_event *event);
+int ln_annotate(ln_ctx ctx, struct json_object *json, struct json_object *tags);
 
 #endif /* #ifndef LOGNORM_ANNOT_H_INCLUDED */

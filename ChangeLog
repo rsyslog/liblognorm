@@ -1,3 +1,5 @@
+- libee is not used any more. JSON-C is used for object handling
+  instead. Parsers and formatters are now part of liblognorm.
 - added support for glueing two fields together, without literal 
   between them. It allows for constructs like:
   %volume:number%%unit:word%

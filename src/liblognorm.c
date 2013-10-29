@@ -23,6 +23,7 @@
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
 #include "config.h"
+#include <string.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -141,9 +142,3 @@ done:
 	return r;
 }
 
-
-void
-ln_setEECtx(ln_ctx ctx, ee_ctx eectx)
-{
-	ctx->eectx = eectx;
-}

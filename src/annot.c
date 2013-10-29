@@ -187,24 +187,24 @@ done:	return r;
  * small and easy to follow.
  */
 static inline int
-ln_annotateEventWithTag(ln_ctx ctx, struct ee_event *event, es_str_t *tag)
+ln_annotateEventWithTag(ln_ctx ctx, struct json_object *json, es_str_t *tag)
 {
 	int r=0;
 	ln_annot *annot;
 	ln_annot_op *op;
-	struct ee_field *field;
-	es_str_t *value;
+	struct json_object *field;
+	char *cstr;
 
 	if (NULL == (annot = ln_findAnnot(ctx->pas, tag)))
 		goto done;
 	for(op = annot->oproot ; op != NULL ; op = op->next) {
 		if(op->opc == ln_annot_ADD) {
-			CHKN(field = ee_newField(ctx->eectx));
-			CHKR(ee_nameField(field, op->name));
-			/* Copied string will be free() along with the event */
-			CHKN(value = es_strdup(op->value));
-			CHKR(ee_addStrValueToField(field, value));
-			CHKR(ee_addFieldToEvent(event, field));
+			CHKN(cstr = es_str2cstr(op->value, NULL));
+			CHKN(field = json_object_new_string(cstr));
+			free(cstr);
+			CHKN(cstr = es_str2cstr(op->name, NULL));
+			json_object_object_add(json, cstr, field);
+			free(cstr);
 		} else {
 			// TODO: implement
 		}
@@ -215,25 +215,26 @@ done: 	return r;
 
 
 int
-ln_annotateEvent(ln_ctx ctx, struct ee_event *event)
+ln_annotate(ln_ctx ctx, struct json_object *json, struct json_object *tagbucket)
 {
 	int r = 0;
-	void *cookie;
-	struct ee_tagbucket *tagbucket;
 	es_str_t *tag;
+	struct json_object *tagObj;
+	const char *tagCstr;
+	int i;
 
 	/* shortcut: terminate immediately if nothing to do... */
 	if(ctx->pas->aroot == NULL)
 		goto done;
 
 	/* iterate over tagbucket */
-	ee_EventGetTagbucket(event, &tagbucket);
-	cookie = NULL;
-	while(1) {
-		CHKR(ee_TagbucketGetNextTag(tagbucket, &cookie, &tag));
-		if(cookie == NULL)
-			break;	/* end iteration */
-		CHKR(ln_annotateEventWithTag(ctx, event, tag));
+	for (i = json_object_array_length(tagbucket); i >= 0; i--) {
+		CHKN(tagObj = json_object_array_get_idx(tagbucket, i));
+		CHKN(tagCstr = json_object_get_string(tagObj));
+		CHKN(tag = es_newStrFromCStr(tagCstr, strlen(tagCstr)));
+		json_object_put(tagObj);
+		CHKR(ln_annotateEventWithTag(ctx, json, tag));
+		es_deleteStr(tag);
 	}
 
 done:	return r;
