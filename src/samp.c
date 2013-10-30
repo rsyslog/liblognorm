@@ -309,6 +309,10 @@ ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
 		if(es_strlen(str) == 0) {
 			/* we had no literal, so let's parse a field description */
 			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
+			if (i == es_strlen(rule)) {
+				/* finish the tree with empty literal to avoid false merging*/
+				CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
+			}
 		}
 	}
 ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
