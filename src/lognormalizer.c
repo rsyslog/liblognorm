@@ -36,7 +36,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <libestr.h>
-#include <json-c/json.h>
+#include <json.h>
 #include "liblognorm.h"
 #include "ptree.h"
 #include "lognorm.h"

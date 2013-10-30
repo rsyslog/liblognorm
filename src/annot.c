@@ -196,12 +196,10 @@ ln_annotateEventWithTag(ln_ctx ctx, struct json_object *json, es_str_t *tag)
 		goto done;
 	for(op = annot->oproot ; op != NULL ; op = op->next) {
 		if(op->opc == ln_annot_ADD) {
-			CHKN(cstr = es_str2cstr(op->value, NULL));
-			CHKN(field = json_object_new_string(cstr));
-			free(cstr);
-			CHKN(cstr = es_str2cstr(op->name, NULL));
+			CHKN(field = json_object_new_string_len(
+					(char*)es_getBufAddr(op->value), es_strlen(op->value)));
+			CHKN(cstr = ln_es_str2cstr(&op->name));
 			json_object_object_add(json, cstr, field);
-			free(cstr);
 		} else {
 			// TODO: implement
 		}

@@ -59,7 +59,7 @@
 #ifndef LIBLOGNORM_H_INCLUDED
 #define	LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
-#include <json-c/json.h>
+#include <json.h>
 #include <libestr.h>
 
 /* error codes */

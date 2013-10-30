@@ -31,7 +31,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <libestr.h>
-#include <json-c/json.h>
+#include <json.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -224,7 +224,7 @@ ln_dbgprintf(tree->ctx, "addPTree: offs %u", offs);
 	}
 
 	if(tree->ctx->debug) {
-		char * cstr = es_str2cstr(str, NULL);
+		char *cstr = es_str2cstr(str, NULL);
 		ln_dbgprintf(tree->ctx, "addPTree: add '%s', offs %u, tree %p",
 			     cstr+offs, (unsigned) offs, tree);
 		free(cstr);
@@ -555,19 +555,17 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
 static inline int
 addUnparsedField(es_str_t *str, es_size_t offs, struct json_object *json)
 {
-	char *valstr;
 	int r = 1;
 	struct json_object *value;
 
-	valstr = es_str2cstr(str, NULL);
-	value = json_object_new_string(valstr);
+	value = json_object_new_string_len((char*)es_getBufAddr(str), es_strlen(str));
 	if (value == NULL) {
 		goto fail;
 	}
 	json_object_object_add(json, "originalmsg", value);
 	
-	value = json_object_new_string_len(valstr + offs, strlen(valstr) - offs);
-	free(valstr);
+	value = json_object_new_string_len((char*)es_getBufAddr(str) + offs, 
+			es_strlen(str) - offs);
 	if (value == NULL) {
 		goto fail;
 	}
@@ -633,10 +631,12 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 			fval = es_newStrFromCStr("[*PRESENT*]", sizeof("[*PRESENT*]")-1);
 		}
 		char *cn, *cv;
-		cn = es_str2cstr(fname, NULL);
-		cv = es_str2cstr(fval, NULL);
-		ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
-		value = json_object_new_string(cv);
+		CHKN(cn = ln_es_str2cstr(&fname));
+		if (tree->ctx->debug) {
+			CHKN(cv = ln_es_str2cstr(&fval));
+			ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
+		}
+		value = json_object_new_string_len((char*)es_getBufAddr(fval), es_strlen(fval));
 		json_object_object_add(json, cn, value);
 	}
 
@@ -680,7 +680,6 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 	es_size_t parsed;
 	char *namestr;
 	struct json_object *value;
-	char *valstr;
 	
 	if(offs >= es_strlen(str)) {
 		*endNode = tree;
@@ -757,16 +756,13 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
 						/* Store the value here */
-						namestr = es_str2cstr(node->name, NULL);
-						valstr = es_str2cstr(str, NULL);
-						value = json_object_new_string_len(valstr + i, parsed);
+						value = json_object_new_string_len((char*)es_getBufAddr(str) + i, parsed);
 						if (value == NULL) {
 							ln_dbgprintf(tree->ctx, "unable to create json");
 							goto done;
 						}
+						namestr = ln_es_str2cstr(&node->name);
 						json_object_object_add(json, namestr, value);
-						free(namestr);
-						free(valstr);
 					}
 					r = 0;
 					goto done;
