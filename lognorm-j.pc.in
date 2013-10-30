@@ -3,8 +3,8 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: lognorm
+Name: lognorm_j
 Description: fast samples-based log normalization library
 Version: @VERSION@
-Libs: -L${libdir} -llognorm -lee -lestr
+Libs: -L${libdir} -llognorm_j -lestr
 Cflags: -I${includedir}
