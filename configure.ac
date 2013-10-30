@@ -11,10 +11,10 @@ AC_CONFIG_HEADER([config.h])
 # Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
+AC_PROG_CC_C99
 if test "$GCC" = "yes"
 then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
 fi
-
 AC_PROG_LIBTOOL
 
 # Checks for libraries.
@@ -46,7 +46,8 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(JSON_C, json-c)
+PKG_CHECK_MODULES(JSON_C, json-c,, [
+	PKG_CHECK_MODULES(JSON_C, json)])
 
 # debug mode settings
 AC_ARG_ENABLE(debug,

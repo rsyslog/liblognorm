@@ -34,7 +34,7 @@
 #include <string.h>
 
 #include <libestr.h>
-#include <json-c/json.h>
+#include <json.h>
 
 #include "internal.h"
 #include "liblognorm.h"

@@ -35,7 +35,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include <json-c/json.h>
+#include <json.h>
 
 #include "lognorm.h"
 #include "internal.h"
