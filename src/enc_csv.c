@@ -49,52 +49,6 @@ static char hexdigit[16] =
 	{'0', '1', '2', '3', '4', '5', '6', '7', '8',
 	 '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
-/**
- * Build a name list. The name list is required in order for this encoder
- * to know in which sequence which fields need to be output.
- */
-static struct json_object*
-genNameList(es_str_t *str)
-{
-	es_size_t i = 0, start = 0;
-	unsigned char *c;
-	struct json_object *nameList = NULL, *nameObj;
-
-	if ((nameList = json_object_new_array()) == NULL)
-		goto done;
-
-	c = es_getBufAddr(str);
-	while(i < es_strlen(str)) {
-		while(i < es_strlen(str) && c[i] != ',' && c[i] != ' ') {
-			++i;
-		}
-		if(i == start) {
-			json_object_put(nameList);
-			nameList = NULL;
-			goto done;
-		}
-		if ((nameObj = json_object_new_string_len(
-				(const char*)&c[start], i - start))== NULL) {
-			json_object_put(nameList);
-			nameList = NULL;
-			goto done;
-		}
-		/* add name to name list */
-		if (json_object_array_add(nameList, nameObj) != 0) {
-			json_object_put(nameObj);
-			json_object_put(nameList);
-			nameList = NULL;
-			goto done;
-		}
-		if(i < es_strlen(str))	/* are we on ','? */
-			start = ++i;		/* "eat" it */
-	}
-
-done:
-	return nameList;
-}
-
-
 /* TODO: CSV encoding for Unicode characters is as of RFC4627 not fully
  * supported. The algorithm is that we must build the wide character from
  * UTF-8 (if char > 127) and build the full 4-octet Unicode character out
@@ -217,23 +171,28 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 {
 	int r = -1;
 	int needComma = 0;
-	struct json_object *nameList = NULL, *nameObj, *field;
-	int i;
-	const char *name;
+	struct json_object *field;
+	char *namelist = NULL, *name, *nn;
 
 	assert(json != NULL);
 	assert(json_object_is_type(json, json_type_object));
 	
 	if((*str = es_newStr(256)) == NULL)
 		goto done;
-	if(extraData == NULL || (nameList = genNameList(extraData)) == NULL)
+	if(extraData == NULL)
 		goto done;
-		
-	fprintf(stderr, "genNameList returns %s\n", json_object_to_json_string(nameList)); 
-		
-	for (i = 0; i < json_object_array_length(nameList); i++) {
-		CHKN(nameObj = json_object_array_get_idx(nameList, i));
-		CHKN(name = json_object_get_string(nameObj));
+
+	CHKN(namelist = es_str2cstr(extraData, NULL));
+			
+	for (name = namelist; name != NULL; name = nn) {
+		for (nn = name; *nn != '\0' && *nn != ',' && *nn != ' '; nn++)
+			{ /* do nothing */ }
+		if (*nn == '\0') {
+			nn = NULL;
+		} else {
+			*nn = '\0';
+			nn++;
+		}
 		field = json_object_object_get(json, name);
 		if (needComma) {
 			CHKR(es_addChar(str, ','));
@@ -248,7 +207,7 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 	}
 	r = 0;
 done:
-	if (nameList != NULL)
-		json_object_put(nameList);
+	if (namelist != NULL)
+		free(namelist);
 	return r;
 }

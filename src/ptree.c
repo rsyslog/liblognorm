@@ -614,13 +614,13 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 	while(pstr < end) {
 		while(isspace(*pstr))
 			++pstr;
-		fname = es_newStr(16);
+		CHKN(fname = es_newStr(16));
 		while(!isspace(*pstr) && *pstr != '=') {
 			es_addChar(&fname, *pstr);
 			++pstr;
 		}
 		if(*pstr == '=') {
-			fval = es_newStr(16);
+			CHKN(fval = es_newStr(16));
 			++pstr;
 			/* error on space */
 			while(!isspace(*pstr) && pstr < end) {
@@ -628,7 +628,8 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 				++pstr;
 			}
 		} else {
-			fval = es_newStrFromCStr("[*PRESENT*]", sizeof("[*PRESENT*]")-1);
+			CHKN(fval = es_newStrFromCStr("[*PRESENT*]", 
+					sizeof("[*PRESENT*]")-1));
 		}
 		char *cn, *cv;
 		CHKN(cn = ln_es_str2cstr(&fname));
@@ -636,8 +637,11 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 			CHKN(cv = ln_es_str2cstr(&fval));
 			ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
 		}
-		value = json_object_new_string_len((char*)es_getBufAddr(fval), es_strlen(fval));
+		CHKN(value = json_object_new_string_len((char*)es_getBufAddr(fval), 
+				es_strlen(fval)));
 		json_object_object_add(json, cn, value);
+		es_deleteStr(fval);
+		es_deleteStr(fname);
 	}
 
 	r = 0;
