@@ -2,7 +2,7 @@
  * Libee - An Event Expression Library inspired by CEE
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
- * This file is part of libee.
+ * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -53,19 +53,15 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  *
  * All parsers receive 
  *
- * @param[in] ctx context object
  * @param[in] str the to-be-parsed string
- * @param[in/out] offs an offset into the string
+ * @param[in] offs an offset into the string
  * @param[in] ed string with extra data for parser use
- * @param[out] newVal newly created value
+ * @param[out] parsed bytes
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
  *
- * create a nw ee_value (newVal) and store the obtained value into it
- * update buf and lenBuf to reflect the parsing carried out
- *
- * returns 0 on success and EE_WRONGPARSER if this parser could
+ * return 0 on success and LN_WRONGPARSER if this parser could
  *           not successfully parse (but all went well otherwise) and something
  *           else in case of an error.
  */

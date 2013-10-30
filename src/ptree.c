@@ -834,7 +834,7 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
 	} else {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
-			/* add tags to an event CHKR(ee_assignTagbucketToEvent(*json_p, ee_addRefTagbucket(endNode->tags))); */
+			/* add tags to an event */
 			json_object_get(endNode->tags);
 			json_object_object_add(*json_p, "event.tags", endNode->tags);
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
