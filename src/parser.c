@@ -37,7 +37,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
 	unsigned char *p = *buf;
 	es_size_t len = *lenBuf;
 	int i = 0;
-	
+
 	while(len > 0 && isdigit(*p)) {
 		i = i * 10 + *p - '0';
 		++p;
@@ -175,6 +175,7 @@ BEGINParser(RFC5424Date)
 
 		if(len == 0 || *pszTS++ != ':')
 			goto fail;
+		--len;
 		OffsetMinute = hParseInt(&pszTS, &len);
 		if(OffsetMinute < 0 || OffsetMinute > 59)
 			goto fail;
