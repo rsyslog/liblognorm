@@ -1,9 +1,15 @@
+Version 0.4.0, 
+- the library has been renamed to liblognorm_j to avoid conflicts
+  with older versions.
 - libee is not used any more. JSON-C is used for object handling
   instead. Parsers and formatters are now part of liblognorm.
+- added new field type "rest", which simply sinks all up to end of
+  the string.
 - added support for glueing two fields together, without literal 
   between them. It allows for constructs like:
   %volume:number%%unit:word%
   which matches string "1000Kbps"
+- this version has survived many bugfixes
 ----------------------------------------------------------------------
 Version 0.3.7, 2013-07-17
 - added support to load single samples
