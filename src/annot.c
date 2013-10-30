@@ -52,15 +52,13 @@ done:	return as;
 void
 ln_deleteAnnotSet(ln_annotSet *as)
 {
-	ln_annot *node, *nodeDel;
+	ln_annot *node, *nextnode;
 	if(as == NULL)
 		goto done;
 
-	for(node = as->aroot ; node != NULL ; ) {
-		nodeDel = node;
-		es_deleteStr(node->tag);
-		node = node->next;
-		ln_deleteAnnot(nodeDel);
+	for(node = as->aroot; node != NULL; node = nextnode) {
+		nextnode = node->next;
+		ln_deleteAnnot(node);
 	}
 	free(as);
 done:	return;
@@ -96,14 +94,16 @@ inline int
 ln_combineAnnot(ln_annot *annot, ln_annot *add)
 {
 	int r = 0;
-	ln_annot_op *op, *opdel;
+	ln_annot_op *op, *nextop;
 
-	for(op = add->oproot ; op != NULL ; ) {
+	for(op = add->oproot; op != NULL; op = nextop) {
 		CHKR(ln_addAnnotOp(annot, op->opc, op->name, op->value));
-		opdel = op;
-		op = op->next;
-		free(opdel);
+		nextop = op->next;
+		free(op);
 	}
+	es_deleteStr(add->tag);
+	free(add);
+	
 done:	return r;
 }
 
@@ -141,17 +141,17 @@ done:	return annot;
 void
 ln_deleteAnnot(ln_annot *annot)
 {
-	ln_annot_op *node, *nodeDel;
+	ln_annot_op *op, *nextop;
 	if(annot == NULL)
 		goto done;
 
-	for(node = annot->oproot ; node != NULL ; ) {
-		nodeDel = node;
-		es_deleteStr(node->name);
-		if(node->value != NULL)
-			es_deleteStr(node->value);
-		node = node->next;
-		free(nodeDel);
+	es_deleteStr(annot->tag);
+	for(op = annot->oproot; op != NULL; op = nextop) {
+		es_deleteStr(op->name);
+		if(op->value != NULL)
+			es_deleteStr(op->value);
+		nextop = op->next;
+		free(op);
 	}
 	free(annot);
 done:	return;
