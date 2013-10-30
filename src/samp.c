@@ -306,8 +306,13 @@ addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 		/* After the literal there can be field only*/
 		if (i < es_strlen(rule)) {
 			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
+			if (i == es_strlen(rule)) {
+				/* finish the tree with empty literal to avoid false merging*/
+				CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
+			}
 		}
 	}
+
 	ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
 	subtree->flags.isTerminal = 1;

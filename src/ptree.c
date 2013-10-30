@@ -192,13 +192,14 @@ done:	return r;
 
 /**
  * Check if the provided tree is a true leaf. This means that it
- * does not contain any subtrees of any kind and no prefix.
+ * does not contain any subtrees of any kind and no prefix,
+ * and it is not terminal leaf.
  * @return 1 if it is a leaf, 0 otherwise
  */
 static inline int
 isTrueLeaf(struct ln_ptree *tree)
 {
-	return((tree->lenPrefix == 0) && isLeaf(tree));
+	return((tree->lenPrefix == 0) && isLeaf(tree)) && !tree->flags.isTerminal;
 }
 
 
@@ -612,18 +613,18 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 	end = es_getBufAddr(str) + es_strlen(str);
 	pstr = es_getBufAddr(str) + o;
 	while(pstr < end) {
-		while(isspace(*pstr))
+		while(pstr < end && isspace(*pstr))
 			++pstr;
 		CHKN(fname = es_newStr(16));
-		while(!isspace(*pstr) && *pstr != '=') {
+		while(pstr < end && !isspace(*pstr) && *pstr != '=') {
 			es_addChar(&fname, *pstr);
 			++pstr;
 		}
-		if(*pstr == '=') {
+		if(pstr < end && *pstr == '=') {
 			CHKN(fval = es_newStr(16));
 			++pstr;
 			/* error on space */
-			while(!isspace(*pstr) && pstr < end) {
+			while(pstr < end && !isspace(*pstr)) {
 				es_addChar(&fval, *pstr);
 				++pstr;
 			}
