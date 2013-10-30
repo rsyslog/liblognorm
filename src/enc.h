@@ -29,4 +29,8 @@
 	
 int ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str);
 
+int ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData);
+
+int ln_fmtEventToXML(struct json_object *json, es_str_t **str);
+
 #endif /* LIBLOGNORM_ENC_H_INCLUDED */

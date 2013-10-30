@@ -129,7 +129,7 @@ ln_addField_Syslog(char *name, struct json_object *field, es_str_t **str)
 		CHKR(ln_addValue_Syslog(value, str));
 		break;
 	default:
-		CHKR(es_addBuf(str, "OBJECT", sizeof("OBJECT")-1));
+		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
 	}
 	CHKR(es_addChar(str, '\"'));
 	r = 0;
@@ -170,7 +170,7 @@ int
 ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str)
 {
 	int r = -1;
-	struct json_object *obj;
+	struct json_object *tags;
 	
 	assert(json != NULL);
 	assert(json_object_is_type(json, json_type_object));
@@ -179,8 +179,8 @@ ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str)
 
 	es_addBuf(str, "[cee@115", 8);
 	
-	if((obj = json_object_object_get(json, "event.tags")) != NULL) {
-		CHKR(ln_addTags_Syslog(obj, str));
+	if((tags = json_object_object_get(json, "event.tags")) != NULL) {
+		CHKR(ln_addTags_Syslog(tags, str));
 	}
 	json_object_object_foreach(json, name, field) {
 		if (strcmp(name, "event.tags")) {

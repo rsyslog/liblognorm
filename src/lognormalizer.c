@@ -78,17 +78,20 @@ outputEvent(struct json_object *json)
 
 	switch(outfmt) {
 	case f_json:
+		if(!flatTags) {
+			json_object_object_del(json, "event.tags");
+		}
 		cstr = (char*)json_object_to_json_string(json);
 		break;
 	case f_syslog:
 		ln_fmtEventToRFC5424(json, &str);
-		break;/*
+		break;
 	case f_xml:
-		ee_fmtEventToXML(event, &str);
+		ln_fmtEventToXML(json, &str);
 		break;
 	case f_csv:
-		ee_fmtEventToCSV(event, &str, encFmt);
-		break;*/
+	ln_fmtEventToCSV(json, &str, encFmt);
+		break;
 	}
 	if (str != NULL)
 		cstr = es_str2cstr(str, NULL);
@@ -218,10 +221,6 @@ int main(int argc, char *argv[])
 		errout("Could not initialize liblognorm context");
 	}
 
-/*	if(flatTags) {
-		ee_setFlags(eectx, EE_CTX_FLAG_INCLUDE_FLAT_TAGS);
-	} */
-
 	if(verbose) {
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
@@ -242,5 +241,7 @@ int main(int argc, char *argv[])
 	normalize();
 
 	ln_exitCtx(ctx);
+	if (encFmt != NULL)
+		free(encFmt);
 	return 0;
 }
