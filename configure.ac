@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([liblognorm], [0.4.0], [rgerhards@adiscon.com])
+AC_INIT([liblognorm_j], [0.4.0], [rgerhards@adiscon.com])
 AM_INIT_AUTOMAKE
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_SRCDIR([src/lognorm.c])
@@ -39,10 +39,10 @@ AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 #AC_CHECK_FUNCS([])
 
-LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/include"
-LIBLOGNORM_LIBS="\$(top_builddir)/src/liblognorm.la"
-AC_SUBST(LIBLOGNORM_CFLAGS)
-AC_SUBST(LIBLOGNORM_LIBS)
+LIBLOGNORM_J_CFLAGS="-I\$(top_srcdir)/include"
+LIBLOGNORM_J_LIBS="\$(top_builddir)/src/liblognorm_j.la"
+AC_SUBST(LIBLOGNORM_J_CFLAGS)
+AC_SUBST(LIBLOGNORM_J_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
