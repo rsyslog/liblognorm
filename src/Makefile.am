@@ -36,6 +36,7 @@ EXTRA_DIST = \
 	ptree.h \
 	annot.h \
 	samp.h \
+	enc.h \
 	parser.h
 
-include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h
+include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h enc.h parser.h
