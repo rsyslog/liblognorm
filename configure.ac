@@ -69,7 +69,7 @@ fi
 
 
 AC_CONFIG_FILES([Makefile \
-		lognorm.pc \
+		lognorm-j.pc \
 		src/Makefile])
 AC_OUTPUT
 AC_CONFIG_MACRO_DIR([m4])
