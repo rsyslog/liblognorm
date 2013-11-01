@@ -558,22 +558,25 @@ addUnparsedField(es_str_t *str, es_size_t offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
-
-	value = json_object_new_string_len((char*)es_getBufAddr(str), es_strlen(str));
+	char *cstr = NULL;
+	
+	CHKN(cstr = (char*)es_str2cstr(str, NULL));
+	value = json_object_new_string(cstr);
 	if (value == NULL) {
-		goto fail;
+		goto done;
 	}
 	json_object_object_add(json, "originalmsg", value);
 	
-	value = json_object_new_string_len((char*)es_getBufAddr(str) + offs, 
-			es_strlen(str) - offs);
+	value = json_object_new_string(cstr + offs);
 	if (value == NULL) {
-		goto fail;
+		goto done;
 	}
 	json_object_object_add(json, "unparsed-data", value);
 
 	r = 0;
-fail:	
+done:
+	if (cstr != NULL)
+		free(cstr);
 	return r;
 }
 
@@ -634,12 +637,11 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 		}
 		char *cn, *cv;
 		CHKN(cn = ln_es_str2cstr(&fname));
+		CHKN(cv = ln_es_str2cstr(&fval));
 		if (tree->ctx->debug) {
-			CHKN(cv = ln_es_str2cstr(&fval));
-			ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
+			ln_dbgprintf(tree->ctx, "iptables parser extracts %s=%s", cn, cv);
 		}
-		CHKN(value = json_object_new_string_len((char*)es_getBufAddr(fval), 
-				es_strlen(fval)));
+		CHKN(value = json_object_new_string(cv));
 		json_object_object_add(json, cn, value);
 		es_deleteStr(fval);
 		es_deleteStr(fname);
@@ -761,7 +763,9 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
 						/* Store the value here */
-						value = json_object_new_string_len((char*)es_getBufAddr(str) + i, parsed);
+						CHKN(cstr = strndup((char*)es_getBufAddr(str) + i, parsed));
+						value = json_object_new_string(cstr);
+						free(cstr);
 						if (value == NULL) {
 							ln_dbgprintf(tree->ctx, "unable to create json");
 							goto done;
