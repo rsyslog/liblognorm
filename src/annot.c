@@ -90,7 +90,7 @@ done:	return annot;
  *                  as part of the process.
  * @returns 0 if ok, something else otherwise
  */
-inline int
+static int
 ln_combineAnnot(ln_annot *annot, ln_annot *add)
 {
 	int r = 0;
