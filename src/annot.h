@@ -5,6 +5,8 @@
  *//*
  * Copyright 2011 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is meant to be included by applications using liblognorm.
  * For lognorm library files themselves, include "lognorm.h".
  *

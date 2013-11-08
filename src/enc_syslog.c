@@ -5,8 +5,12 @@
  * order to encode syslog format. The core idea of putting all of this into
  * a single file is that this makes it very straightforward to write
  * encoders for different encodings, as all is in one place.
- *//* Libee - An Event Expression Library inspired by CEE
+ */
+/* 
+ * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
  * This file is part of liblognorm.
  *

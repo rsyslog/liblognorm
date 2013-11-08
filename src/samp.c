@@ -2,6 +2,8 @@
  *
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
