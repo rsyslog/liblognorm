@@ -224,11 +224,9 @@ ln_annotate(ln_ctx ctx, struct json_object *json, struct json_object *tagbucket)
 	/* shortcut: terminate immediately if nothing to do... */
 	if(ctx->pas->aroot == NULL)
 		goto done;
-	ln_dbgprintf(ctx, "ln_annotate going to tagbucket");
 
 	/* iterate over tagbucket */
 	for (i = json_object_array_length(tagbucket) - 1; i >= 0; i--) {
-		ln_dbgprintf(ctx, "ln_annotate iterates, current tag %d", i);
 		CHKN(tagObj = json_object_array_get_idx(tagbucket, i));
 		CHKN(tagCstr = json_object_get_string(tagObj));
 		ln_dbgprintf(ctx, "ln_annotate, current tag %d, cstr %s", i, tagCstr);
