@@ -9,12 +9,12 @@ PTHREADS_CFLAGS = -pthread
 bin_PROGRAMS = lognormalizer
 lognormalizer_SOURCES = lognormalizer.c
 lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
-lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_J_LIBS) $(LIBESTR_LIBS) 
-lognormalizer_DEPENDENCIES = liblognorm_j.la
+lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) 
+lognormalizer_DEPENDENCIES = liblognorm.la
 
-lib_LTLIBRARIES = liblognorm_j.la
+lib_LTLIBRARIES = liblognorm.la
 
-liblognorm_j_la_SOURCES = \
+liblognorm_la_SOURCES = \
 	liblognorm.c \
 	ptree.c \
 	annot.c \
@@ -25,9 +25,9 @@ liblognorm_j_la_SOURCES = \
 	enc_csv.c \
 	enc_xml.c
 
-liblognorm_j_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
-liblognorm_j_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr
-liblognorm_j_la_LDFLAGS = -version-info 0:4:0
+liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr
+liblognorm_la_LDFLAGS = -version-info 1:0:0
 
 EXTRA_DIST = \
 	internal.h \

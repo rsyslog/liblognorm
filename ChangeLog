@@ -1,6 +1,6 @@
 Version 0.4.0, 
-- the library has been renamed to liblognorm_j to avoid conflicts
-  with older versions.
+- WARNING: this version has incompatible interface and older programs 
+  will not compile with it.
 - libee is not used any more. JSON-C is used for object handling
   instead. Parsers and formatters are now part of liblognorm.
 - added new field type "rest", which simply sinks all up to end of

@@ -1,6 +1,6 @@
 SUBDIRS = src
 
 pkgconfigdir = $(libdir)/pkgconfig
-pkgconfig_DATA = lognorm_j.pc
+pkgconfig_DATA = lognorm.pc
 
 ACLOCAL_AMFLAGS = -I m4
