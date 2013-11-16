@@ -185,8 +185,6 @@ BEGINParser(RFC5424Date)
 	if(len > 0) {
 		if(*pszTS != ' ') /* if it is not a space, it can not be a "good" time */
 			goto fail;
-		++pszTS; /* just skip past it */
-		--len;
 	}
 
 	/* we had success, so update parse pointer */
