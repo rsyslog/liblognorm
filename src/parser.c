@@ -28,8 +28,11 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
+#include <string.h>
+#include <json.h>
 
 #include "liblognorm.h"
+#include "internal.h"
 #include "parser.h"
 
 /* some helpers */
@@ -69,7 +72,8 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  */
 #define BEGINParser(ParserName) \
 int ln_parse##ParserName(es_str_t *str, es_size_t *offs, \
-                      __attribute__((unused)) es_str_t *ed, es_size_t *parsed) \
+                      __attribute__((unused)) es_str_t *ed, es_size_t *parsed,\
+					  __attribute__((unused)) struct json_object **value) \
 { \
 	es_size_t r = LN_WRONGPARSER; \
 	*parsed = 0;
@@ -90,15 +94,15 @@ fail: \
 BEGINParser(RFC5424Date)
 	unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
-	int year;
+	__attribute__((unused)) int year;
 	int month;
 	int day;
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
-	int secfrac;	/* fractional seconds (must be 32 bit!) */
-	int secfracPrecision;
-	char OffsetMode;	/* UTC offset + or - */
+	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
+	__attribute__((unused)) int secfracPrecision;
+	__attribute__((unused)) char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	es_size_t len;
@@ -200,7 +204,7 @@ BEGINParser(RFC3164Date)
 	unsigned char *p;
 	es_size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
-	int month;
+	__attribute__((unused)) int month;
 	int day;
 	//int year = 0; /* 0 means no year provided */
 	int hour; /* 24 hour clock */
@@ -529,6 +533,7 @@ ENDParser
 BEGINParser(QuotedString)
 	unsigned char *c;
 	es_size_t i;
+	char *cstr;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -551,6 +556,10 @@ BEGINParser(QuotedString)
 
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
+	/* create JSON value to save quoted string contents */
+	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+	CHKN(*value = json_object_new_string(cstr));
+	free(cstr);
 
 ENDParser
 

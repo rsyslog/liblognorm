@@ -755,7 +755,8 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 					r = left;
 			}
 		} else {
-			localR = node->parser(str, &i, node->data, &parsed);
+			value = NULL;
+			localR = node->parser(str, &i, node->data, &parsed, &value);
 			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %d", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
@@ -764,22 +765,33 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
-						/* Store the value here */
-						CHKN(cstr = strndup((char*)es_getBufAddr(str) + i, parsed));
-						value = json_object_new_string(cstr);
-						free(cstr);
+						/* Store the value here; create json if not already created */
+						if (value == NULL) { 
+							CHKN(cstr = strndup((char*)es_getBufAddr(str) + i, parsed));
+							value = json_object_new_string(cstr);
+							free(cstr);
+						}
 						if (value == NULL) {
 							ln_dbgprintf(tree->ctx, "unable to create json");
 							goto done;
 						}
 						namestr = ln_es_str2cstr(&node->name);
 						json_object_object_add(json, namestr, value);
+					} else {
+						if (value != NULL) {
+							/* Free the unneeded value */
+							json_object_put(value);
+						}
 					}
 					r = 0;
 					goto done;
 				}
 				ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
 						(int) offs, (int)left);
+				if (value != NULL) {
+					/* Free the value if it was created */
+					json_object_put(value);
+				}
 				if(left < r)
 					r = left;
 			}

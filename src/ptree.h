@@ -50,7 +50,8 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(es_str_t*, es_size_t*, es_str_t*, es_size_t*);
+	int (*parser)(es_str_t*, es_size_t*, es_str_t*, es_size_t*,
+			struct json_object **);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
