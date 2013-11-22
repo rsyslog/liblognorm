@@ -62,6 +62,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  * @param[in] offs an offset into the string
  * @param[in] ed string with extra data for parser use
  * @param[out] parsed bytes
+ * @param[out] json object containing parsed data (can be unused)
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
