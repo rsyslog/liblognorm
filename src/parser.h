@@ -63,6 +63,11 @@ int ln_parseWord(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed
  */
 int ln_parseCharTo(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
+/** 
+ * Parse everything up to a specific character (relaxed constraints, suitable for CSV)
+ */
+int ln_parseCharSeparated(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+
 
 /** 
  * Get everything till the rest of string.

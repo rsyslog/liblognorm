@@ -720,13 +720,6 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 	r -= ipfix;
 	ln_dbgprintf(tree->ctx, "%d: prefix compare succeeded, still valid", (int) offs);
 
-	if(offs == es_strlen(str)) {
-		*endNode = tree;
-		r = 0;
-		goto done;
-	}
-
-
 	/* now try the parsers */
 	while(node != NULL) {
 		if(tree->ctx->debug) {
@@ -797,6 +790,12 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 			}
 		}
 		node = node->next;
+	}
+
+	if(offs == es_strlen(str)) {
+		*endNode = tree;
+		r = 0;
+		goto done;
 	}
 
 if(offs < es_strlen(str)) {

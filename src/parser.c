@@ -110,8 +110,6 @@ BEGINParser(RFC5424Date)
 	es_size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
 
-	assert(*offs < es_strlen(str));
-
 	pszTS = es_getBufAddr(str) + *offs;
 	len = orglen = es_strlen(str) - *offs;
 
@@ -211,8 +209,6 @@ BEGINParser(RFC3164Date)
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
-
-	assert(*offs < es_strlen(str));
 
 	p = es_getBufAddr(str) + *offs;
 	orglen = len = es_strlen(str) - *offs;
@@ -510,6 +506,37 @@ ENDParser
 
 
 /**
+ * Parse everything up to a specific character, or up to the end of string.
+ * The character must be the only char inside extra data passed to the parser.
+ * It is a program error if strlen(ed) != 1.
+ * This parser always returns success.
+ * By nature of the parser, it is required that end of string or the separator
+ * follows this field in rule.
+ */
+BEGINParser(CharSeparated)
+	unsigned char *c;
+	unsigned char cTerm;
+	es_size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	assert(es_strlen(ed) == 1);
+	cTerm = *(es_getBufAddr(ed));
+	c = es_getBufAddr(str);
+	i = *offs;
+
+	/* search end of word */
+	while(i < es_strlen(str) && c[i] != cTerm) 
+		i++;
+
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+
+
+/**
  * Just get everything till the end of string.
  */
 BEGINParser(Rest)
@@ -541,6 +568,8 @@ BEGINParser(QuotedString)
 	assert(parsed != NULL);
 	c = es_getBufAddr(str);
 	i = *offs;
+	if(i + 2 > es_strlen(str))
+		goto fail;	/* needs at least 2 characters */
 
 	if(c[i] != '"')
 		goto fail;
@@ -737,7 +766,7 @@ BEGINParser(IPv4)
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
-	if(es_strlen(str) - i + 1 < 7) {
+	if(i + 7 > es_strlen(str)) {
 		/* IPv4 addr requires at least 7 characters */
 		goto fail;
 	}
