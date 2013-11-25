@@ -125,30 +125,6 @@ int ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node);
 
 
 /**
- * Traverse a (sub) tree according to a string.
- *
- * This functions traverses the provided tree according to the
- * provided string. It navigates to the deepest node possible.
- * Then, it returns this node as well as the position until which
- * the string could be parsed. If there is no match at all,
- * NULL is returned instead of a tree node. Note that this is
- * different from the case where the root of the subtree is
- * returned. In that case, there was at least a single match
- * inside that root.
- * @memberof ln_ptree
- *
- * @param[in] subtree root of subtree to traverse
- * @param[in] str string to parse
- * @param[in/out] parsedTo on entry: start position within string,
- * 	          on exist position of first unmatched byte
- *
- * @return pointer to found tree node or NULL if there was no match at all
- */
-struct ln_ptree* ln_traversePTree(struct ln_ptree *subtree,
-                               es_str_t *str, es_size_t *parsedTo);
-
-
-/**
  * Add a literal to a ptree.
  * Creates new tree nodes as necessary.
  * @memberof ln_ptree

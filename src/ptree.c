@@ -108,38 +108,6 @@ done:	return;
 }
 
 
-struct ln_ptree*
-ln_traversePTree(struct ln_ptree *subtree, es_str_t *str, es_size_t *parsedTo)
-{
-	es_size_t i = 0;
-	unsigned char *c;
-	struct ln_ptree *curr = subtree;
-	struct ln_ptree *prev = NULL;
-
-	ln_dbgprintf(subtree->ctx, "traversePTree: begin at %p", curr);
-	c = es_getBufAddr(str);
-	while(curr != NULL && i < es_strlen(str)) {
-		// TODO: implement commonPrefix
-		ln_dbgprintf(subtree->ctx, "traversePTree: curr %p, char '%u'", curr, c[i]);
-		prev = curr;
-		curr = curr->subtree[c[i++]];
-	};
-	ln_dbgprintf(subtree->ctx, "traversePTree: after search %p", curr);
-
-	if(curr == NULL) {
-		curr = prev;
-	}
-
-	if(i == es_strlen(str))
-		--i;
-
-	*parsedTo = i;
-	ln_dbgprintf(subtree->ctx, "traversePTree: returns node %p, offset %u", curr, (unsigned) i);
-	return curr;
-}
-
-
-
 /**
  * Set the common prefix inside a note, taking into account the subtle
  * issues associated with it.
