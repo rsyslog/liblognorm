@@ -28,8 +28,11 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
+#include <string.h>
+#include <json.h>
 
 #include "liblognorm.h"
+#include "internal.h"
 #include "parser.h"
 
 /* some helpers */
@@ -59,6 +62,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  * @param[in] offs an offset into the string
  * @param[in] ed string with extra data for parser use
  * @param[out] parsed bytes
+ * @param[out] json object containing parsed data (can be unused)
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
@@ -69,7 +73,8 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  */
 #define BEGINParser(ParserName) \
 int ln_parse##ParserName(es_str_t *str, es_size_t *offs, \
-                      __attribute__((unused)) es_str_t *ed, es_size_t *parsed) \
+                      __attribute__((unused)) es_str_t *ed, es_size_t *parsed,\
+					  __attribute__((unused)) struct json_object **value) \
 { \
 	es_size_t r = LN_WRONGPARSER; \
 	*parsed = 0;
@@ -90,22 +95,20 @@ fail: \
 BEGINParser(RFC5424Date)
 	unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
-	int year;
+	__attribute__((unused)) int year;
 	int month;
 	int day;
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
-	int secfrac;	/* fractional seconds (must be 32 bit!) */
-	int secfracPrecision;
-	char OffsetMode;	/* UTC offset + or - */
+	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
+	__attribute__((unused)) int secfracPrecision;
+	__attribute__((unused)) char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	es_size_t len;
 	es_size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
-
-	assert(*offs < es_strlen(str));
 
 	pszTS = es_getBufAddr(str) + *offs;
 	len = orglen = es_strlen(str) - *offs;
@@ -200,14 +203,12 @@ BEGINParser(RFC3164Date)
 	unsigned char *p;
 	es_size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
-	int month;
+	__attribute__((unused)) int month;
 	int day;
 	//int year = 0; /* 0 means no year provided */
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
-
-	assert(*offs < es_strlen(str));
 
 	p = es_getBufAddr(str) + *offs;
 	orglen = len = es_strlen(str) - *offs;
@@ -505,6 +506,37 @@ ENDParser
 
 
 /**
+ * Parse everything up to a specific character, or up to the end of string.
+ * The character must be the only char inside extra data passed to the parser.
+ * It is a program error if strlen(ed) != 1.
+ * This parser always returns success.
+ * By nature of the parser, it is required that end of string or the separator
+ * follows this field in rule.
+ */
+BEGINParser(CharSeparated)
+	unsigned char *c;
+	unsigned char cTerm;
+	es_size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	assert(es_strlen(ed) == 1);
+	cTerm = *(es_getBufAddr(ed));
+	c = es_getBufAddr(str);
+	i = *offs;
+
+	/* search end of word */
+	while(i < es_strlen(str) && c[i] != cTerm) 
+		i++;
+
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+
+
+/**
  * Just get everything till the end of string.
  */
 BEGINParser(Rest)
@@ -529,12 +561,15 @@ ENDParser
 BEGINParser(QuotedString)
 	unsigned char *c;
 	es_size_t i;
+	char *cstr;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	c = es_getBufAddr(str);
 	i = *offs;
+	if(i + 2 > es_strlen(str))
+		goto fail;	/* needs at least 2 characters */
 
 	if(c[i] != '"')
 		goto fail;
@@ -551,6 +586,10 @@ BEGINParser(QuotedString)
 
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
+	/* create JSON value to save quoted string contents */
+	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+	CHKN(*value = json_object_new_string(cstr));
+	free(cstr);
 
 ENDParser
 
@@ -727,7 +766,7 @@ BEGINParser(IPv4)
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
-	if(es_strlen(str) - i + 1 < 7) {
+	if(i + 7 > es_strlen(str)) {
 		/* IPv4 addr requires at least 7 characters */
 		goto fail;
 	}

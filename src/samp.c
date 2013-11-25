@@ -188,6 +188,9 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	} else if(!es_strconstcmp(*str, "char-to")) {
 		// TODO: check extra data!!!! (very important)
 		node->parser = ln_parseCharTo;
+	} else if(!es_strconstcmp(*str, "char-sep")) {
+		// TODO: check extra data!!!! (very important)
+		node->parser = ln_parseCharSeparated;
 	} else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
