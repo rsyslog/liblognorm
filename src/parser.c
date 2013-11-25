@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -59,6 +59,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  * All parsers receive 
  *
  * @param[in] str the to-be-parsed string
+ * @param[in] strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
  * @param[in] ed string with extra data for parser use
  * @param[out] parsed bytes
@@ -72,7 +73,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  *           else in case of an error.
  */
 #define BEGINParser(ParserName) \
-int ln_parse##ParserName(es_str_t *str, es_size_t *offs, \
+int ln_parse##ParserName(char *str, es_size_t strLen, es_size_t *offs, \
                       __attribute__((unused)) es_str_t *ed, es_size_t *parsed,\
 					  __attribute__((unused)) struct json_object **value) \
 { \
@@ -110,8 +111,8 @@ BEGINParser(RFC5424Date)
 	es_size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
 
-	pszTS = es_getBufAddr(str) + *offs;
-	len = orglen = es_strlen(str) - *offs;
+	pszTS = (unsigned char*) str + *offs;
+	len = orglen = strLen - *offs;
 
 	year = hParseInt(&pszTS, &len);
 
@@ -210,8 +211,8 @@ BEGINParser(RFC3164Date)
 	int minute;
 	int second;
 
-	p = es_getBufAddr(str) + *offs;
-	orglen = len = es_strlen(str) - *offs;
+	p = (unsigned char*) str + *offs;
+	orglen = len = strLen - *offs;
 	/* If we look at the month (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec),
 	 * we may see the following character sequences occur:
 	 *
@@ -421,15 +422,15 @@ ENDParser
  * as 64 bits (but may later change our mind if performance dictates so).
  */
 BEGINParser(Number)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 
-	for (i = *offs; i < es_strlen(str) && isdigit(c[i]); i++);
+	for (i = *offs; i < strLen && isdigit(c[i]); i++);
 	if (i == *offs)
 		goto fail;
 	
@@ -445,17 +446,17 @@ ENDParser
  * the offset is position on a space upon entry.
  */
 BEGINParser(Word)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < es_strlen(str) && c[i] != ' ') 
+	while(i < strLen && c[i] != ' ') 
 		i++;
 
 	if(i == *offs) {
@@ -478,7 +479,7 @@ ENDParser
  * other cases a string is extracted.
  */
 BEGINParser(CharTo)
-	unsigned char *c;
+	char *c;
 	unsigned char cTerm;
 	es_size_t i;
 
@@ -487,14 +488,14 @@ BEGINParser(CharTo)
 	assert(parsed != NULL);
 	assert(es_strlen(ed) == 1);
 	cTerm = *(es_getBufAddr(ed));
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < es_strlen(str) && c[i] != cTerm) 
+	while(i < strLen && c[i] != cTerm) 
 		i++;
 
-	if(i == *offs || i == es_strlen(str) || c[i] != cTerm) {
+	if(i == *offs || i == strLen || c[i] != cTerm) {
 		r = LN_WRONGPARSER;
 		goto fail;
 	}
@@ -514,7 +515,7 @@ ENDParser
  * follows this field in rule.
  */
 BEGINParser(CharSeparated)
-	unsigned char *c;
+	char *c;
 	unsigned char cTerm;
 	es_size_t i;
 
@@ -523,11 +524,11 @@ BEGINParser(CharSeparated)
 	assert(parsed != NULL);
 	assert(es_strlen(ed) == 1);
 	cTerm = *(es_getBufAddr(ed));
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < es_strlen(str) && c[i] != cTerm) 
+	while(i < strLen && c[i] != cTerm) 
 		i++;
 
 	/* success, persist */
@@ -546,7 +547,7 @@ BEGINParser(Rest)
 	assert(parsed != NULL);
 
 	/* success, persist */
-	*parsed = es_strlen(str) - *offs;
+	*parsed = strLen - *offs;
 
 ENDParser
 
@@ -559,16 +560,16 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(QuotedString)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 	char *cstr;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
-	if(i + 2 > es_strlen(str))
+	if(i + 2 > strLen)
 		goto fail;	/* needs at least 2 characters */
 
 	if(c[i] != '"')
@@ -576,10 +577,10 @@ BEGINParser(QuotedString)
 	++i;
 
 	/* search end of string */
-	while(i < es_strlen(str) && c[i] != '"') 
+	while(i < strLen && c[i] != '"') 
 		i++;
 
-	if(i == es_strlen(str) || c[i] != '"') {
+	if(i == strLen || c[i] != '"') {
 		r = LN_WRONGPARSER;
 		goto fail;
 	}
@@ -600,16 +601,16 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(ISODate)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
-	if(*offs+10 > es_strlen(str))
+	if(*offs+10 > strLen)
 		goto fail;	/* if it is not 10 chars, it can't be an ISO date */
 
 	/* year */
@@ -649,16 +650,16 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(Time24hr)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
-	if(*offs+8 > es_strlen(str))
+	if(*offs+8 > strLen)
 		goto fail;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
@@ -689,16 +690,16 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(Time12hr)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = es_getBufAddr(str);
+	c = str;
 	i = *offs;
 
-	if(*offs+8 > es_strlen(str))
+	if(*offs+8 > strLen)
 		goto fail;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
@@ -731,19 +732,20 @@ ENDParser
  * @return 0 if OK, 1 otherwise
  */
 static int
-chkIPv4AddrByte(es_str_t *str, es_size_t *offs)
+chkIPv4AddrByte(char *str, es_size_t strLen, es_size_t *offs)
 {
 	int val = 0;
 	int r = 1;	/* default: fail -- simplifies things */
-	unsigned char *c = es_getBufAddr(str);
+	char *c;
 	es_size_t i = *offs;
 
-	if(i == es_strlen(str) || !isdigit(c[i]))
+	c = str;
+	if(i == strLen || !isdigit(c[i]))
 		goto fail;
 	val = c[i++] - '0';
-	if(i < es_strlen(str) && isdigit(c[i])) {
+	if(i < strLen && isdigit(c[i])) {
 		val = val * 10 + c[i++] - '0';
-		if(i < es_strlen(str) && isdigit(c[i]))
+		if(i < strLen && isdigit(c[i]))
 			val = val * 10 + c[i++] - '0';
 	}
 	if(val > 255)	/* cannot be a valid IP address byte! */
@@ -759,30 +761,30 @@ fail:
  * Parser for IPv4 addresses.
  */
 BEGINParser(IPv4)
-	unsigned char *c;
+	char *c;
 	es_size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
-	if(i + 7 > es_strlen(str)) {
+	if(i + 7 > strLen) {
 		/* IPv4 addr requires at least 7 characters */
 		goto fail;
 	}
-	c = es_getBufAddr(str);
+	c = str;
 
 	/* byte 1*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
-	if(i == es_strlen(str) || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
+	if(i == strLen || c[i++] != '.') goto fail;
 	/* byte 2*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
-	if(i == es_strlen(str) || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
+	if(i == strLen || c[i++] != '.') goto fail;
 	/* byte 3*/
-	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
-	if(i == es_strlen(str) || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
+	if(i == strLen || c[i++] != '.') goto fail;
 	/* byte 4 - we do NOT need any char behind it! */
-	if(chkIPv4AddrByte(str, &i) != 0) goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;

@@ -491,7 +491,7 @@ static inline void dotAddPtr(es_str_t **str, void *p)
 {
 	char buf[64];
 	int i;
-	i = snprintf(buf, sizeof(buf), "%llu", (unsigned long long) p);
+	i = snprintf(buf, sizeof(buf), "%p", p);
 	es_addBuf(str, buf, i);
 }
 /**
@@ -556,20 +556,18 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(es_str_t *str, es_size_t offs, struct json_object *json)
+addUnparsedField(char *str, es_size_t offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
-	char *cstr = NULL;
 	
-	CHKN(cstr = (char*)es_str2cstr(str, NULL));
-	value = json_object_new_string(cstr);
+	value = json_object_new_string(str);
 	if (value == NULL) {
 		goto done;
 	}
 	json_object_object_add(json, "originalmsg", value);
 	
-	value = json_object_new_string(cstr + offs);
+	value = json_object_new_string(str + offs);
 	if (value == NULL) {
 		goto done;
 	}
@@ -577,8 +575,6 @@ addUnparsedField(es_str_t *str, es_size_t offs, struct json_object *json)
 
 	r = 0;
 done:
-	if (cstr != NULL)
-		free(cstr);
 	return r;
 }
 
@@ -591,32 +587,33 @@ done:
  * can otherwise not be processed by liblognorm in a meaningful way.
  *
  * @param[in] tree current tree to process
- * @param[in] string string to be matched against (the to-be-normalized data)
+ * @param[in] str string to be matched against (the to-be-normalized data)
+ * @param[in] strLen length of str
  * @param[in/out] offs start position in input data, on exit first unparsed position
  * @param[in/out] event handle to event that is being created during normalization
  *
  * @return 0 if parser was successfully, something else on error
  */
 static int
-ln_iptablesParser(struct ln_ptree *tree, es_str_t *str, es_size_t *offs,
+ln_iptablesParser(struct ln_ptree *tree, char *str, es_size_t strLen, es_size_t *offs,
 		  struct json_object *json)
 {
 	int r;
 	es_size_t o = *offs;
 	es_str_t *fname;
 	es_str_t *fval;
-	unsigned char *pstr;
-	unsigned char *end;
+	char *pstr;
+	char *end;
 	struct json_object *value;
 
-ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es_strlen(str));
-	if(o == es_strlen(str)) {
+ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) strLen);
+	if(o == strLen) {
 		r = -1; /* can not be, we have no n/v pairs! */
 		goto done;
 	}
 	
-	end = es_getBufAddr(str) + es_strlen(str);
-	pstr = es_getBufAddr(str) + o;
+	end = str + strLen;
+	pstr = str + o;
 	while(pstr < end) {
 		while(pstr < end && isspace(*pstr))
 			++pstr;
@@ -650,7 +647,7 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 	}
 
 	r = 0;
-	*offs = es_strlen(str);
+	*offs = strLen;
 
 done:
 	ln_dbgprintf(tree->ctx, "%d iptables parser returns %d", (int) *offs, (int) r);
@@ -674,7 +671,7 @@ done:
  *         characters.
  */
 static int
-ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct json_object *json,
+ln_normalizeRec(struct ln_ptree *tree, char *str, es_size_t strLen, es_size_t offs, struct json_object *json,
 		struct ln_ptree **endNode)
 {
 	int r;
@@ -683,26 +680,26 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 	int left;
 	ln_fieldList_t *node;
 	char *cstr;
-	unsigned char *c;
+	char *c;
 	unsigned char *cpfix;
 	unsigned ipfix;
 	es_size_t parsed;
 	char *namestr;
 	struct json_object *value;
 	
-	if(offs >= es_strlen(str)) {
+	if(offs >= strLen) {
 		*endNode = tree;
 		r = -tree->lenPrefix;
 		goto done;
 	}
 
-	c = es_getBufAddr(str);
+	c = str;
 	cpfix = prefixBase(tree);
 	node = tree->froot;
-	r = es_strlen(str) - offs;
+	r = strLen - offs;
 	/* first we need to check if the common prefix matches (and consume input data while we do) */
 	ipfix = 0;
-	while(offs < es_strlen(str) && ipfix < tree->lenPrefix) {
+	while(offs < strLen && ipfix < tree->lenPrefix) {
 		ln_dbgprintf(tree->ctx, "%d: prefix compare '%c', '%c'", (int) offs, c[offs], cpfix[ipfix]);
 		if(c[offs] != cpfix[ipfix]) {
 			r -= ipfix;
@@ -730,13 +727,13 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 		}
 		i = offs;
 		if(node->isIPTables) {
-			localR = ln_iptablesParser(tree, str, &i, json);
+			localR = ln_iptablesParser(tree, str, strLen, &i, json);
 			ln_dbgprintf(tree->ctx, "%d iptables parser return, i=%d",
 						(int) offs, (int)i);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, i, json, endNode);
+				left = ln_normalizeRec(node->subtree, str, strLen, i, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					r = 0;
@@ -749,18 +746,18 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 			}
 		} else {
 			value = NULL;
-			localR = node->parser(str, &i, node->data, &parsed, &value);
+			localR = node->parser(str, strLen, &i, node->data, &parsed, &value);
 			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %d", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, i + parsed, json, endNode);
+				left = ln_normalizeRec(node->subtree, str, strLen, i + parsed, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
 						/* Store the value here; create json if not already created */
 						if (value == NULL) { 
-							CHKN(cstr = strndup((char*)es_getBufAddr(str) + i, parsed));
+							CHKN(cstr = strndup(str + i, parsed));
 							value = json_object_new_string(cstr);
 							free(cstr);
 						}
@@ -792,22 +789,22 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct jso
 		node = node->next;
 	}
 
-	if(offs == es_strlen(str)) {
+	if(offs == strLen) {
 		*endNode = tree;
 		r = 0;
 		goto done;
 	}
 
-if(offs < es_strlen(str)) {
-unsigned char cc = es_getBufAddr(str)[offs];
+if(offs < strLen) {
+unsigned char cc = str[offs];
 ln_dbgprintf(tree->ctx, "%u no field, trying subtree char '%c': %p", offs, cc, tree->subtree[cc]);
 } else {
 ln_dbgprintf(tree->ctx, "%u no field, offset already beyond end", offs);
 }
 	/* now let's see if we have a literal */
-	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
-		left = ln_normalizeRec(tree->subtree[es_getBufAddr(str)[offs]],
-				       str, offs + 1, json, endNode);
+	if(tree->subtree[(int)str[offs]] != NULL) {
+		left = ln_normalizeRec(tree->subtree[(int)str[offs]],
+				       str, strLen, offs + 1, json, endNode);
 		if(left < r)
 			r = left;
 	}
@@ -819,7 +816,7 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
+ln_normalize(ln_ctx ctx, char *str, es_size_t strLen, struct json_object **json_p)
 {
 	int r;
 	int left;
@@ -829,7 +826,7 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	left = ln_normalizeRec(ctx->ptree, str, 0, *json_p, &endNode);
+	left = ln_normalizeRec(ctx->ptree, str, strLen, 0, *json_p, &endNode);
 
 	if(ctx->debug) {
 		if(left == 0) {
@@ -844,9 +841,9 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {
-			addUnparsedField(str, es_strlen(str), *json_p);
+			addUnparsedField(str, strLen, *json_p);
 		} else {
-			addUnparsedField(str, es_strlen(str) - left, *json_p);
+			addUnparsedField(str, strLen - left, *json_p);
 		}
 	} else {
 		/* success, finalize event */

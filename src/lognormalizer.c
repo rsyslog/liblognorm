@@ -12,7 +12,7 @@
  *
  *//*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2011 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of liblognorm.
  *
@@ -110,7 +110,6 @@ normalize(void)
 {
 	FILE *fp = stdin;
 	char buf[10*1024];
-	es_str_t *str;
 	struct json_object *json = NULL;
 	long long unsigned numUnparsed = 0;
 	long long unsigned numWrongTag = 0;
@@ -125,9 +124,7 @@ normalize(void)
 		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
 			buf[strlen(buf)-1] = '\0';
 		if(verbose > 0) printf("To normalize: '%s'\n", buf);
-		str = es_newStrFromCStr(buf, strlen(buf));
-		ln_normalize(ctx, str, &json);
-		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
+		ln_normalize(ctx, buf, strlen(buf), &json);
 		if(json != NULL) {
 			if( mandatoryTagCstr == NULL 
 					|| json_object_object_get(json, mandatoryTagCstr)) {
@@ -143,7 +140,6 @@ normalize(void)
 			json_object_put(json);
 			json = NULL;
 		}
-		es_deleteStr(str);
 	}
 	if(numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);

@@ -3,7 +3,7 @@
  * @brief The parse tree object.
  * @class ln_ptree ptree.h
  *//*
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2013 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -50,7 +50,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(es_str_t*, es_size_t*, es_str_t*, es_size_t*,
+	int (*parser)(char*, es_size_t, es_size_t*, es_str_t*, es_size_t*,
 			struct json_object **);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
