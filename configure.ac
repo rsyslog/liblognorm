@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([liblognorm], [0.3.8], [rgerhards@adiscon.com])
+AC_INIT([liblognorm], [1.0.0], [rgerhards@adiscon.com])
 AM_INIT_AUTOMAKE
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_SRCDIR([src/lognorm.c])
@@ -11,10 +11,10 @@ AC_CONFIG_HEADER([config.h])
 # Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
+AC_PROG_CC_C99
 if test "$GCC" = "yes"
 then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
 fi
-
 AC_PROG_LIBTOOL
 
 # Checks for libraries.
@@ -46,7 +46,8 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(LIBEE, libee >= 0.3.2)
+PKG_CHECK_MODULES(JSON_C, json-c,, [
+	PKG_CHECK_MODULES(JSON_C, json)])
 
 # debug mode settings
 AC_ARG_ENABLE(debug,

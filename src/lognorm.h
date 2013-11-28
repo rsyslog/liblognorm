@@ -27,6 +27,7 @@
 #ifndef LIBLOGNORM_LOGNORM_HINCLUDED
 #define	LIBLOGNORM_LOGNORM_HINCLUDED
 #include <stdlib.h>	/* we need size_t */
+#include "liblognorm.h"
 #include "ptree.h"
 #include "annot.h"
 
@@ -34,11 +35,10 @@
 #define LN_ObjID_CTX 0xFEFE0001
 
 struct ln_ctx_s {
-	unsigned objID;	/**< a magic number to prevent some memory adressing errors */
+	unsigned objID;	/**< a magic number to prevent some memory addressing errors */
 	void (*dbgCB)(void *cookie, char *msg, size_t lenMsg);
 		/**< user-provided debug output callback */
 	void *dbgCookie; /**< cookie to be passed to debug callback */
-	ee_ctx eectx;
 	ln_ptree *ptree; /**< parse tree being used by this context */
 	ln_annotSet *pas; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */

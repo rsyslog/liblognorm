@@ -8,8 +8,8 @@ PTHREADS_CFLAGS = -pthread
 # milestone (latest at initial release!)
 bin_PROGRAMS = lognormalizer
 lognormalizer_SOURCES = lognormalizer.c
-lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
-lognormalizer_LDADD = $(LIBEE_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) 
 lognormalizer_DEPENDENCIES = liblognorm.la
 
 lib_LTLIBRARIES = liblognorm.la
@@ -19,11 +19,15 @@ liblognorm_la_SOURCES = \
 	ptree.c \
 	annot.c \
 	samp.c \
-	lognorm.c
+	lognorm.c \
+	parser.c \
+	enc_syslog.c \
+	enc_csv.c \
+	enc_xml.c
 
-liblognorm_la_CPPFLAGS = $(LIBEE_CFLAGS) $(LIBESTR_CFLAGS)
-liblognorm_la_LIBADD = $(rt_libs) $(LIBEE_LIBS) $(LIBESTR_LIBS) -lestr
-liblognorm_la_LDFLAGS = -version-info 0:0:0
+liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr
+liblognorm_la_LDFLAGS = -version-info 1:0:0
 
 EXTRA_DIST = \
 	internal.h \
@@ -31,6 +35,8 @@ EXTRA_DIST = \
 	lognorm.h \
 	ptree.h \
 	annot.h \
-	samp.h
+	samp.h \
+	enc.h \
+	parser.h
 
-include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h
+include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h enc.h parser.h

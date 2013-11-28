@@ -33,6 +33,8 @@
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
@@ -54,6 +56,8 @@
 #ifndef INTERNAL_H_INCLUDED
 #define	INTERNAL_H_INCLUDED
 
+#include "liblognorm.h"
+
 /* support for simple error checking */
 
 #define CHKR(x) \
@@ -67,4 +71,19 @@
 
 #define FAIL(e) {r = (e); goto done;}
 
-#endif /* #ifndef LOGNORM_H_INCLUDED */
+static inline char* ln_es_str2cstr(es_str_t **str)
+{
+	int r = -1;
+	char *buf;
+
+	if (es_strlen(*str) == (*str)->lenBuf) {
+		CHKR(es_extendBuf(str, 1));
+	}
+	CHKN(buf = (char*)es_getBufAddr(*str));
+	buf[es_strlen(*str)] = '\0';
+	return buf;
+done:
+	return NULL;
+}
+
+#endif /* #ifndef INTERNAL_H_INCLUDED */

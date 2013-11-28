@@ -36,13 +36,13 @@
 #include <string.h>
 #include <getopt.h>
 #include <libestr.h>
-#include <libee/libee.h>
+#include <json.h>
 #include "liblognorm.h"
 #include "ptree.h"
 #include "lognorm.h"
+#include "enc.h"
 
 static ln_ctx ctx;
-static ee_ctx eectx;
 
 static int verbose = 0;
 static int parsedOnly = 0;	/**< output unparsed messages? */
@@ -71,29 +71,34 @@ void errout(char *errmsg)
  * of the string on every call.
  */
 static inline void
-outputEvent(struct ee_event *event)
+outputEvent(struct json_object *json)
 {
 	char *cstr;
 	es_str_t *str = NULL;
 
 	switch(outfmt) {
 	case f_json:
-		ee_fmtEventToJSON(event, &str);
+		if(!flatTags) {
+			json_object_object_del(json, "event.tags");
+		}
+		cstr = (char*)json_object_to_json_string(json);
 		break;
 	case f_syslog:
-		ee_fmtEventToRFC5424(event, &str);
+		ln_fmtEventToRFC5424(json, &str);
 		break;
 	case f_xml:
-		ee_fmtEventToXML(event, &str);
+		ln_fmtEventToXML(json, &str);
 		break;
 	case f_csv:
-		ee_fmtEventToCSV(event, &str, encFmt);
+	ln_fmtEventToCSV(json, &str, encFmt);
 		break;
 	}
-	cstr = es_str2cstr(str, NULL);
+	if (str != NULL)
+		cstr = es_str2cstr(str, NULL);
 	if(verbose > 0) printf("normalized: '%s'\n", cstr);
 	printf("%s\n", cstr);
-	free(cstr);
+	if (str != NULL)
+		free(cstr);
 	es_deleteStr(str);
 }
 
@@ -106,12 +111,14 @@ normalize(void)
 	FILE *fp = stdin;
 	char buf[10*1024];
 	es_str_t *str;
-	struct ee_event *event = NULL;
-	es_str_t *constUnparsed;
+	struct json_object *json = NULL;
 	long long unsigned numUnparsed = 0;
 	long long unsigned numWrongTag = 0;
-
-	constUnparsed = es_newStrFromBuf("unparsed-data", sizeof("unparsed-data") - 1);
+	char *mandatoryTagCstr = NULL;
+	
+	if (mandatoryTag != NULL) {
+		mandatoryTagCstr = es_str2cstr(mandatoryTag, NULL);
+	}
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
 		buf[strlen(buf)-1] = '\0';
@@ -119,22 +126,22 @@ normalize(void)
 			buf[strlen(buf)-1] = '\0';
 		if(verbose > 0) printf("To normalize: '%s'\n", buf);
 		str = es_newStrFromCStr(buf, strlen(buf));
-		ln_normalize(ctx, str, &event);
+		ln_normalize(ctx, str, &json);
 		//printf("normalize result: %d\n", ln_normalizeRec(ctx, ctx->ptree, str, 0, &event));
-		if(event != NULL) {
-			if(   mandatoryTag == NULL
-			   || (mandatoryTag != NULL && ee_EventHasTag(event, mandatoryTag))) {
-				if(   parsedOnly == 1
-				   && ee_getEventField(event, constUnparsed) != NULL){
+		if(json != NULL) {
+			if( mandatoryTagCstr == NULL 
+					|| json_object_object_get(json, mandatoryTagCstr)) {
+				if( parsedOnly == 1
+						&& json_object_object_get(json, "unparsed-data") != NULL) {
 					numUnparsed++;
 				} else {
-					outputEvent(event);
+					outputEvent(json);
 				}
 			} else {
 				numWrongTag++;
 			}
-			ee_deleteEvent(event);
-			event = NULL;
+			json_object_put(json);
+			json = NULL;
 		}
 		es_deleteStr(str);
 	}
@@ -142,7 +149,7 @@ normalize(void)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
-	es_deleteStr(constUnparsed);
+	free(mandatoryTagCstr);
 }
 
 
@@ -214,18 +221,10 @@ int main(int argc, char *argv[])
 		errout("Could not initialize liblognorm context");
 	}
 
-	if((eectx = ee_initCtx()) == NULL) {
-		errout("Could not initialize libee context");
-	}
-	if(flatTags) {
-		ee_setFlags(eectx, EE_CTX_FLAG_INCLUDE_FLAT_TAGS);
-	}
-
 	if(verbose) {
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
 	}
-	ln_setEECtx(ctx, eectx);
 
 	ln_loadSamples(ctx, repository);
 
@@ -242,5 +241,7 @@ int main(int argc, char *argv[])
 	normalize();
 
 	ln_exitCtx(ctx);
+	if (encFmt != NULL)
+		free(encFmt);
 	return 0;
 }

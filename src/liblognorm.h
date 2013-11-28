@@ -38,6 +38,8 @@
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
@@ -59,16 +61,13 @@
 #ifndef LIBLOGNORM_H_INCLUDED
 #define	LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
-#include <libee/libee.h>
+#include <json.h>
+#include <libestr.h>
 
 /* error codes */
 #define LN_NOMEM -1
 #define LN_INVLDFDESCR -1
-
-/* event_t needs to come from libcee, or whatever it will be called. We
- * provide a dummy to be able to compile the initial skeletons.
- */
-typedef void * event_t;
+#define LN_WRONGPARSER -1000
 
 /**
  * The library context descriptor.
@@ -112,15 +111,6 @@ ln_ctx ln_initCtx(void);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_exitCtx(ln_ctx ctx);
-
-
-/**
- * Set the libee context to be used by this liblognorm context.
- *
- * @param ctx context to be modified
- * @param eectx	libee context
- */
-void ln_setEECtx(ln_ctx ctx, ee_ctx eectx);
 
 
 /**
@@ -222,7 +212,9 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  *
  * @return Returns zero on success, something else otherwise.
  */
-int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, event_t *event);
-int ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event);
+/* This prototype is not implemented
+int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, struct json_object **json_p);
+ */
+int ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

@@ -4,6 +4,8 @@
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
@@ -23,6 +25,7 @@
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
 #include "config.h"
+#include <string.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -87,6 +90,8 @@ ln_exitCtx(ln_ctx ctx)
 		ln_deletePTree(ctx->ptree);
 	if(ctx->rulePrefix != NULL)
 		es_deleteStr(ctx->rulePrefix);
+	if(ctx->pas != NULL)
+		ln_deleteAnnotSet(ctx->pas);
 	free(ctx);
 done:
 	return r;
@@ -139,9 +144,3 @@ done:
 	return r;
 }
 
-
-void
-ln_setEECtx(ln_ctx ctx, ee_ctx eectx)
-{
-	ctx->eectx = eectx;
-}

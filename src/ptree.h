@@ -5,6 +5,8 @@
  *//*
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is meant to be included by applications using liblognorm.
  * For lognorm library files themselves, include "lognorm.h".
  *
@@ -29,7 +31,6 @@
 #ifndef LIBLOGNORM_PTREE_H_INCLUDED
 #define	LIBLOGNORM_PTREE_H_INCLUDED
 #include <libestr.h>
-#include <libee/libee.h>
 
 typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
@@ -49,7 +50,8 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(ee_ctx, es_str_t*, es_size_t*, es_str_t*, struct ee_value**);
+	int (*parser)(es_str_t*, es_size_t*, es_str_t*, es_size_t*,
+			struct json_object **);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
 	ln_fieldList_t *next;	/**< list housekeeping, next node (or NULL) */
@@ -68,7 +70,7 @@ struct ln_ptree {
 	struct {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence? */
 	} flags;
-	struct ee_tagbucket *tags;	/* tags to assign to events of this type */
+	struct json_object *tags;	/* tags to assign to events of this type */
 	/* the respresentation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.

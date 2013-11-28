@@ -5,6 +5,8 @@
  *//*
  * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
  *
+ * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
+ *
  * This file is part of liblognorm.
  *
  * This library is free software; you can redistribute it and/or
@@ -31,6 +33,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <libestr.h>
+#include <json.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -38,6 +41,7 @@
 #include "ptree.h"
 #include "annot.h"
 #include "internal.h"
+#include "parser.h"
 
 /**
  * Get base addr of common prefix. Takes length of prefix in account
@@ -65,26 +69,30 @@ ln_newPTree(ln_ctx ctx, struct ln_ptree **parentptr)
 done:	return tree;
 }
 
+static void
+ln_deletePTreeNode(ln_fieldList_t *node)
+{
+	ln_deletePTree(node->subtree);
+	es_deleteStr(node->name);
+	if(node->data != NULL)
+		es_deleteStr(node->data);
+	free(node);
+}
 
 void
 ln_deletePTree(struct ln_ptree *tree)
 {
-	ln_fieldList_t *node, *nodeDel;
+	ln_fieldList_t *node, *nextnode;
 	es_size_t i;
 
 	if(tree == NULL)
 		goto done;
 
 	if(tree->tags != NULL)
-		ee_deleteTagbucket(tree->tags);
-	for(node = tree->froot ; node != NULL ; ) {
-		ln_deletePTree(node->subtree);
-		nodeDel = node;
-		es_deleteStr(node->name);
-		if(node->data != NULL)
-			es_deleteStr(node->data);
-		node = node->next;
-		free(nodeDel);
+		json_object_put(tree->tags);
+	for(node = tree->froot; node != NULL; node = nextnode) {
+		nextnode = node->next;
+		ln_deletePTreeNode(node);
 	}
 
 	/* need to free a large prefix buffer? */
@@ -219,7 +227,7 @@ ln_dbgprintf(tree->ctx, "addPTree: offs %u", offs);
 	}
 
 	if(tree->ctx->debug) {
-		char * cstr = es_str2cstr(str, NULL);
+		char *cstr = es_str2cstr(str, NULL);
 		ln_dbgprintf(tree->ctx, "addPTree: add '%s', offs %u, tree %p",
 			     cstr+offs, (unsigned) offs, tree);
 		free(cstr);
@@ -395,8 +403,13 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 	 * TODO: optimized, check logic
 	 */
 	for(curr = (*tree)->froot ; curr != NULL ; curr = curr->next) {
-		if(!es_strcmp(curr->name, node->name)) {
+		if(!es_strcmp(curr->name, node->name) 
+				&& curr->parser == node->parser
+				&& ((curr->data == NULL && node->data == NULL)
+					|| (curr->data != NULL && node->data != NULL
+						&& !es_strcmp(curr->data, node->data)))) {
 			*tree = curr->subtree;
+			ln_deletePTreeNode(node);
 			r = 0;
 			ln_dbgprintf((*tree)->ctx, "merging with tree %p\n", *tree);
 			goto done;
@@ -539,54 +552,34 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
 }
 
 
-/* TODO: Move to a better location? */
-
-static inline int
-addField(ln_ctx ctx, struct ee_event **event, es_str_t *name, struct ee_value *value)
-{
-	int r;
-	struct ee_field *field;
-
-	if(*event == NULL) {
-		CHKN(*event = ee_newEvent(ctx->eectx));
-	}
-
-	CHKN(field = ee_newField(ctx->eectx));
-	CHKR(ee_nameField(field, name));
-	CHKR(ee_addValueToField(field, value));
-	CHKR(ee_addFieldToEvent(*event, field));
-	r = 0;
-
-done:	return r;
-}
-
-
 /**
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(ln_ctx ctx, es_str_t *str, es_size_t offs, struct ee_event **event)
+addUnparsedField(es_str_t *str, es_size_t offs, struct json_object *json)
 {
-	struct ee_value *value;
-	es_str_t *namestr;
-	es_str_t *valstr;
-	int r;
+	int r = 1;
+	struct json_object *value;
+	char *cstr = NULL;
+	
+	CHKN(cstr = (char*)es_str2cstr(str, NULL));
+	value = json_object_new_string(cstr);
+	if (value == NULL) {
+		goto done;
+	}
+	json_object_object_add(json, "originalmsg", value);
+	
+	value = json_object_new_string(cstr + offs);
+	if (value == NULL) {
+		goto done;
+	}
+	json_object_object_add(json, "unparsed-data", value);
 
-	CHKN(value = ee_newValue(ctx->eectx));
-	CHKN(namestr = es_newStrFromCStr("originalmsg", sizeof("originalmsg") - 1));
-	CHKN(valstr = es_strdup(str));
-	ee_setStrValue(value, valstr);
-	addField(ctx, event, namestr, value);
-	es_deleteStr(namestr);
-
-	CHKN(value = ee_newValue(ctx->eectx));
-	CHKN(namestr = es_newStrFromCStr("unparsed-data", sizeof("unparsed-data") - 1));
-	CHKN(valstr = es_newStrFromSubStr(str, offs, es_strlen(str) - offs));
-	ee_setStrValue(value, valstr);
-	addField(ctx, event, namestr, value);
-	es_deleteStr(namestr);
 	r = 0;
-done:	return r;
+done:
+	if (cstr != NULL)
+		free(cstr);
+	return r;
 }
 
 
@@ -606,15 +599,15 @@ done:	return r;
  */
 static int
 ln_iptablesParser(struct ln_ptree *tree, es_str_t *str, es_size_t *offs,
-		  struct ee_event **event)
+		  struct json_object *json)
 {
 	int r;
 	es_size_t o = *offs;
 	es_str_t *fname;
 	es_str_t *fval;
-	struct ee_value *value;
 	unsigned char *pstr;
 	unsigned char *end;
+	struct json_object *value;
 
 ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es_strlen(str));
 	if(o == es_strlen(str)) {
@@ -641,22 +634,26 @@ ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) es
 				++pstr;
 			}
 		} else {
-			fval = es_newStrFromCStr("[*PRESENT*]", sizeof("[*PRESENT*]")-1);
+			CHKN(fval = es_newStrFromCStr("[*PRESENT*]", 
+					sizeof("[*PRESENT*]")-1));
 		}
 		char *cn, *cv;
-		cn = es_str2cstr(fname, NULL);
-		cv = es_str2cstr(fval, NULL);
-ln_dbgprintf(tree->ctx, "iptable parser extracts %s=%s", cn, cv);
-		value = ee_newValue(tree->ctx->eectx);
-		ee_setStrValue(value, fval);
-		CHKR(addField(tree->ctx, event, fname, value));
+		CHKN(cn = ln_es_str2cstr(&fname));
+		CHKN(cv = ln_es_str2cstr(&fval));
+		if (tree->ctx->debug) {
+			ln_dbgprintf(tree->ctx, "iptables parser extracts %s=%s", cn, cv);
+		}
+		CHKN(value = json_object_new_string(cv));
+		json_object_object_add(json, cn, value);
+		es_deleteStr(fval);
+		es_deleteStr(fname);
 	}
 
 	r = 0;
 	*offs = es_strlen(str);
 
 done:
-	ln_dbgprintf(tree->ctx, "%d iptable parser returns %d", (int) *offs, (int) r);
+	ln_dbgprintf(tree->ctx, "%d iptables parser returns %d", (int) *offs, (int) r);
 	return r;
 }
 
@@ -677,7 +674,7 @@ done:
  *         characters.
  */
 static int
-ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_event **event,
+ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct json_object *json,
 		struct ln_ptree **endNode)
 {
 	int r;
@@ -685,11 +682,13 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	es_size_t i;
 	int left;
 	ln_fieldList_t *node;
-	struct ee_value *value;
 	char *cstr;
 	unsigned char *c;
 	unsigned char *cpfix;
 	unsigned ipfix;
+	es_size_t parsed;
+	char *namestr;
+	struct json_object *value;
 	
 	if(offs >= es_strlen(str)) {
 		*endNode = tree;
@@ -721,13 +720,6 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 	r -= ipfix;
 	ln_dbgprintf(tree->ctx, "%d: prefix compare succeeded, still valid", (int) offs);
 
-	if(offs == es_strlen(str)) {
-		*endNode = tree;
-		r = 0;
-		goto done;
-	}
-
-
 	/* now try the parsers */
 	while(node != NULL) {
 		if(tree->ctx->debug) {
@@ -738,13 +730,13 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 		}
 		i = offs;
 		if(node->isIPTables) {
-			localR = ln_iptablesParser(tree, str, &i, event);
+			localR = ln_iptablesParser(tree, str, &i, json);
 			ln_dbgprintf(tree->ctx, "%d iptables parser return, i=%d",
 						(int) offs, (int)i);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, i, event, endNode);
+				left = ln_normalizeRec(node->subtree, str, i, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
 					r = 0;
@@ -756,29 +748,54 @@ ln_normalizeRec(struct ln_ptree *tree, es_str_t *str, es_size_t offs, struct ee_
 					r = left;
 			}
 		} else {
-			localR = node->parser(tree->ctx->eectx, str, &i, node->data, &value);
+			value = NULL;
+			localR = node->parser(str, &i, node->data, &parsed, &value);
+			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %d", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, i, event, endNode);
+				left = ln_normalizeRec(node->subtree, str, i + parsed, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%d: parser matches at %d", (int) offs, (int)i);
-					if(!es_strbufcmp(node->name, (unsigned char*)"-", 1))
-						ee_deleteValue(value); /* filler, discard */
-					else
-						CHKR(addField(tree->ctx, event, node->name, value));
+					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
+						/* Store the value here; create json if not already created */
+						if (value == NULL) { 
+							CHKN(cstr = strndup((char*)es_getBufAddr(str) + i, parsed));
+							value = json_object_new_string(cstr);
+							free(cstr);
+						}
+						if (value == NULL) {
+							ln_dbgprintf(tree->ctx, "unable to create json");
+							goto done;
+						}
+						namestr = ln_es_str2cstr(&node->name);
+						json_object_object_add(json, namestr, value);
+					} else {
+						if (value != NULL) {
+							/* Free the unneeded value */
+							json_object_put(value);
+						}
+					}
 					r = 0;
 					goto done;
-				} else {
-					ee_deleteValue(value); /* was created, now not needed */
 				}
 				ln_dbgprintf(tree->ctx, "%d nonmatch, backtracking required, left=%d",
 						(int) offs, (int)left);
+				if (value != NULL) {
+					/* Free the value if it was created */
+					json_object_put(value);
+				}
 				if(left < r)
 					r = left;
 			}
 		}
 		node = node->next;
+	}
+
+	if(offs == es_strlen(str)) {
+		*endNode = tree;
+		r = 0;
+		goto done;
 	}
 
 if(offs < es_strlen(str)) {
@@ -790,7 +807,7 @@ ln_dbgprintf(tree->ctx, "%u no field, offset already beyond end", offs);
 	/* now let's see if we have a literal */
 	if(tree->subtree[es_getBufAddr(str)[offs]] != NULL) {
 		left = ln_normalizeRec(tree->subtree[es_getBufAddr(str)[offs]],
-				       str, offs + 1, event, endNode);
+				       str, offs + 1, json, endNode);
 		if(left < r)
 			r = left;
 	}
@@ -802,13 +819,17 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
+ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p)
 {
 	int r;
 	int left;
-	struct ln_ptree *endNode;
+	struct ln_ptree *endNode = NULL;
 
-	left = ln_normalizeRec(ctx->ptree, str, 0, event, &endNode);
+	if(*json_p == NULL) {
+		CHKN(*json_p = json_object_new_object());
+	}
+
+	left = ln_normalizeRec(ctx->ptree, str, 0, *json_p, &endNode);
 
 	if(ctx->debug) {
 		if(left == 0) {
@@ -823,18 +844,17 @@ ln_normalize(ln_ctx ctx, es_str_t *str, struct ee_event **event)
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {
-			addUnparsedField(ctx, str, es_strlen(str), event);
+			addUnparsedField(str, es_strlen(str), *json_p);
 		} else {
-			addUnparsedField(ctx, str, es_strlen(str) - left, event);
+			addUnparsedField(str, es_strlen(str) - left, *json_p);
 		}
 	} else {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
-			if(*event == NULL) {
-				CHKN(*event = ee_newEvent(ctx->eectx));
-			}
-			CHKR(ee_assignTagbucketToEvent(*event, ee_addRefTagbucket(endNode->tags)));
-			CHKR(ln_annotateEvent(ctx, *event));
+			/* add tags to an event */
+			json_object_get(endNode->tags);
+			json_object_object_add(*json_p, "event.tags", endNode->tags);
+			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
 	}
 

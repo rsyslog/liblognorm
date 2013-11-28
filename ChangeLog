@@ -1,7 +1,22 @@
 ----------------------------------------------------------------------
-Version 0.3.8, 2013-11-??
+Version 1.0.0, 2013-11-??
+- WARNING: this version has incompatible interface and older programs 
+  will not compile with it.
+- libee is not used any more. JSON-C is used for object handling
+  instead. Parsers and formatters are now part of liblognorm.
+- added new field type "rest", which simply sinks all up to end of
+  the string.
+- added support for glueing two fields together, without literal 
+  between them. It allows for constructs like:
+  %volume:number%%unit:word%
+  which matches string "1000Kbps"
 - Fix incorrect merging of trees with empty literal at end
   Thanks to Pavel Levshin for the patch
+- this version has survived many bugfixes
+----------------------------------------------------------------------
+================================================================================
+The versions below is liblognorm0, which has a different API
+================================================================================
 ----------------------------------------------------------------------
 Version 0.3.7, 2013-07-17
 - added support to load single samples
