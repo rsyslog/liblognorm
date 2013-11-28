@@ -1,6 +1,9 @@
 Liblognorm is a fast-samples based normalization library.
 
-It evolves since several years and was intially meant to be used primarily with
+More information on liblognorm can be found at
+    http://www.liblognorm.com
+
+Liblognorm evolves since several years and was intially meant to be used primarily with
 the Mitre CEE effort. Consequently, the initial version of liblognorm (0.x)
 uses the libee CEE support library in its API.
 
@@ -24,7 +27,7 @@ However, if you need to stick to the old API, there is a git branch
 liblognorm0, which contains the previous version of the library. This
 branch is also maintained for important bug fixes, so it is safe to use.
 
-We recommend that packages create packages both for liblognorm0 and
+We recommend that packagers create packages both for liblognorm0 and
 liblognorm1. Note that liblognorm's development packages cannot
 coexist on the same system as the PKGCONFIG system would get into
 trouble. Adiscon's own packages follow this schema.
