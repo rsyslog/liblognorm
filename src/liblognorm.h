@@ -145,7 +145,7 @@ int ln_exitCtx(ln_ctx ctx);
  *
  * @return Returns zero on success, something else otherwise.
  */
-int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie);
+int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie);
 
 
 /**
@@ -169,7 +169,7 @@ void ln_enableDebug(ln_ctx ctx, int i);
  * @return Returns zero on success, something else otherwise.
  */
 int
-ln_loadSample(ln_ctx ctx, char *buf);
+ln_loadSample(ln_ctx ctx, const char *buf);
 
 /**
  * Load a (log) sample file.
@@ -184,7 +184,7 @@ ln_loadSample(ln_ctx ctx, char *buf);
  *
  * @return Returns zero on success, something else otherwise.
  */
-int ln_loadSamples(ln_ctx ctx, char *file);
+int ln_loadSamples(ln_ctx ctx, const char *file);
 
 /**
  * Normalize a message.

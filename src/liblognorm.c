@@ -99,7 +99,7 @@ done:
 
 
 int
-ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, char*, size_t), void *cookie)
+ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie)
 {
 	int r = 0;
 
@@ -112,7 +112,7 @@ done:
 
 
 int
-ln_loadSample(ln_ctx ctx, char *buf)
+ln_loadSample(ln_ctx ctx, const char *buf)
 {
     // Something bad happened - no new sample
     if (ln_processSamp(ctx, buf, strlen(buf)) == NULL) {
@@ -123,7 +123,7 @@ ln_loadSample(ln_ctx ctx, char *buf)
 
 
 int
-ln_loadSamples(ln_ctx ctx, char *file)
+ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
 	struct ln_sampRepos *repo;

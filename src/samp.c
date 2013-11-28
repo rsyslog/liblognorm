@@ -37,7 +37,7 @@
 #include "parser.h"
 
 struct ln_sampRepos*
-ln_sampOpen(ln_ctx __attribute((unused)) ctx, char *name)
+ln_sampOpen(ln_ctx __attribute((unused)) ctx, const char *name)
 {
 	struct ln_sampRepos *repo = NULL;
 	FILE *fp;
@@ -341,7 +341,7 @@ done:
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getLineType(char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
+getLineType(const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
 {
 	int r;
 	es_size_t i;
@@ -371,7 +371,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
+getPrefix(const char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 {
 	int r;
 
@@ -381,7 +381,7 @@ getPrefix(char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 		es_emptyStr(*str);
 	}
 
-	r = es_addBuf(str, buf + offs, lenBuf - offs);
+	r = es_addBuf(str, (char*)buf + offs, lenBuf - offs);
 done:	return r;
 }
 
@@ -397,9 +397,9 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-extendPrefix(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+extendPrefix(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
-	return es_addBuf(&ctx->rulePrefix, buf+offs, lenBuf - offs);
+	return es_addBuf(&ctx->rulePrefix, (char*)buf+offs, lenBuf - offs);
 }
 
 
@@ -445,7 +445,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-processTags(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t *poffs, struct json_object **tagBucket)
+processTags(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t *poffs, struct json_object **tagBucket)
 {
 	int r = -1;
 	es_str_t *str = NULL;
@@ -494,7 +494,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
 	es_str_t *str;
@@ -513,7 +513,7 @@ processRule(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
 	} else {
 		CHKN(str = es_strdup(ctx->rulePrefix));
 	}
-	CHKR(es_addBuf(&str, buf + offs, lenBuf - offs));
+	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
 	addSampToTree(ctx, str, tagBucket);
 	es_deleteStr(str);
 	r = 0;
@@ -533,7 +533,7 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getFieldName(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
+getFieldName(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
 {
 	int r = -1;
 	es_size_t i;
@@ -563,7 +563,7 @@ done:	return r;
  * @param[in/out] offs on entry: offset first unprocessed position
  */
 static inline void
-skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, es_size_t *offs)
+skipWhitespace(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs)
 {
 	while(*offs < lenBuf && isspace(buf[*offs])) {
 		(*offs)++;
@@ -591,7 +591,7 @@ skipWhitespace(ln_ctx __attribute__((unused)) ctx, char *buf, es_size_t lenBuf, 
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getAnnotationOp(ln_ctx ctx, ln_annot *annot, char *buf, es_size_t lenBuf, es_size_t *offs)
+getAnnotationOp(ln_ctx ctx, ln_annot *annot, const char *buf, es_size_t lenBuf, es_size_t *offs)
 {
 	int r = -1;
 	es_size_t i;
@@ -653,7 +653,7 @@ fail:	return -1;
  * @returns 0 on success, something else otherwise
  */
 static inline int
-processAnnotate(ln_ctx ctx, char *buf, es_size_t lenBuf, es_size_t offs)
+processAnnotate(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r;
 	es_str_t *tag = NULL;
@@ -682,7 +682,7 @@ done:	return r;
 }
 
 struct ln_samp *
-ln_processSamp(ln_ctx ctx, char *buf, es_size_t lenBuf)
+ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 {
 	struct ln_samp *samp = NULL;
     es_str_t *typeStr = NULL;

@@ -59,7 +59,7 @@ struct ln_samp {
  * @return repository object or NULL if failure
  */
 struct ln_sampRepos *
-ln_sampOpen(ln_ctx ctx, char *name);
+ln_sampOpen(ln_ctx ctx, const char *name);
 
 
 /**
@@ -86,7 +86,7 @@ ln_sampClose(ln_ctx ctx, struct ln_sampRepos *repo);
  * @return Newly create object or NULL if an error occured.
  */
 struct ln_samp *
-ln_processSamp(ln_ctx ctx, char *buf, es_size_t lenBuf);
+ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf);
 
 
 /**
