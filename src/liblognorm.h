@@ -36,7 +36,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -205,9 +205,9 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  * must be provided.
  *
  * @param[in] ctx The library context to use.
- * @param[in] msg The message string (see note above).
- * @param[in] lenmsg The length of the message in bytes.
- * @param[out] event A new event record or NULL if an error occured. <b>Must be
+ * @param[in] str The message string (see note above).
+ * @param[in] strLen The length of the message in bytes.
+ * @param[out] json_p A new event record or NULL if an error occured. <b>Must be
  *                   destructed if no longer needed.</b>
  *
  * @return Returns zero on success, something else otherwise.
@@ -215,6 +215,6 @@ int ln_loadSamples(ln_ctx ctx, char *file);
 /* This prototype is not implemented
 int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, struct json_object **json_p);
  */
-int ln_normalize(ln_ctx ctx, es_str_t *str, struct json_object **json_p);
+int ln_normalize(ln_ctx ctx, char *str, es_size_t strLen, struct json_object **json_p);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

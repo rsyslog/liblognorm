@@ -39,67 +39,67 @@
 /** 
  * Parser for RFC5424 date.
  */
-int ln_parseRFC5424Date(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseRFC5424Date(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for RFC3164 date.
  */
-int ln_parseRFC3164Date(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseRFC3164Date(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for numbers.
  */
-int ln_parseNumber(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseNumber(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Parser for Words (SP-terminated strings).
  */
-int ln_parseWord(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseWord(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Parse everything up to a specific character.
  */
-int ln_parseCharTo(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseCharTo(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 /** 
  * Parse everything up to a specific character (relaxed constraints, suitable for CSV)
  */
-int ln_parseCharSeparated(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseCharSeparated(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Get everything till the rest of string.
  */
-int ln_parseRest(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseRest(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Parse a quoted string.
  */
-int ln_parseQuotedString(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseQuotedString(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 /** 
  * Parse an ISO date.
  */
-int ln_parseISODate(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseISODate(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Parse a timestamp in 12hr format.
  */
-int ln_parseTime12hr(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseTime12hr(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 
 /** 
  * Parse a timestamp in 24hr format.
  */
-int ln_parseTime24hr(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseTime24hr(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for IPv4 addresses.
  */
-int ln_parseIPv4(es_str_t *str, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
+int ln_parseIPv4(char *str, es_size_t strlen, es_size_t *offs, es_str_t *ed, es_size_t *parsed, struct json_object **value);
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
