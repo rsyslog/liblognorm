@@ -83,7 +83,7 @@ void
 ln_deletePTree(struct ln_ptree *tree)
 {
 	ln_fieldList_t *node, *nextnode;
-	es_size_t i;
+	size_t i;
 
 	if(tree == NULL)
 		goto done;
@@ -114,7 +114,7 @@ done:	return;
  * @return 0 on success, something else otherwise
  */
 static int
-setPrefix(struct ln_ptree *tree, unsigned char *buf, es_size_t lenBuf, es_size_t offs)
+setPrefix(struct ln_ptree *tree, unsigned char *buf, size_t lenBuf, size_t offs)
 {
 	int r;
 ln_dbgprintf(tree->ctx, "setPrefix lenBuf %u, offs %d", lenBuf, offs); 
@@ -174,7 +174,7 @@ isTrueLeaf(struct ln_ptree *tree)
 
 
 struct ln_ptree *
-ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs)
+ln_addPTree(struct ln_ptree *tree, es_str_t *str, size_t offs)
 {
 	struct ln_ptree *r;
 	struct ln_ptree **parentptr;	 /**< pointer in parent that needs to be updated */
@@ -284,12 +284,12 @@ done:	return r;
 
 
 struct ln_ptree *
-ln_buildPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs)
+ln_buildPTree(struct ln_ptree *tree, es_str_t *str, size_t offs)
 {
 	struct ln_ptree *r;
 	unsigned char *c;
 	unsigned char *cpfix;
-	es_size_t i;
+	size_t i;
 	unsigned short ipfix;
 
 	assert(tree != NULL);
@@ -563,11 +563,11 @@ done:
  * @return 0 if parser was successfully, something else on error
  */
 static int
-ln_iptablesParser(struct ln_ptree *tree, const char *str, es_size_t strLen, es_size_t *offs,
+ln_iptablesParser(struct ln_ptree *tree, const char *str, size_t strLen, size_t *offs,
 		  struct json_object *json)
 {
 	int r;
-	es_size_t o = *offs;
+	size_t o = *offs;
 	es_str_t *fname;
 	es_str_t *fval;
 	const char *pstr;
@@ -639,19 +639,19 @@ done:
  *         characters.
  */
 static int
-ln_normalizeRec(struct ln_ptree *tree, const char *str, es_size_t strLen, es_size_t offs, struct json_object *json,
+ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t offs, struct json_object *json,
 		struct ln_ptree **endNode)
 {
 	int r;
 	int localR;
-	es_size_t i;
+	size_t i;
 	int left;
 	ln_fieldList_t *node;
 	char *cstr;
 	const char *c;
 	unsigned char *cpfix;
 	unsigned ipfix;
-	es_size_t parsed;
+	size_t parsed;
 	char *namestr;
 	struct json_object *value;
 	
@@ -784,7 +784,7 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, const char *str, int strLen, struct json_object **json_p)
+ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
 {
 	int r;
 	int left;

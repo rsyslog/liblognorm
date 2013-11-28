@@ -45,12 +45,12 @@ typedef struct ln_fieldList_s ln_fieldList_t;
  * optimize it so that frequently used fields are moved "up" towards
  * the root of the list. In any case, we do NOT expect this list to
  * be long, as the parser should already have gotten quite specific when
- * we hit a field.
+ * we hit a fieldconst .
  */
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	int (*parser)(const char*, es_size_t, es_size_t*, es_str_t*, es_size_t*,
+	int (*parser)(const char*, size_t, size_t*, es_str_t*, size_t*,
 			struct json_object **);
 				/**< parser to use */
 	ln_ptree *subtree;	/**< subtree to follow if parser succeeded */
@@ -136,7 +136,7 @@ int ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node);
  * @return NULL on error, otherwise pointer to deepest tree added
  */
 struct ln_ptree*
-ln_addPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
+ln_addPTree(struct ln_ptree *tree, es_str_t *str, size_t offs);
 
 
 /**
@@ -180,6 +180,6 @@ void ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str);
  * @return NULL on error, otherwise the ptree leaf that
  *         corresponds to the parameters passed.
  */
-struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str, es_size_t offs);
+struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str, size_t offs);
 
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */

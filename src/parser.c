@@ -37,10 +37,10 @@
 
 /* some helpers */
 static inline int
-hParseInt(const unsigned char **buf, es_size_t *lenBuf)
+hParseInt(const unsigned char **buf, size_t *lenBuf)
 {
 	const unsigned char *p = *buf;
-	es_size_t len = *lenBuf;
+	size_t len = *lenBuf;
 	int i = 0;
 
 	while(len > 0 && isdigit(*p)) {
@@ -73,11 +73,11 @@ hParseInt(const unsigned char **buf, es_size_t *lenBuf)
  *           else in case of an error.
  */
 #define BEGINParser(ParserName) \
-int ln_parse##ParserName(const char *str, es_size_t strLen, es_size_t *offs, \
-                      __attribute__((unused)) es_str_t *ed, es_size_t *parsed,\
+int ln_parse##ParserName(const char *str, size_t strLen, size_t *offs, \
+                      __attribute__((unused)) es_str_t *ed, size_t *parsed,\
 					  __attribute__((unused)) struct json_object **value) \
 { \
-	es_size_t r = LN_WRONGPARSER; \
+	size_t r = LN_WRONGPARSER; \
 	*parsed = 0;
 
 #define ENDParser \
@@ -107,8 +107,8 @@ BEGINParser(RFC5424Date)
 	__attribute__((unused)) char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
-	es_size_t len;
-	es_size_t orglen;
+	size_t len;
+	size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
 
 	pszTS = (unsigned char*) str + *offs;
@@ -202,7 +202,7 @@ ENDParser
  */
 BEGINParser(RFC3164Date)
 	const unsigned char *p;
-	es_size_t len, orglen;
+	size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int month;
 	int day;
@@ -423,7 +423,7 @@ ENDParser
  */
 BEGINParser(Number)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -447,7 +447,7 @@ ENDParser
  */
 BEGINParser(Word)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -481,7 +481,7 @@ ENDParser
 BEGINParser(CharTo)
 	const char *c;
 	unsigned char cTerm;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -517,7 +517,7 @@ ENDParser
 BEGINParser(CharSeparated)
 	const char *c;
 	unsigned char cTerm;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -561,7 +561,7 @@ ENDParser
  */
 BEGINParser(QuotedString)
 	const char *c;
-	es_size_t i;
+	size_t i;
 	char *cstr;
 
 	assert(str != NULL);
@@ -602,7 +602,7 @@ ENDParser
  */
 BEGINParser(ISODate)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -651,7 +651,7 @@ ENDParser
  */
 BEGINParser(Time24hr)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -691,7 +691,7 @@ ENDParser
  */
 BEGINParser(Time12hr)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -732,12 +732,12 @@ ENDParser
  * @return 0 if OK, 1 otherwise
  */
 static int
-chkIPv4AddrByte(const char *str, es_size_t strLen, es_size_t *offs)
+chkIPv4AddrByte(const char *str, size_t strLen, size_t *offs)
 {
 	int val = 0;
 	int r = 1;	/* default: fail -- simplifies things */
 	const char *c;
-	es_size_t i = *offs;
+	size_t i = *offs;
 
 	c = str;
 	if(i == strLen || !isdigit(c[i]))
@@ -762,7 +762,7 @@ fail:
  */
 BEGINParser(IPv4)
 	const char *c;
-	es_size_t i;
+	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
