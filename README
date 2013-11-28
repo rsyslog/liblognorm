@@ -1,1 +1,28 @@
-nothing yet
+Liblognorm is a fast-samples based normalization library.
+
+It evolves for several years and was intially meant to be used primarily with
+the Mitre CEE effort. Consequently, the initial version of liblognorm (0.x)
+use the libee CEE support library in its API.
+
+As time evolved, the initial CEE schema underwent considerable change. Even
+worse, Mitre lost funding for CEE. While the CEE ideas survived as part
+of Red Hat-driven "Project Lumberjack", the data structures became greatly
+simplified and JSON based.
+
+In 2013, Pavel Levshin converted liblognorm to native JSON, which helped
+improve performance and simplicity for many client applications.
+Unfortunately, this change broke interface compatibility (and there was
+no way to avoid that, obviously...).
+
+The current library is the result of that effort. Application developers
+are encouraged to switch to this version, as it provides the benefit of
+a simpler API.
+
+However, if you need to stick to the old API, there is a git branch
+liblognorm0, which contains the previous version of the library. This
+branch is also maintained for important bug fixes, so it is safe to use.
+
+We recommend that packages create packages both for liblognorm0 and
+liblognorm1. Note that liblognorm's development packages cannot
+coexist on the same system as the PKGCONFIG system would get into
+trouble. Adiscon's own packages follow this schema.
