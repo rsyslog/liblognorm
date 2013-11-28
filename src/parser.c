@@ -37,9 +37,9 @@
 
 /* some helpers */
 static inline int
-hParseInt(unsigned char **buf, es_size_t *lenBuf)
+hParseInt(const unsigned char **buf, es_size_t *lenBuf)
 {
-	unsigned char *p = *buf;
+	const unsigned char *p = *buf;
 	es_size_t len = *lenBuf;
 	int i = 0;
 
@@ -73,7 +73,7 @@ hParseInt(unsigned char **buf, es_size_t *lenBuf)
  *           else in case of an error.
  */
 #define BEGINParser(ParserName) \
-int ln_parse##ParserName(char *str, es_size_t strLen, es_size_t *offs, \
+int ln_parse##ParserName(const char *str, es_size_t strLen, es_size_t *offs, \
                       __attribute__((unused)) es_str_t *ed, es_size_t *parsed,\
 					  __attribute__((unused)) struct json_object **value) \
 { \
@@ -94,7 +94,7 @@ fail: \
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
  */
 BEGINParser(RFC5424Date)
-	unsigned char *pszTS;
+	const unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int year;
 	int month;
@@ -149,7 +149,7 @@ BEGINParser(RFC5424Date)
 	/* Now let's see if we have secfrac */
 	if(len > 0 && *pszTS == '.') {
 		--len;
-		unsigned char *pszStart = ++pszTS;
+		const unsigned char *pszStart = ++pszTS;
 		secfrac = hParseInt(&pszTS, &len);
 		secfracPrecision = (int) (pszTS - pszStart);
 	} else {
@@ -201,7 +201,7 @@ ENDParser
  * Parse a RFC3164 Date.
  */
 BEGINParser(RFC3164Date)
-	unsigned char *p;
+	const unsigned char *p;
 	es_size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int month;
@@ -422,7 +422,7 @@ ENDParser
  * as 64 bits (but may later change our mind if performance dictates so).
  */
 BEGINParser(Number)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);
@@ -446,7 +446,7 @@ ENDParser
  * the offset is position on a space upon entry.
  */
 BEGINParser(Word)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);
@@ -479,7 +479,7 @@ ENDParser
  * other cases a string is extracted.
  */
 BEGINParser(CharTo)
-	char *c;
+	const char *c;
 	unsigned char cTerm;
 	es_size_t i;
 
@@ -515,7 +515,7 @@ ENDParser
  * follows this field in rule.
  */
 BEGINParser(CharSeparated)
-	char *c;
+	const char *c;
 	unsigned char cTerm;
 	es_size_t i;
 
@@ -560,7 +560,7 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(QuotedString)
-	char *c;
+	const char *c;
 	es_size_t i;
 	char *cstr;
 
@@ -601,7 +601,7 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(ISODate)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);
@@ -650,7 +650,7 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(Time24hr)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);
@@ -690,7 +690,7 @@ ENDParser
  * rgerhards, 2011-01-14
  */
 BEGINParser(Time12hr)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);
@@ -732,11 +732,11 @@ ENDParser
  * @return 0 if OK, 1 otherwise
  */
 static int
-chkIPv4AddrByte(char *str, es_size_t strLen, es_size_t *offs)
+chkIPv4AddrByte(const char *str, es_size_t strLen, es_size_t *offs)
 {
 	int val = 0;
 	int r = 1;	/* default: fail -- simplifies things */
-	char *c;
+	const char *c;
 	es_size_t i = *offs;
 
 	c = str;
@@ -761,7 +761,7 @@ fail:
  * Parser for IPv4 addresses.
  */
 BEGINParser(IPv4)
-	char *c;
+	const char *c;
 	es_size_t i;
 
 	assert(str != NULL);

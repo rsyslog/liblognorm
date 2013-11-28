@@ -524,7 +524,7 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(char *str, es_size_t offs, struct json_object *json)
+addUnparsedField(const char *str, int offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
@@ -563,15 +563,15 @@ done:
  * @return 0 if parser was successfully, something else on error
  */
 static int
-ln_iptablesParser(struct ln_ptree *tree, char *str, es_size_t strLen, es_size_t *offs,
+ln_iptablesParser(struct ln_ptree *tree, const char *str, es_size_t strLen, es_size_t *offs,
 		  struct json_object *json)
 {
 	int r;
 	es_size_t o = *offs;
 	es_str_t *fname;
 	es_str_t *fval;
-	char *pstr;
-	char *end;
+	const char *pstr;
+	const char *end;
 	struct json_object *value;
 
 ln_dbgprintf(tree->ctx, "%d enter iptable parser, len %d", (int) *offs, (int) strLen);
@@ -639,7 +639,7 @@ done:
  *         characters.
  */
 static int
-ln_normalizeRec(struct ln_ptree *tree, char *str, es_size_t strLen, es_size_t offs, struct json_object *json,
+ln_normalizeRec(struct ln_ptree *tree, const char *str, es_size_t strLen, es_size_t offs, struct json_object *json,
 		struct ln_ptree **endNode)
 {
 	int r;
@@ -648,7 +648,7 @@ ln_normalizeRec(struct ln_ptree *tree, char *str, es_size_t strLen, es_size_t of
 	int left;
 	ln_fieldList_t *node;
 	char *cstr;
-	char *c;
+	const char *c;
 	unsigned char *cpfix;
 	unsigned ipfix;
 	es_size_t parsed;
@@ -784,7 +784,7 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, char *str, es_size_t strLen, struct json_object **json_p)
+ln_normalize(ln_ctx ctx, const char *str, int strLen, struct json_object **json_p)
 {
 	int r;
 	int left;

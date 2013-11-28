@@ -212,9 +212,6 @@ int ln_loadSamples(ln_ctx ctx, char *file);
  *
  * @return Returns zero on success, something else otherwise.
  */
-/* This prototype is not implemented
-int ln_normalizeMsg(ln_ctx ctx, char *msg, size_t lenmsg, struct json_object **json_p);
- */
-int ln_normalize(ln_ctx ctx, char *str, es_size_t strLen, struct json_object **json_p);
+int ln_normalize(ln_ctx ctx, const char *str, int strLen, struct json_object **json_p);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */
