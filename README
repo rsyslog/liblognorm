@@ -1,13 +1,15 @@
 Liblognorm is a fast-samples based normalization library.
 
-It evolves for several years and was intially meant to be used primarily with
+It evolves since several years and was intially meant to be used primarily with
 the Mitre CEE effort. Consequently, the initial version of liblognorm (0.x)
-use the libee CEE support library in its API.
+uses the libee CEE support library in its API.
 
 As time evolved, the initial CEE schema underwent considerable change. Even
 worse, Mitre lost funding for CEE. While the CEE ideas survived as part
 of Red Hat-driven "Project Lumberjack", the data structures became greatly
-simplified and JSON based.
+simplified and JSON based. That effectively made libee obsolete (and also
+in parts libestr, which was specifically written to support CEE's
+initial requirement of embedded NUL chars in strings).
 
 In 2013, Pavel Levshin converted liblognorm to native JSON, which helped
 improve performance and simplicity for many client applications.
@@ -16,7 +18,7 @@ no way to avoid that, obviously...).
 
 The current library is the result of that effort. Application developers
 are encouraged to switch to this version, as it provides the benefit of
-a simpler API.
+a simpler API. This version is now being tracked by the git master branch.
 
 However, if you need to stick to the old API, there is a git branch
 liblognorm0, which contains the previous version of the library. This
