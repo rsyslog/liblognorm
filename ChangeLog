@@ -2,6 +2,7 @@
 Version 1.0.0, 2013-11-28
 - WARNING: this version has incompatible interface and older programs 
   will not compile with it.
+  For details see http://www.liblognorm.com/news/on-liblognorm-1-0-0/
 - libestr is not used any more in interface functions. Traditional
   C strings are used instead. Internally, libestr is still used, but
   scheduled for removal.
