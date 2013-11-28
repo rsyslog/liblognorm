@@ -1,7 +1,10 @@
 ----------------------------------------------------------------------
-Version 1.0.0, 2013-11-??
+Version 1.0.0, 2013-11-28
 - WARNING: this version has incompatible interface and older programs 
   will not compile with it.
+- libestr is not used any more in interface functions. Traditional
+  C strings are used instead. Internally, libestr is still used, but
+  scheduled for removal.
 - libee is not used any more. JSON-C is used for object handling
   instead. Parsers and formatters are now part of liblognorm.
 - added new field type "rest", which simply sinks all up to end of
