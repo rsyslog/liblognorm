@@ -71,7 +71,7 @@
 
 /**
  * The library context descriptor.
- * This is used to permit multiple independednt instances of the
+ * This is used to permit multiple independent instances of the
  * library to be called within a single program. This is most
  * useful for plugin-based architectures.
  */

@@ -77,14 +77,14 @@ int ln_parse##ParserName(const char *str, size_t strLen, size_t *offs, \
                       __attribute__((unused)) es_str_t *ed, size_t *parsed,\
 					  __attribute__((unused)) struct json_object **value) \
 { \
-	size_t r = LN_WRONGPARSER; \
+	int r = LN_WRONGPARSER; \
 	*parsed = 0;
 
 #define ENDParser \
-	goto done; /* supress warnings */ \
+	goto done; /* suppress warnings */ \
 done: \
 	r = 0; \
-	goto fail; /* supress warnings */ \
+	goto fail; /* suppress warnings */ \
 fail: \
 	return r; \
 }
@@ -546,6 +546,8 @@ BEGINParser(Rest)
 	assert(offs != NULL);
 	assert(parsed != NULL);
 
+	/* silence the warning about unused variable */
+	(void)str;
 	/* success, persist */
 	*parsed = strLen - *offs;
 

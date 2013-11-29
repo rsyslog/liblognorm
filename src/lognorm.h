@@ -36,7 +36,7 @@
 
 struct ln_ctx_s {
 	unsigned objID;	/**< a magic number to prevent some memory addressing errors */
-	void (*dbgCB)(void *cookie, char *msg, size_t lenMsg);
+	void (*dbgCB)(void *cookie, const char *msg, size_t lenMsg);
 		/**< user-provided debug output callback */
 	void *dbgCookie; /**< cookie to be passed to debug callback */
 	ln_ptree *ptree; /**< parse tree being used by this context */

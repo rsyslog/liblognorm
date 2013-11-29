@@ -54,7 +54,7 @@ static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg 
 static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
 
 void
-dbgCallBack(void __attribute__((unused)) *cookie, char *msg,
+dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
 	printf("liblognorm: %s\n", msg);
