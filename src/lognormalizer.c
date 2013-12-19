@@ -46,7 +46,7 @@ static ln_ctx ctx;
 
 static int verbose = 0;
 static int parsedOnly = 0;	/**< output unparsed messages? */
-static int flatTags = 0;	/**< output unparsed messages? */
+static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
 static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will

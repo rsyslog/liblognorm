@@ -83,10 +83,10 @@ Extra data:		Not used
 Example:		%field_name:quoted-string%
 Notes:			Quote marks are stripped from the match.
 
-Field type:		'iso-date'
+Field type:		'date-iso'
 Matches:		Date of format 'YYYY-MM-DD'.
 Extra data:		Not used
-Example:		%field-name:iso-date%
+Example:		%field-name:date-iso%
 
 Field type:		'time-24hr'
 Matches:		Time of format 'HH:MM:SS', where HH is 00..23.
@@ -101,7 +101,7 @@ Example:		%field_name:time-12hr%
 Field type:		'ipv4'
 Matches:		IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 Extra data:		Not used
-Example:		%field_name:ipv6%
+Example:		%field_name:ipv4%
 
 Field type:		'date-rfc3164'
 Matches:		Valid date/time in RFC3164 format, i.e.: 'Oct 29 09:47:08'
