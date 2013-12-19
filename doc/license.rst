@@ -1,0 +1,6 @@
+Licensing
+=========
+
+.. literalinclude:: ../COPYING
+    :linenos:
+
