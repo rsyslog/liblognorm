@@ -1,0 +1,153 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Lognormalizer &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="Liblognorm internals" href="internals.html" />
+    <link rel="prev" title="Sample rulebase" href="sample_rulebase.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>Lognormalizer</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="sample_rulebase.html">Sample rulebase</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="internals.html">Liblognorm internals</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="lognormalizer">
+<h1>Lognormalizer<a class="headerlink" href="#lognormalizer" title="Permalink to this headline">¶</a></h1>
+<p>Lognormalizer is a sample tool which is often used to test and debug
+rulebases before real use. Nevertheless, it can be used in production as
+a simple command line interface to liblognorm.</p>
+<p>This tool reads log lines from its standard input and prints results
+to standard output. You need to use redirections if you want to read
+or write files.</p>
+<p>An example of the command:</p>
+<div class="highlight-python"><pre>$ lognormalizer -r messages.sampdb -o json &lt;messages.log</pre>
+</div>
+<div class="section" id="command-line-options">
+<h2>Command line options<a class="headerlink" href="#command-line-options" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-python"><pre>-r &lt;FILENAME&gt;</pre>
+</div>
+<p>Specifies name of the file containing the rulebase.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="o">-</span><span class="n">v</span>
+</pre></div>
+</div>
+<p>Increase verbosity level. Can be used several times.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="o">-</span><span class="n">p</span>
+</pre></div>
+</div>
+<p>Print only successfully parsed messages.</p>
+<div class="highlight-python"><pre>-t &lt;TAG&gt;</pre>
+</div>
+<p>Print only those messages which have this tag.</p>
+<div class="highlight-python"><pre>-e &lt;json|xml|csv&gt;</pre>
+</div>
+<p>Output format. By default, output is in Mitre CEE format. With this option, you can change it to JSON, XML or CSV.</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="o">-</span><span class="n">T</span>
+</pre></div>
+</div>
+<p>Include &#8216;event.tags&#8217; attribute when output is in JSON format. This attribute contains list of tags of the matched
+rule.</p>
+<div class="highlight-python"><pre>-E &lt;DATA&gt;</pre>
+</div>
+<p>Encoder-specific data (for example, a separator for CSV).</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="o">-</span><span class="n">d</span> <span class="p">[</span><span class="n">FILENAME</span><span class="p">]</span>
+</pre></div>
+</div>
+<p>Generate DOT file describing parse tree. It is used to plot parse graph
+with GraphViz.</p>
+</div>
+<div class="section" id="creating-a-graph-of-the-rulebase">
+<h2>Creating a graph of the rulebase<a class="headerlink" href="#creating-a-graph-of-the-rulebase" title="Permalink to this headline">¶</a></h2>
+<p>To get a better overview of a rulebase you can create a graph that shows you
+the chain of normalization (parse-tree).</p>
+<p>At first you have to install an additional package called graphviz. Graphviz
+is a tool that creates such a graph with the help of a control file (created
+with the rulebase). <a class="reference external" href="http://www.graphviz.org/">Here</a> you will find more
+information about graphviz.</p>
+<p>To install it you can use the package manager. For example, on RedHat
+systems it is yum command:</p>
+<div class="highlight-python"><pre>$ sudo yum install graphviz</pre>
+</div>
+<p>The next step would be creating the control file for graphviz. Therefore we
+use the normalizer command with the options -d &#8220;prefered filename for the
+control file&#8221; and -r &#8220;rulebase&#8221;:</p>
+<div class="highlight-python"><pre>$ lognormalize -d control.dot -r messages.rb</pre>
+</div>
+<p>Please note that there is no need for an input or output file.
+If you have a look at the control file now you will see that the content is
+a little bit confusing, but it includes all information, like the nodes,
+fields and parser, that graphviz needs to create the graph. Of course you
+can edit that file, but please note that it is a lot of work.</p>
+<p>Now we can create the graph by typing:</p>
+<div class="highlight-python"><pre>$ dot control.dot -Tpng &gt;graph.png</pre>
+</div>
+<p>dot + name of control file + option -T -&gt; file format + output file</p>
+<p>That is just one example for using graphviz, of course you can do many
+other great things with it. But I think this &#8220;simple&#8221; graph could be very
+helpful for the normalizer.</p>
+<p>Below you see sample for such a graph, but please note that this is
+not such a pretty one. Such a graph can grow very fast by editing your
+rulebase.</p>
+<div class="figure">
+<img alt="graph sample" src="_images/graph.png" style="width: 90%;" />
+</div>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="sample_rulebase.html">Sample rulebase</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="internals.html">Liblognorm internals</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

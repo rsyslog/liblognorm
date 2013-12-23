@@ -1,0 +1,94 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Introduction &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="How to install" href="installation.html" />
+    <link rel="prev" title="Welcome to Liblognorm documentation!" href="index.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>Introduction</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="index.html">Welcome to Liblognorm documentation!</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="installation.html">How to install</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="introduction">
+<h1>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h1>
+<p>Briefly described, liblognorm is a tool to normalize log data.</p>
+<p>People who need to take a look at logs often have a common problem. Logs
+from different machines (from different vendors) usually have different
+formats. Even if it is the same type of log (e.g. from firewalls), the log
+entries are so different, that it is pretty hard to read these. This is
+where liblognorm comes into the game. With this tool you can normalize all
+your logs. All you need is liblognorm and its dependencies and a sample
+database that fits the logs you want to normalize.</p>
+<p>So, for example, if you have traffic logs from three different firewalls,
+liblognorm will be able to &#8220;normalize&#8221; the events into generic ones. Among
+others, it will extract source and destination ip addresses and ports and
+make them available via well-defined fields. As the end result, a common log
+analysis application will be able to work on that common set and so this
+backend will be independent from the actual firewalls feeding it. Even
+better, once we have a well-understood interim format, it is also easy to
+convert that into any other vendor specific format, so that you can use that
+vendor&#8217;s analysis tool.</p>
+<p>By design, liblognorm is constructed as a library. Thus, it can be used by
+other tools.</p>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="index.html">Welcome to Liblognorm documentation!</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="installation.html">How to install</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

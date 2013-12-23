@@ -1,0 +1,331 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>How to configure &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="Sample rulebase" href="sample_rulebase.html" />
+    <link rel="prev" title="How to install" href="installation.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>How to configure</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="installation.html">How to install</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="sample_rulebase.html">Sample rulebase</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="how-to-configure">
+<h1>How to configure<a class="headerlink" href="#how-to-configure" title="Permalink to this headline">¶</a></h1>
+<p>To use liblognorm, you need 3 things.</p>
+<ol class="arabic simple">
+<li>An installed and working copy of liblognorm. The installation process
+has been discussed in the chapter <a class="reference internal" href="installation.html"><em>How to install</em></a>.</li>
+<li>Log files.</li>
+<li>A rulebase, which is heart of liblognorm configuration.</li>
+</ol>
+<div class="section" id="log-files">
+<h2>Log files<a class="headerlink" href="#log-files" title="Permalink to this headline">¶</a></h2>
+<p>A log file is a text file, which typically holds many lines. Each line is
+a log message. These are usually a bit strange to read, thus to analyze.
+This mostly happens, if you have a lot of different devices, that are all
+creating log messages in a different format.</p>
+</div>
+<div class="section" id="rulebase">
+<h2>Rulebase<a class="headerlink" href="#rulebase" title="Permalink to this headline">¶</a></h2>
+<p>The rulebase holds all the schemes for your logs. It basically consists of
+many lines that reflect the structure of your log messages. When the
+normalization process is started, a parse-tree will be generated from
+the rulebase and put into the memory. This will then be used to parse the
+log messages.</p>
+<p>Each line in rulebase file is evaluated separately.</p>
+</div>
+<div class="section" id="commentaries">
+<h2>Commentaries<a class="headerlink" href="#commentaries" title="Permalink to this headline">¶</a></h2>
+<p>To keep your rulebase tidy, you can use commentaries. Start a commentary
+with &#8220;#&#8221; like in many other configurations. It should look like this:</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="c"># The following prefix and rules are for firewall logs</span>
+</pre></div>
+</div>
+<p>Empty lines are just skipped, they can be inserted for readability.</p>
+</div>
+<div class="section" id="rules">
+<h2>Rules<a class="headerlink" href="#rules" title="Permalink to this headline">¶</a></h2>
+<p>If the line starts with &#8216;rule=&#8217;, then it contains a rule. This line has
+following format:</p>
+<div class="highlight-python"><pre>rule=[&lt;tag1&gt;[,&lt;tag2&gt;...]]:&lt;match description&gt;</pre>
+</div>
+<p>Everything before a colon is treated as comma-separated list of tags, which
+will be attached to a match. After the colon, match description should be
+given. It consists of string literals and field selectors. String literals
+should match exactly, whereas field selectors may match variable parts
+of a message.</p>
+<p>A rule could look like this:</p>
+<div class="highlight-python"><pre>rule=:%date:date-rfc3164% %host:word% %tag:char-to:\x3a%: no longer listening on %ip:ipv4%#%port:number%'</pre>
+</div>
+<p>This excerpt is a common rule. A rule always contains several different
+&#8220;parts&#8221;/properties and reflects the structure of the message you want to
+normalize (e.g. Host, IP, Source, Syslogtag...).</p>
+</div>
+<div class="section" id="literals">
+<h2>Literals<a class="headerlink" href="#literals" title="Permalink to this headline">¶</a></h2>
+<p>Literal is just a sequence of characters, which must match exactly.
+Percent sign characters must be escaped to prevent them from starting a
+field accidentally. Replace each &#8220;%&#8221; with &#8220;\x25&#8221; or &#8220;%%&#8221;, when it occurs
+in a string literal.</p>
+</div>
+<div class="section" id="fields">
+<h2>Fields<a class="headerlink" href="#fields" title="Permalink to this headline">¶</a></h2>
+<p>The structure of a field selector is as follows:</p>
+<div class="highlight-python"><pre>%&lt;field name&gt;:&lt;field type&gt;[:&lt;additional information&gt;]%</pre>
+</div>
+<p>field name -&gt; that name can be selected freely. It should be a description
+of what kind of information the field is holding, e.g. SRC is the field
+contains the source IP address of the message. These names should also be
+chosen carefully, since the field name can be used in every rule and
+therefore should fit for the same kind of information in different rules.</p>
+<p>If field name is &#8220;-&#8221;, then this field is matched but not saved.</p>
+<p>field type -&gt; selects the accordant parser, which are described below.</p>
+<p>Special characters that need to be escaped when used inside a field
+description are &#8220;%&#8221; and &#8221;:&#8221;. For example, this will match anything up to
+(but not including) a colon:</p>
+<div class="highlight-python"><pre>%variable:char-to:\x3a%</pre>
+</div>
+<p>Additional information is dependent on the field type; only some field
+types need additional information.</p>
+</div>
+<div class="section" id="field-types">
+<h2>Field types<a class="headerlink" href="#field-types" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="number">
+<h3>number<a class="headerlink" href="#number" title="Permalink to this headline">¶</a></h3>
+<p>One or more decimal digits.</p>
+<div class="highlight-python"><pre>%port:number%</pre>
+</div>
+</div>
+<div class="section" id="word">
+<h3>word<a class="headerlink" href="#word" title="Permalink to this headline">¶</a></h3>
+<p>One or more characters, up to the next space (\x20), or
+up to end of line.</p>
+<div class="highlight-python"><pre>%host:word%</pre>
+</div>
+</div>
+<div class="section" id="char-to">
+<h3>char-to<a class="headerlink" href="#char-to" title="Permalink to this headline">¶</a></h3>
+<p>One or more characters, up to the next character given in
+extra data. Additional data must contain exactly one character, which
+can be escaped.</p>
+<div class="highlight-python"><pre>%field_name:char-to:,%
+%field_name:char-to:\x25%</pre>
+</div>
+</div>
+<div class="section" id="char-sep">
+<h3>char-sep<a class="headerlink" href="#char-sep" title="Permalink to this headline">¶</a></h3>
+<p>Zero or more characters, up to the next character given in extra data, or
+up to end of line. Additional data must contain exactly one character,
+which can be escaped.</p>
+<div class="highlight-python"><pre>%field_name:char-sep:,%
+%field_name:char-sep:\x25%</pre>
+</div>
+</div>
+<div class="section" id="rest">
+<h3>rest<a class="headerlink" href="#rest" title="Permalink to this headline">¶</a></h3>
+<p>Zero or more characters till end of line. Should be always at end of the
+rule.</p>
+<div class="highlight-python"><pre>%field_name:rest%</pre>
+</div>
+</div>
+<div class="section" id="quoted-string">
+<h3>quoted-string<a class="headerlink" href="#quoted-string" title="Permalink to this headline">¶</a></h3>
+<p>Zero or more characters, surrounded by double quote marks.
+Quote marks are stripped from the match.</p>
+<div class="highlight-python"><pre>%field_name:quoted-string%</pre>
+</div>
+</div>
+<div class="section" id="date-iso">
+<h3>date-iso<a class="headerlink" href="#date-iso" title="Permalink to this headline">¶</a></h3>
+<p>Date in ISO format (&#8216;YYYY-MM-DD&#8217;).</p>
+<div class="highlight-python"><pre>%field-name:date-iso%</pre>
+</div>
+</div>
+<div class="section" id="time-24hr">
+<h3>time-24hr<a class="headerlink" href="#time-24hr" title="Permalink to this headline">¶</a></h3>
+<p>Time of format &#8216;HH:MM:SS&#8217;, where HH is 00..23.</p>
+<div class="highlight-python"><pre>%time:time-24hr%</pre>
+</div>
+</div>
+<div class="section" id="time-12hr">
+<h3>time-12hr<a class="headerlink" href="#time-12hr" title="Permalink to this headline">¶</a></h3>
+<p>Time of format &#8216;HH:MM:SS&#8217;, where HH is 00..12.</p>
+<div class="highlight-python"><pre>%time:time-12hr%</pre>
+</div>
+</div>
+<div class="section" id="date-rfc3164">
+<h3>date-rfc3164<a class="headerlink" href="#date-rfc3164" title="Permalink to this headline">¶</a></h3>
+<p>Valid date/time in RFC3164 format, i.e.: &#8216;Oct 29 09:47:08&#8217;.
+This parser implements several quirks to match malformed
+timestamps from some devices.</p>
+<div class="highlight-python"><pre>%date:date-rfc3164%</pre>
+</div>
+</div>
+<div class="section" id="date-rfc5424">
+<h3>date-rfc5424<a class="headerlink" href="#date-rfc5424" title="Permalink to this headline">¶</a></h3>
+<p>Valid date/time in RFC5424 format, i.e.:
+&#8216;1985-04-12T19:20:50.52-04:00&#8217;.
+Slightly different formats are allowed.</p>
+<div class="highlight-python"><pre>%date:date-rfc5424%</pre>
+</div>
+</div>
+<div class="section" id="ipv4">
+<h3>ipv4<a class="headerlink" href="#ipv4" title="Permalink to this headline">¶</a></h3>
+<p>IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).</p>
+<div class="highlight-python"><pre>%ip-src:ipv4%</pre>
+</div>
+</div>
+<div class="section" id="iptables">
+<h3>iptables<a class="headerlink" href="#iptables" title="Permalink to this headline">¶</a></h3>
+<p>Name=value pairs, separated by spaces, as in Netfilter log messages.
+Name of the selector is not used; names from the line are
+used instead. This selector always matches everything till
+end of the line. Cannot match zero characters.</p>
+<div class="highlight-python"><pre>%-:iptables%</pre>
+</div>
+</div>
+</div>
+<div class="section" id="prefixes">
+<h2>Prefixes<a class="headerlink" href="#prefixes" title="Permalink to this headline">¶</a></h2>
+<p>Several rules can have a common prefix. You can set it once with this
+syntax:</p>
+<div class="highlight-python"><pre>prefix=&lt;prefix match description&gt;</pre>
+</div>
+<p>Prefix match description syntax is the same as rule match description.
+Every following rule will be treated as an addition to this prefix.</p>
+<p>Prefix can be reset to default (empty value) by the line:</p>
+<div class="highlight-python"><pre>prefix=</pre>
+</div>
+<p>You can define a prefix for devices that produce the same header in each
+message. We assume, that you have your rules sorted by device. In such a
+case you can take the header of the rules and use it with the prefix
+variable. Here is a example of a rule for IPTables:</p>
+<div class="highlight-python"><pre>prefix=%date:date-rfc3164% %host:word% %tag:char-to:-\x3a%:
+rule=:INBOUND%INBOUND:char-to:-\x3a%: IN=%IN:word% PHYSIN=%PHYSIN:word% OUT=%OUT:word% PHYSOUT=%PHYSOUT:word% SRC=%source:ipv4% DST=%destination:ipv4% LEN=%LEN:number% TOS=%TOS:char-to: % PREC=%PREC:word% TTL=%TTL:number% ID=%ID:number% DF PROTO=%PROTO:word% SPT=%SPT:number% DPT=%DPT:number% WINDOW=%WINDOW:number% RES=0x00 ACK SYN URGP=%URGP:number%</pre>
+</div>
+<p>Usually, every rule would hold what is defined in the prefix at its
+beginning. But since we can define the prefix, we can save that work in
+every line and just make the rules for the log lines. This saves us a lot
+of work and even saves space.</p>
+<p>In a rulebase you can use multiple prefixes obviously. The prefix will be
+used for the following rules. If then another prefix is set, the first one
+will be erased, and new one will be used for the following rules.</p>
+</div>
+<div class="section" id="rule-tags">
+<h2>Rule tags<a class="headerlink" href="#rule-tags" title="Permalink to this headline">¶</a></h2>
+<p>Rule tagging capability permits very easy classification of syslog
+messages and log records in general. So you can not only extract data from
+your various log source, you can also classify events, for example, as
+being a &#8220;login&#8221;, a &#8220;logout&#8221; or a firewall &#8220;denied access&#8221;. This makes it
+very easy to look at specific subsets of messages and process them in ways
+specific to the information being conveyed.</p>
+<p>To see how it works, let’s first define what a tag is:</p>
+<p>A tag is a simple alphanumeric string that identifies a specific type of
+object, action, status, etc. For example, we can have object tags for
+firewalls and servers. For simplicity, let’s call them &#8220;firewall&#8221; and
+&#8220;server&#8221;. Then, we can have action tags like &#8220;login&#8221;, &#8220;logout&#8221; and
+&#8220;connectionOpen&#8221;. Status tags could include &#8220;success&#8221; or &#8220;fail&#8221;, among
+others. Tags form a flat space, there is no inherent relationship between
+them (but this may be added later on top of the current implementation).
+Think of tags like the tag cloud in a blogging system. Tags can be defined
+for any reason and need. A single event can be associated with as many
+tags as required.</p>
+<p>Assigning tags to messages is simple. A rule contains both the sample of
+the message (including the extracted fields) as well as the tags.
+Have a look at this sample:</p>
+<div class="highlight-python"><pre>rule=:sshd[%pid:number%]: Invalid user %user:word% from %src-ip:ipv4%</pre>
+</div>
+<p>Here, we have a rule that shows an invalid ssh login request. The various
+fields are used to extract information into a well-defined structure. Have
+you ever wondered why every rule starts with a colon? Now, here is the
+answer: the colon separates the tag part from the actual sample part.
+Now, you can create a rule like this:</p>
+<div class="highlight-python"><pre>rule=ssh,user,login,fail:sshd[%pid:number%]: Invalid user %user:word% from %src-ip:ipv4%</pre>
+</div>
+<p>Note the &#8220;ssh,user,login,fail&#8221; part in front of the colon. These are the
+four tags the user has decided to assign to this event. What now happens
+is that the normalizer does not only extract the information from the
+message if it finds a match, but it also adds the tags as metadata. Once
+normalization is done, one can not only query the individual fields, but
+also query if a specific tag is associated with this event. For example,
+to find all ssh-related events (provided the rules are built that way),
+you can normalize a large log and select only that subset of the
+normalized log that contains the tag &#8220;ssh&#8221;.</p>
+</div>
+<div class="section" id="log-annotations">
+<h2>Log annotations<a class="headerlink" href="#log-annotations" title="Permalink to this headline">¶</a></h2>
+<p>In short, annotations allow to add arbitrary attributes to a parsed
+message, depending on rule tags. Values of these attributes are fixed,
+they cannot be derived from variable fields. Syntax is as following:</p>
+<div class="highlight-python"><pre>annotate=&lt;tag&gt;:+&lt;field name&gt;="&lt;field value&gt;"</pre>
+</div>
+<p>Field value should always be enclosed in double quote marks.</p>
+<p>There can be multiple annotations for the same tag.</p>
+</div>
+<div class="section" id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this headline">¶</a></h2>
+<p>Look at <a class="reference internal" href="sample_rulebase.html"><em>sample rulebase</em></a> for configuration
+examples and matching log lines.</p>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="installation.html">How to install</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="sample_rulebase.html">Sample rulebase</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,134 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Sample rulebase &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="Lognormalizer" href="lognormalizer.html" />
+    <link rel="prev" title="How to configure" href="configuration.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>Sample rulebase</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="configuration.html">How to configure</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="lognormalizer.html">Lognormalizer</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="sample-rulebase">
+<h1>Sample rulebase<a class="headerlink" href="#sample-rulebase" title="Permalink to this headline">¶</a></h1>
+<div class="highlight-python"><pre># Some sample rules and strings matching them
+
+# Prefix sample:
+# myhostname: code=23
+prefix=%host:char-to:\x3a%: 
+rule=prefixed_code:code=%code:number%
+# myhostname: name=somename
+rule=prefixed_name:name=%name:word%
+# Reset prefix to default (empty value):
+prefix=
+
+# Quantity: 555
+rule=tag1:Quantity: %N:number%
+
+# Weight: 42kg
+rule=tag2:Weight: %N:number%%unit:word%
+annotate=tag2:+fat="free"
+
+# %%
+rule=tag3,percent:\x25%%
+annotate=percent:+percent="100"
+annotate=tag3:+whole="whale"
+annotate=tag3:+part="wha"
+
+# literal
+rule=tag4,tag5,tag6,tag4:literal
+annotate=tag4:+this="that"
+
+# first field,second field,third field,fourth field
+rule=csv:%r1:char-to:,%,%r2:char-to:,%,%r3:char-to:,%,%r4:rest%
+
+# CSV: field1,,field3
+rule=better-csv:CSV: %f1:char-sep:,%,%f2:char-sep:,%,%f3:char-sep:,%
+
+# Snow White and the Seven Dwarfs
+rule=tale:Snow White and %company:rest%
+
+# iptables: SRC=192.168.1.134 DST=46.252.161.13 LEN=48 TOS=0x00 PREC=0x00
+rule=ipt:iptables: %dummy:iptables%
+
+# 2012-10-11 src=127.0.0.1 dst=88.111.222.19
+rule=:%date:date-iso% src=%src:ipv4% dst=%dst:ipv4%
+
+# Oct 29 09:47:08 server rsyslogd: rsyslogd's groupid changed to 103
+rule=syslog:%date1:date-rfc3164% %host:word% %tag:char-to:\x3a%: %text:rest%
+
+# Oct 29 09:47:08
+rule=rfc3164:%date1:date-rfc3164%
+
+# 1985-04-12T19:20:50.52-04:00
+rule=rfc5424:%date1:date-rfc5424%
+
+# 1985-04-12T19:20:50.52-04:00 testing 123
+rule=rfc5424:%date1:date-rfc5424% %test:word% %test2:number%
+
+# quoted_string="Contents of a quoted string cannot include quote marks"
+rule=quote:quoted_string=%quote:quoted-string%
+</pre>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="configuration.html">How to configure</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="lognormalizer.html">Lognormalizer</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

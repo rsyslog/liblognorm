@@ -1,0 +1,138 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>How to install &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="How to configure" href="configuration.html" />
+    <link rel="prev" title="Introduction" href="introduction.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>How to install</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="introduction.html">Introduction</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="configuration.html">How to configure</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="how-to-install">
+<h1>How to install<a class="headerlink" href="#how-to-install" title="Permalink to this headline">¶</a></h1>
+<p>Here you can find the first steps to install and try liblognorm.</p>
+<div class="section" id="getting-liblognorm">
+<h2>Getting liblognorm<a class="headerlink" href="#getting-liblognorm" title="Permalink to this headline">¶</a></h2>
+<p>There are several ways to install libognorm. You can install it
+from your distribution, if it is there. You can get binary packages from
+Rsyslog repositories:</p>
+<ul class="simple">
+<li><a class="reference external" href="http://www.rsyslog.com/rhelcentos-rpms/">RedHat Enterprise Linux or CentOS</a></li>
+<li><a class="reference external" href="http://www.rsyslog.com/ubuntu-repository/">Ubuntu</a></li>
+<li><a class="reference external" href="http://www.rsyslog.com/debian-repository/">Debian</a></li>
+</ul>
+<p>Or you can build your own binaries from sources. You can fetch all
+sources from git (below you can find all commands you need) or you can
+download it as tarballs at:</p>
+<ul class="simple">
+<li><a class="reference external" href="http://libestr.adiscon.com/download/">libestr</a></li>
+<li><a class="reference external" href="http://www.liblognorm.com/download/">liblognorm</a></li>
+</ul>
+<p>Please note if you compile it from tarballs then you have to do the same
+steps which are mentioned below, apart from:</p>
+<div class="highlight-python"><pre>$ git clone ...
+$ autoreconf -vfi</pre>
+</div>
+</div>
+<div class="section" id="building-from-git">
+<h2>Building from git<a class="headerlink" href="#building-from-git" title="Permalink to this headline">¶</a></h2>
+<p>To build liblognorm from sources, you need to have
+<a class="reference external" href="https://github.com/json-c/json-c/wiki">json-c</a> installed.</p>
+<p>Open a terminal and switch to the folder where you want to build
+liblognorm. Below you will find the necessary commands. First, build
+and install prerequisite library called <strong>libestr</strong>:</p>
+<div class="highlight-python"><pre>$ git clone git://git.adiscon.com/git/libestr.git
+$ cd libestr
+$ autoreconf -vfi
+$ ./configure
+$ make
+$ make install</pre>
+</div>
+<p>leave that folder and repeat this step again for liblognorm:</p>
+<div class="highlight-python"><pre>$ cd ..
+$ git clone git://git.adiscon.com/git/liblognorm.git
+$ cd liblognorm
+$ autoreconf -vfi
+$ ./configure
+$ make
+$ make install</pre>
+</div>
+<p>That’s all you have to do.</p>
+</div>
+<div class="section" id="testing">
+<h2>Testing<a class="headerlink" href="#testing" title="Permalink to this headline">¶</a></h2>
+<p>For a first test we need two further things, a test log and the rulebase.
+Both can be downloaded <a class="reference external" href="http://blog.gerhards.net/2010/11/log-normalization-first-results.html">here</a>.</p>
+<p>After downloading these examples you can use liblognorm. Go to
+liblognorm/src and use the command below:</p>
+<div class="highlight-python"><pre>$ ./lognormalize -r messages.sampdb -o json &lt;messages.log</pre>
+</div>
+<p>where:</p>
+<div class="highlight-python"><pre>-r = path to the rulebase
+-o = output format</pre>
+</div>
+<p>Please have look at <a class="reference internal" href="lognormalizer.html"><em>Lognormalizer</em></a> for all available options.</p>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="introduction.html">Introduction</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="configuration.html">How to configure</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>
