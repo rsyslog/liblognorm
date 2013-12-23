@@ -42,7 +42,7 @@ and install prerequisite library called **libestr**::
     $ autoreconf -vfi
     $ ./configure
     $ make
-    $ make install
+    $ sudo make install
 
 leave that folder and repeat this step again for liblognorm::
 
@@ -52,7 +52,7 @@ leave that folder and repeat this step again for liblognorm::
     $ autoreconf -vfi
     $ ./configure
     $ make
-    $ make install
+    $ sudo make install
 
 That’s all you have to do.
 

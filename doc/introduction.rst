@@ -23,3 +23,12 @@ vendor's analysis tool.
 
 By design, liblognorm is constructed as a library. Thus, it can be used by 
 other tools.
+
+In short, liblognorm works by:
+
+	1. Matching a line to a rule from predefined configuration;
+	2. Picking out variable fields from the line;
+	3. Returning them as a JSON hash object.
+
+Then, a consumer of this object can construct new, normalized log line
+on its own.
