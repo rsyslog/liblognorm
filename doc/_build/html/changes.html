@@ -1,0 +1,159 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>ChangeLog &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="prev" title="Contacts" href="contacts.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>ChangeLog</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="contacts.html">Contacts</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="changelog">
+<h1>ChangeLog<a class="headerlink" href="#changelog" title="Permalink to this headline">¶</a></h1>
+<p>See below for a list of changes.</p>
+<div class="highlight-python"><pre>----------------------------------------------------------------------
+Version 1.0.0, 2013-11-28
+- WARNING: this version has incompatible interface and older programs 
+  will not compile with it.
+  For details see http://www.liblognorm.com/news/on-liblognorm-1-0-0/
+- libestr is not used any more in interface functions. Traditional
+  C strings are used instead. Internally, libestr is still used, but
+  scheduled for removal.
+- libee is not used any more. JSON-C is used for object handling
+  instead. Parsers and formatters are now part of liblognorm.
+- added new field type "rest", which simply sinks all up to end of
+  the string.
+- added support for glueing two fields together, without literal 
+  between them. It allows for constructs like:
+  %volume:number%%unit:word%
+  which matches string "1000Kbps"
+- Fix incorrect merging of trees with empty literal at end
+  Thanks to Pavel Levshin for the patch
+- this version has survived many bugfixes
+----------------------------------------------------------------------
+================================================================================
+The versions below is liblognorm0, which has a different API
+================================================================================
+----------------------------------------------------------------------
+Version 0.3.7, 2013-07-17
+- added support to load single samples
+  Thanks to John Hopper for the patch
+----------------------------------------------------------------------
+Version 0.3.6, 2013-03-22
+- bugfix: unitialized variable could lead to rulebase load error
+----------------------------------------------------------------------
+Version 0.3.5 (rgerhards), 2012-09-18
+- renamed "normalizer" tool to "lognormalizer" to solve name clashes
+  Thanks to the Fedora folks for pointing this out.
+----------------------------------------------------------------------
+Version 0.3.4 (rgerhards), 2012-04-16
+- bugfix: normalizer tool had a memory leak
+  Thanks to Brian Know for alerting me and helping to debug
+----------------------------------------------------------------------
+Version 0.3.3 (rgerhards), 2012-02-06
+- required header file was not installed, resulting in compile error
+  closes: http://bugzilla.adiscon.com/show_bug.cgi?id=307
+  Thanks to Andreis Vinogradovs for alerting us on this bug.
+----------------------------------------------------------------------
+Version 0.3.2 (rgerhards), 2011-11-21
+- added rfc5424 parser (requires libee &gt;= 0.3.2)
+- added "-" to serve as name for filler fields. Value is extracted,
+  but no field is written
+- special handling for iptables log via %iptables% parser added 
+  (currently experimental pending practical verification)
+- normalizer tool on its way to a full-blow stand-alone tool
+- support for annotations added, for the time being see
+  http://blog.gerhards.net/2011/11/log-annotation-with-liblognorm.html
+----------------------------------------------------------------------
+Version 0.3.1 (rgerhards), 2011-04-18
+- added -t option to normalizer so that only messages with a 
+  specified tag will be output
+- bugfix: abort if a tag was assigned to a message without any 
+  fields parsed out (uncommon scenario)
+- bugfix: mem leak on parse tree destruct -- associated tags were
+  not deleted
+- bugfix: potential abort in normalizer due to misadressing in debug
+  message generation
+----------------------------------------------------------------------
+Version 0.3.0 (rgerhards), 2011-04-06
+- support for message classification via tags added
+- bugfix: partial messages were invalidly matched
+  closes: http://bugzilla.adiscon.com/show_bug.cgi?id=247
+----------------------------------------------------------------------
+Version 0.2.0 (rgerhards), 2011-04-01
+- added -E option to normalizer tool, permits to specify data for
+  encoders
+- support for new libee parsers:
+  * Time12hr
+  * Time24hr
+  * ISODate
+  * QuotedString
+- support for csv encoding added
+- added -p option to normalizer tool (output only correctly parsed
+  entries)
+- bugfix: segfault if a parse tree prefix had exactly buffer size,
+  in which case it was invalidly assumed that an external buffer had
+  been allocated
+----------------------------------------------------------------------
+Version 0.1.0 (rgerhards), 2010-12-09
+Initial public release.
+</pre>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="contacts.html">Contacts</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>
