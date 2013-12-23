@@ -1,6 +1,7 @@
 EXTRA_DIST = _static _templates conf.py \
     index.rst introduction.rst installation.rst \
     configuration.rst sample_rulebase.rst internals.rst \
+    contacts.rst changes.rst \
     lognormalizer.rst license.rst graph.png
 
 htmldir = $(docdir)
