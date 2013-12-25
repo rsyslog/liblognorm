@@ -87,12 +87,41 @@ or write files.</p>
 rule.</p>
 <div class="highlight-python"><pre>-E &lt;DATA&gt;</pre>
 </div>
-<p>Encoder-specific data (for example, a separator for CSV).</p>
-<div class="highlight-python"><div class="highlight"><pre><span class="o">-</span><span class="n">d</span> <span class="p">[</span><span class="n">FILENAME</span><span class="p">]</span>
-</pre></div>
+<p>Encoder-specific data. For CSV, it is the list of fields to be output,
+separated by comma or space. It is currently unused for other formats.</p>
+<div class="highlight-python"><pre>-d &lt;FILENAME&gt;</pre>
 </div>
 <p>Generate DOT file describing parse tree. It is used to plot parse graph
 with GraphViz.</p>
+</div>
+<div class="section" id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Permalink to this headline">¶</a></h2>
+<p>These examples were created using sample rulebase from source package.</p>
+<p>Default (CEE) output:</p>
+<div class="highlight-python"><pre>$ lognormalizer -r rulebases/sample.rulebase
+Weight: 42kg
+[cee@115 event.tags="tag2" unit="kg" N="42" fat="free"]
+Snow White and the Seven Dwarfs
+[cee@115 event.tags="tale" company="the Seven Dwarfs"]
+2012-10-11 src=127.0.0.1 dst=88.111.222.19
+[cee@115 dst="88.111.222.19" src="127.0.0.1" date="2012-10-11"]</pre>
+</div>
+<p>JSON output, flat tags enabled:</p>
+<div class="highlight-python"><pre>$ lognormalizer -r rulebases/sample.rulebase -e json -T
+%%
+{ "event.tags": [ "tag3", "percent" ], "percent": "100", "part": "wha", "whole": "whale" }
+Weight: 42kg
+{ "unit": "kg", "N": "42", "event.tags": [ "tag2" ], "fat": "free" }</pre>
+</div>
+<p>CSV output with fixed field list:</p>
+<div class="highlight-python"><pre>$ lognormalizer -r rulebases/sample.rulebase -e csv -E'N unit'
+Weight: 42kg
+"42","kg"
+Weight: 115lbs
+"115","lbs"
+Anything not matching the rule
+,</pre>
+</div>
 </div>
 <div class="section" id="creating-a-graph-of-the-rulebase">
 <h2>Creating a graph of the rulebase<a class="headerlink" href="#creating-a-graph-of-the-rulebase" title="Permalink to this headline">¶</a></h2>
