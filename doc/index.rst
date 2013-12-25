@@ -22,6 +22,7 @@ Contents:
     configuration
     sample_rulebase
     lognormalizer
+    libraryapi
     internals
     license
     contacts

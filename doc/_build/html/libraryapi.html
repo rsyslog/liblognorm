@@ -1,0 +1,232 @@
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Library API &mdash; A fast log normalization library</title>
+    
+    <link rel="stylesheet" href="_static/haiku.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/print.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '1.0.0',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="_static/theme_extras.js"></script>
+    <link rel="top" title="A fast log normalization library" href="index.html" />
+    <link rel="next" title="Liblognorm internals" href="internals.html" />
+    <link rel="prev" title="Lognormalizer" href="lognormalizer.html" /> 
+  </head>
+  <body>
+      <div class="header"><h1 class="heading"><a href="index.html">
+          <span>Liblognorm 1.0.0 documentation</span></a></h1>
+        <h2 class="heading"><span>Library API</span></h2>
+      </div>
+      <div class="topnav">
+      
+        <p>
+        «&#160;&#160;<a href="lognormalizer.html">Lognormalizer</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="internals.html">Liblognorm internals</a>&#160;&#160;»
+        </p>
+
+      </div>
+      <div class="content">
+        
+        
+  <div class="section" id="library-api">
+<h1>Library API<a class="headerlink" href="#library-api" title="Permalink to this headline">¶</a></h1>
+<p>To use the library, include liblognorm.h (which is quoted below) into your code.
+The API is fairly simple and hardly needs further explanations.</p>
+<div class="highlight-c"><div class="highlight"><pre><span class="cp">#include &lt;stdlib.h&gt;	</span><span class="cm">/* we need size_t */</span><span class="cp"></span>
+<span class="cp">#include &lt;json.h&gt;</span>
+<span class="cp">#include &lt;libestr.h&gt;</span>
+
+<span class="cp">/* error codes */</span>
+<span class="cp">#define LN_NOMEM -1</span>
+<span class="cp">#define LN_INVLDFDESCR -1</span>
+<span class="cp">#define LN_WRONGPARSER -1000</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * The library context descriptor.</span>
+<span class="cm"> * This is used to permit multiple independent instances of the</span>
+<span class="cm"> * library to be called within a single program. This is most</span>
+<span class="cm"> * useful for plugin-based architectures.</span>
+<span class="cm"> */</span>
+<span class="k">typedef</span> <span class="k">struct</span> <span class="n">ln_ctx_s</span><span class="o">*</span> <span class="n">ln_ctx</span><span class="p">;</span>
+
+<span class="cm">/* API */</span>
+<span class="cm">/**</span>
+<span class="cm"> * Return library version string.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Returns the version of the currently used library.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return Zero-Terminated library version string.</span>
+<span class="cm"> */</span>
+<span class="cm">/* Note: this MUST NOT be inline to make sure the actual library</span>
+<span class="cm"> * has the right version, not just what was used to compile!</span>
+<span class="cm"> */</span>
+<span class="kt">char</span> <span class="o">*</span><span class="n">ln_version</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Initialize a library context.</span>
+<span class="cm"> *</span>
+<span class="cm"> * To prevent memory leaks, ln_exitCtx() must be called on a library</span>
+<span class="cm"> * context that is no longer needed.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return new library context or NULL if an error occured</span>
+<span class="cm"> */</span>
+<span class="n">ln_ctx</span> <span class="n">ln_initCtx</span><span class="p">(</span><span class="kt">void</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Discard a library context.</span>
+<span class="cm"> *</span>
+<span class="cm"> * Free&#39;s the ressources associated with the given library context. It</span>
+<span class="cm"> * MUST NOT be accessed after calling this function.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param ctx The context to be discarded.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return Returns zero on success, something else otherwise.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="n">ln_exitCtx</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">);</span>
+
+
+<span class="cm">/**</span>
+<span class="cm"> * Set a debug message handler (callback).</span>
+<span class="cm"> *</span>
+<span class="cm"> * Liblognorm can provide helpful information for debugging</span>
+<span class="cm"> * - it&#39;s internal processing</span>
+<span class="cm"> * - the way a log message is being normalized</span>
+<span class="cm"> *</span>
+<span class="cm"> * It does so by emiting &quot;interesting&quot; information about its processing</span>
+<span class="cm"> * at various stages. A caller can obtain this information by registering</span>
+<span class="cm"> * an entry point. When done so, liblognorm will call the entry point</span>
+<span class="cm"> * whenever it has something to emit. Note that debugging can be rather</span>
+<span class="cm"> * verbose.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The callback will be called with the following three parameters in that order:</span>
+<span class="cm"> * - the caller-provided cookie</span>
+<span class="cm"> * - a zero-terminated string buffer</span>
+<span class="cm"> * - the length of the string buffer, without the trailing NUL byte</span>
+<span class="cm"> *</span>
+<span class="cm"> * @note</span>
+<span class="cm"> * The provided callback function &lt;b&gt;must not&lt;/b&gt; call any liblognorm</span>
+<span class="cm"> * APIs except when specifically flagged as safe for calling by a debug</span>
+<span class="cm"> * callback handler.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param[in] ctx The library context to apply callback to.</span>
+<span class="cm"> * @param[in] cb The function to be called for debugging</span>
+<span class="cm"> * @param[in] cookie Opaque cookie to be passed down to debug handler. Can be</span>
+<span class="cm"> *                   used for some state tracking by the caller. This is defined as</span>
+<span class="cm"> *                   void* to support pointers. To play it safe, a pointer should be</span>
+<span class="cm"> *                   passed (but advantorous folks may also use an unsigned).</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return Returns zero on success, something else otherwise.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="n">ln_setDebugCB</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">,</span> <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">cb</span><span class="p">)(</span><span class="kt">void</span><span class="o">*</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span><span class="o">*</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">),</span> <span class="kt">void</span> <span class="o">*</span><span class="n">cookie</span><span class="p">);</span>
+
+
+<span class="cm">/**</span>
+<span class="cm"> * enable or disable debug mode.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param[in] ctx context</span>
+<span class="cm"> * @param[in] b boolean 0 - disable debug mode, 1 - enable debug mode</span>
+<span class="cm"> */</span>
+<span class="kt">void</span> <span class="n">ln_enableDebug</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">,</span> <span class="kt">int</span> <span class="n">i</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Reads a sample stored in buffer buf and creates a new ln_samp object</span>
+<span class="cm"> * out of it.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @note</span>
+<span class="cm"> * It is the caller&#39;s responsibility to delete the newly</span>
+<span class="cm"> * created ln_samp object if it is no longer needed.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param[ctx] ctx current library context</span>
+<span class="cm"> * @param[buf] NULL terminated cstr containing the contents of the sample</span>
+<span class="cm"> * @return Returns zero on success, something else otherwise.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span>
+<span class="n">ln_loadSample</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">buf</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Load a (log) sample file.</span>
+<span class="cm"> *</span>
+<span class="cm"> * The file must contain log samples in syntactically correct format. Samples are added</span>
+<span class="cm"> * to set already loaded in the current context. If there is a sample with duplicate</span>
+<span class="cm"> * semantics, this sample will be ignored. Most importantly, this can \b not be used</span>
+<span class="cm"> * to change tag assignments for a given sample.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param[in] ctx The library context to apply callback to.</span>
+<span class="cm"> * @param[in] file Name of file to be loaded.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return Returns zero on success, something else otherwise.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="n">ln_loadSamples</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">file</span><span class="p">);</span>
+
+<span class="cm">/**</span>
+<span class="cm"> * Normalize a message.</span>
+<span class="cm"> *</span>
+<span class="cm"> * This is the main library entry point. It is called with a message</span>
+<span class="cm"> * to normalize and will return a normalized in-memory representation</span>
+<span class="cm"> * of it.</span>
+<span class="cm"> *</span>
+<span class="cm"> * If an error occurs, the function returns -1. In that case, an</span>
+<span class="cm"> * in-memory event representation has been generated if event is</span>
+<span class="cm"> * non-NULL. In that case, the event contains further error details in</span>
+<span class="cm"> * normalized form.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @note</span>
+<span class="cm"> * This function works on byte-counted strings and as such is able to</span>
+<span class="cm"> * process NUL bytes if they occur inside the message. On the other hand,</span>
+<span class="cm"> * this means the the correct messages size, \b excluding the NUL byte,</span>
+<span class="cm"> * must be provided.</span>
+<span class="cm"> *</span>
+<span class="cm"> * @param[in] ctx The library context to use.</span>
+<span class="cm"> * @param[in] str The message string (see note above).</span>
+<span class="cm"> * @param[in] strLen The length of the message in bytes.</span>
+<span class="cm"> * @param[out] json_p A new event record or NULL if an error occured. &lt;b&gt;Must be</span>
+<span class="cm"> *                   destructed if no longer needed.&lt;/b&gt;</span>
+<span class="cm"> *</span>
+<span class="cm"> * @return Returns zero on success, something else otherwise.</span>
+<span class="cm"> */</span>
+<span class="kt">int</span> <span class="n">ln_normalize</span><span class="p">(</span><span class="n">ln_ctx</span> <span class="n">ctx</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">str</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">strLen</span><span class="p">,</span> <span class="k">struct</span> <span class="n">json_object</span> <span class="o">**</span><span class="n">json_p</span><span class="p">);</span>
+</pre></div>
+</div>
+</div>
+
+
+      </div>
+      <div class="bottomnav">
+      
+        <p>
+        «&#160;&#160;<a href="lognormalizer.html">Lognormalizer</a>
+        &#160;&#160;::&#160;&#160;
+        <a class="uplink" href="index.html">Contents</a>
+        &#160;&#160;::&#160;&#160;
+        <a href="internals.html">Liblognorm internals</a>&#160;&#160;»
+        </p>
+
+      </div>
+
+    <div class="footer">
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.3.
+    </div>
+  </body>
+</html>

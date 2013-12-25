@@ -59,7 +59,7 @@
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
 #ifndef LIBLOGNORM_H_INCLUDED
-#define	LIBLOGNORM_H_INCLUDED
+#define LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
 #include <json.h>
 #include <libestr.h>
