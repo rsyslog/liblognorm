@@ -102,6 +102,30 @@ outputEvent(struct json_object *json)
 	es_deleteStr(str);
 }
 
+/* test if the tag exists */
+static int
+eventHasTag(struct json_object *json, const char *tag)
+{
+	struct json_object *tagbucket, *tagObj;
+	int i;
+	const char *tagCstr;
+	
+	if (tag == NULL)
+		return 1;
+	if ((tagbucket = json_object_object_get(json, "event.tags")) != NULL) {
+		if (json_object_get_type(tagbucket) == json_type_array) {
+			for (i = json_object_array_length(tagbucket) - 1; i >= 0; i--) {
+				tagObj = json_object_array_get_idx(tagbucket, i);
+				tagCstr = json_object_get_string(tagObj);
+				if (!strcmp(tag, tagCstr))
+					return 1;
+			}
+		}
+	}
+	if (verbose > 1)
+		printf("Mandatory tag '%s' has not been found\n", tag);
+	return 0;
+}
 
 /* normalize input data
  */
@@ -126,8 +150,7 @@ normalize(void)
 		if(verbose > 0) printf("To normalize: '%s'\n", buf);
 		ln_normalize(ctx, buf, strlen(buf), &json);
 		if(json != NULL) {
-			if( mandatoryTagCstr == NULL 
-					|| json_object_object_get(json, mandatoryTagCstr)) {
+			if(eventHasTag(json, mandatoryTagCstr)) {
 				if( parsedOnly == 1
 						&& json_object_object_get(json, "unparsed-data") != NULL) {
 					numUnparsed++;
