@@ -57,14 +57,48 @@ rule.
 
     -E <DATA>
 
-Encoder-specific data (for example, a separator for CSV).
+Encoder-specific data. For CSV, it is the list of fields to be output, 
+separated by comma or space. It is currently unused for other formats.
 
 ::
 
-    -d [FILENAME]
+    -d <FILENAME>
 
 Generate DOT file describing parse tree. It is used to plot parse graph 
 with GraphViz.
+
+Examples
+--------
+
+These examples were created using sample rulebase from source package.
+
+Default (CEE) output::
+
+	$ lognormalizer -r rulebases/sample.rulebase
+	Weight: 42kg
+	[cee@115 event.tags="tag2" unit="kg" N="42" fat="free"]
+	Snow White and the Seven Dwarfs
+	[cee@115 event.tags="tale" company="the Seven Dwarfs"]
+	2012-10-11 src=127.0.0.1 dst=88.111.222.19
+	[cee@115 dst="88.111.222.19" src="127.0.0.1" date="2012-10-11"]
+
+JSON output, flat tags enabled::
+
+	$ lognormalizer -r rulebases/sample.rulebase -e json -T
+	%%
+	{ "event.tags": [ "tag3", "percent" ], "percent": "100", "part": "wha", "whole": "whale" }
+	Weight: 42kg
+	{ "unit": "kg", "N": "42", "event.tags": [ "tag2" ], "fat": "free" }
+
+CSV output with fixed field list::
+
+	$ lognormalizer -r rulebases/sample.rulebase -e csv -E'N unit'
+	Weight: 42kg
+	"42","kg"
+	Weight: 115lbs
+	"115","lbs"
+	Anything not matching the rule
+	,
 
 Creating a graph of the rulebase
 --------------------------------
