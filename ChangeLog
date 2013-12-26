@@ -1,3 +1,5 @@
+Version 1.0.1, 
+- bugfix: mandatory tag did not work in lognormalizer
 ----------------------------------------------------------------------
 Version 1.0.0, 2013-11-28
 - WARNING: this version has incompatible interface and older programs 
