@@ -528,14 +528,15 @@ addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *j
 {
 	int r = 1;
 	struct json_object *value;
-	
-	value = json_object_new_string_len(str, strLen);
+	char *s = NULL;
+	CHKN(s = strndup(str, strLen));
+	value = json_object_new_string(s);
 	if (value == NULL) {
 		goto done;
 	}
 	json_object_object_add(json, "originalmsg", value);
 	
-	value = json_object_new_string_len(str + offs, strLen - offs);
+	value = json_object_new_string(s + offs);
 	if (value == NULL) {
 		goto done;
 	}
@@ -543,6 +544,7 @@ addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *j
 
 	r = 0;
 done:
+	free(s);
 	return r;
 }
 
