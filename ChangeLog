@@ -1,4 +1,6 @@
 Version 1.0.1, 
+- bugfix: unparsed fields were copied incorrectly from non-terminated
+  string. Thanks to Josh Blum for the fix.
 - bugfix: mandatory tag did not work in lognormalizer
 ----------------------------------------------------------------------
 Version 1.0.0, 2013-11-28
