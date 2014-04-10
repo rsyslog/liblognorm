@@ -524,18 +524,19 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(const char *str, int offs, struct json_object *json)
+addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
-	
-	value = json_object_new_string(str);
+	char *s = NULL;
+	CHKN(s = strndup(str, strLen));
+	value = json_object_new_string(s);
 	if (value == NULL) {
 		goto done;
 	}
 	json_object_object_add(json, "originalmsg", value);
 	
-	value = json_object_new_string(str + offs);
+	value = json_object_new_string(s + offs);
 	if (value == NULL) {
 		goto done;
 	}
@@ -543,6 +544,7 @@ addUnparsedField(const char *str, int offs, struct json_object *json)
 
 	r = 0;
 done:
+	free(s);
 	return r;
 }
 
@@ -809,9 +811,9 @@ ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **js
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {
-			addUnparsedField(str, strLen, *json_p);
+			addUnparsedField(str, strLen, strLen, *json_p);
 		} else {
-			addUnparsedField(str, strLen - left, *json_p);
+			addUnparsedField(str, strLen, strLen - left, *json_p);
 		}
 	} else {
 		/* success, finalize event */
