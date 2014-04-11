@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
-Version 1.0.1, 2014-04-09
+Version 1.0.1, 2014-04-11
+- improved doc (via RST/Sphinx)
 - bugfix: unparsed fields were copied incorrectly from non-terminated
   string. Thanks to Josh Blum for the fix.
 - bugfix: mandatory tag did not work in lognormalizer
