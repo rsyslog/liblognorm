@@ -199,7 +199,7 @@ ln_fmtEventToXML(struct json_object *json, es_str_t **str)
 	struct json_object *tags;
 
 	assert(json != NULL);
-	assert(json_object_is_type(json_type_object));
+	assert(json_object_is_type(json, json_type_object));
 	
 	if((*str = es_newStr(256)) == NULL)
 		goto done;

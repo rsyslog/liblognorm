@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 1.0.2, 2014-04-??
+- fix build problem when --enable-debug was set
+  closes: https://github.com/rsyslog/liblognorm/issues/5
+----------------------------------------------------------------------
 Version 1.0.1, 2014-04-11
 - improved doc (via RST/Sphinx)
 - bugfix: unparsed fields were copied incorrectly from non-terminated
