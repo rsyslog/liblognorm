@@ -74,8 +74,8 @@ AC_ARG_ENABLE(docs,
 )
 AC_CHECK_PROGS([SPHINXBUILD], [sphinx-build sphinx-build3 sphinx-build2], [no])
 AS_IF([test "$enable_docs" = "yes" -a "x$SPHINXBUILD" = xno],
-    AC_MSG_ERROR(sphinx-build is required to build documentation. Install it or try --disable-docs)
-    )
+    [AC_MSG_ERROR([sphinx-build is required to build documentation, install it or try --disable-docs])]
+)
 AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = yes])
 
 AC_CONFIG_FILES([Makefile \
