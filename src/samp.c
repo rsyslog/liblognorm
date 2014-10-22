@@ -211,6 +211,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 			}
 			CHKR(es_addChar(&node->data, buf[i++]));
 		}
+		node->raw_data = es_strdup(node->data);
 		es_unescapeStr(node->data);
 		if(ctx->debug) {
 			cstr = es_str2cstr(node->data, NULL);
