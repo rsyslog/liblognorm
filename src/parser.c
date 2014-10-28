@@ -32,6 +32,7 @@
 #include <json.h>
 
 #include "liblognorm.h"
+#include "lognorm.h"
 #include "internal.h"
 #include "parser.h"
 
@@ -538,6 +539,148 @@ BEGINParser(CharSeparated)
 
 ENDParser
 
+/**
+ * Parse string tokenized by given char-sequence
+ * The sequence may appear 0 or more times, but zero times means 1 token.
+ * NOTE: its not 0 tokens, but 1 token.
+ *
+ * The token found is parsed according to the field-type provided after
+ *  tokenizer char-seq.
+ */
+struct tokenized_parser_data_s {
+	es_str_t *tok_str;
+	ln_ctx ctx;
+};
+typedef struct tokenized_parser_data_s tokenized_parser_data_t;
+static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
+void* tokenized_parser_data_constructor(ln_fieldList_t *);
+
+BEGINParser(Tokenized)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+
+	json_object *json_p = NULL;
+	CHKN(json_p = json_object_new_object());
+	json_object *matches = NULL;
+	CHKN(matches = json_object_new_array());
+
+
+	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
+
+	if (! pData) {
+		r = LN_BADPARSERSTATE;
+		goto fail;
+	}
+
+	int remaining_len = strLen - *offs;
+	const char *remaining_str = str + *offs;
+	json_object *remaining = NULL;
+	json_object *match = NULL;
+	
+	while (remaining_len > 0) {
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
+
+		if (remaining) json_object_put(remaining);
+
+		if (json_object_object_get_ex(json_p, "default", &match)) {
+			json_object_array_add(matches, json_object_get(match));
+		} else {
+			if (json_object_array_length(matches) > 0) {
+				remaining_len += es_strlen(pData->tok_str);
+				break;
+			} else {
+				json_object_put(json_p);
+				r = LN_WRONGPARSER;
+				goto fail;
+			}
+		}
+
+		if (json_object_object_get_ex(json_p, "tail", &remaining)) {
+			remaining_len = json_object_get_string_len(remaining);
+			if (remaining_len > 0) {
+				remaining_str = json_object_get_string(remaining);
+				if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
+					break;
+				} else {
+					json_object_get(remaining);
+					remaining_str += es_strlen(pData->tok_str);
+					remaining_len -= es_strlen(pData->tok_str);
+				}
+			}
+		} else {
+			remaining_len = 0;
+			break;
+		}
+
+		json_object_object_del(json_p, "default");
+		json_object_object_del(json_p, "tail");
+	}
+	json_object_put(json_p);
+
+	/* success, persist */
+	*parsed = (strLen - *offs) - remaining_len;
+	*value =  matches;
+
+ENDParser
+
+void tokenized_parser_data_destructor(void** dataPtr) {
+	tokenized_parser_data_t *data = (tokenized_parser_data_t*) *dataPtr;
+	if (data->tok_str) es_deleteStr(data->tok_str);
+	if (data->ctx) ln_exitCtx(data->ctx);
+	free(data);
+	*dataPtr = NULL;
+}
+
+static void load_tokenized_parser_samples(ln_ctx ctx, const char* const field_type, const int field_type_len, const char* const suffix, const int length) {
+	static const char* const RULE_PREFIX = "rule=:%default:";//TODO: extract nice constants
+	static const int RULE_PREFIX_LEN = 15;
+	
+	es_str_t *field_decl = es_newStrFromCStr(RULE_PREFIX, RULE_PREFIX_LEN);
+	if (! field_decl) goto free;
+
+	if (es_addBuf(&field_decl, field_type, field_type_len) || es_addBuf(&field_decl, "%", 1) || es_addBuf(&field_decl, suffix, length)) {
+		ln_dbgprintf(ctx, "couldn't prepare field for tokenized field-picking: '%s'", field_type);
+		goto free;
+	}
+	char *sample_str = es_str2cstr(field_decl, NULL);
+	if (! sample_str) {
+		ln_dbgprintf(ctx, "couldn't prepare sample-string for: '%s'", field_type);
+		goto free;
+	}
+	ln_loadSample(ctx, sample_str);
+free:
+	if (sample_str) free(sample_str);
+	if (field_decl) es_deleteStr(field_decl);
+}
+
+void* tokenized_parser_data_constructor(ln_fieldList_t *node) {
+	es_str_t *raw_data = node->raw_data;
+	static const char* const ARG_SEP = ":";
+	static const char* const TAIL_FIELD = "%tail:rest%";
+	static const int TAIL_FIELD_LEN = 11;
+	
+	char *args = es_str2cstr(raw_data, NULL);
+	if (! args) return NULL;
+	char *field_type = strstr(args, ARG_SEP);
+
+	tokenized_parser_data_t *pData = malloc(sizeof(tokenized_parser_data_t));
+	if (! pData)  goto fail;
+	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
+	es_unescapeStr(pData->tok_str);
+	if (! (pData->ctx = ln_initCtx())) goto fail;
+	field_type++;//skip :
+	const int field_type_len = strlen(field_type);
+	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
+	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, "", 0);
+	goto free;
+fail:
+	if (pData) tokenized_parser_data_destructor((void**) &pData);
+	pData = NULL;
+free:
+	if (args) free(args);
+	return pData;
+}
 
 /**
  * Just get everything till the end of string.

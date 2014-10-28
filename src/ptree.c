@@ -78,6 +78,8 @@ ln_deletePTreeNode(ln_fieldList_t *node)
 		es_deleteStr(node->data);
 	if(node->raw_data != NULL)
 		es_deleteStr(node->raw_data);
+	if(node->parser_data != NULL)
+		node->parser_data_destructor(&(node->parser_data));
 	free(node);
 }
 

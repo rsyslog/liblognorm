@@ -114,6 +114,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	char *cstr;	/* for debug mode strings */
 	unsigned char *buf;
 	es_size_t lenBuf;
+	void* (*constructor_fn)(ln_fieldList_t *) = NULL;
 
 	assert(subtree != NULL);
 
@@ -125,6 +126,9 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	node->subtree = NULL;
 	node->next = NULL;
 	node->data = NULL;
+	node->raw_data = NULL;
+	node->parser_data = NULL;
+	node->parser_data_destructor = NULL;
 	CHKN(node->name = es_newStr(16));
 
 	while(i < lenBuf && buf[i] != ':') {
@@ -191,6 +195,10 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	} else if(!es_strconstcmp(*str, "char-sep")) {
 		// TODO: check extra data!!!! (very important)
 		node->parser = ln_parseCharSeparated;
+	} else if(!es_strconstcmp(*str, "tokenized")) {
+		node->parser = ln_parseTokenized;
+		constructor_fn = tokenized_parser_data_constructor;
+		node->parser_data_destructor = tokenized_parser_data_destructor;
 	} else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
@@ -219,6 +227,8 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 			free(cstr);
 		}
 	}
+
+	if (constructor_fn) node->parser_data = constructor_fn(node);
 
 
 	/* finished */
