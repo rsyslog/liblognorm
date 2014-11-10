@@ -221,7 +221,10 @@ tokenized
 #########
 
 Values of any field-type separated by some sort of token. 
-It returns json array in place of single field when matched.
+It returns json array of tokens when matched.
+Additional arguments are tokenizing subsequence, followed by 
+expected type of single token.
+
 Here is an expression that'd match IPv4 addresses separated 
 by ', ' (comma + space). Given string "192.168.1.2, 192.168.1.3, 192.168.1.4"
 it would produce: { my_ips: [ "192.168.1.2", "192.168.1.3", "192.168.1.4" ] }
