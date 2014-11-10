@@ -217,6 +217,34 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 
     %ip-src:ipv4%
 
+tokenized
+#########
+
+Values of any field-type separated by some sort of token. 
+It returns json array in place of single field when matched.
+Here is an expression that'd match IPv4 addresses separated 
+by ', ' (comma + space). Given string "192.168.1.2, 192.168.1.3, 192.168.1.4"
+it would produce: { my_ips: [ "192.168.1.2", "192.168.1.3", "192.168.1.4" ] }
+
+::
+
+    %my_ips:tokenized:, :ipv4%
+
+However, it can be made multi-level deep by chaining. 
+The expression below for instance, would match numbers 
+sepated by '#' which occur in runs separated by ' : ' 
+which occur in runs separated by ', '. 
+So given "10, 20 : 30#40#50 : 60#70#80, 90 : 100"
+it would produce: { some_nos: [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ], 
+[ "60", "70", "80" ] ], [ [ "90" ], [ "100" ] ] ] }
+
+::
+   
+   %some_nos:tokenized:, :tokenized: \x3a :tokenized:#:number%
+
+Note how colon (:) is used unescaped when using as field-pattern, but is escaped when 
+used as tokenizer subsequence. The same would appply to use of % character.
+
 iptables
 ########    
 
