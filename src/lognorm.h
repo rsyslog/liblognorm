@@ -48,6 +48,8 @@ struct ln_ctx_s {
 			       * to all rules before they are submitted to tree
 			       * building.
 			       */
+	unsigned short allowRegex; /**< allow use of regex-based field-types
+								* (disabled by default for performance reasons) */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

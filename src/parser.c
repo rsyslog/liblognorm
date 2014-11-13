@@ -36,6 +36,11 @@
 #include "internal.h"
 #include "parser.h"
 
+#ifdef FEATURE_REGEXP
+#include <sys/types.h>
+#include <regex.h>
+#endif
+
 /* some helpers */
 static inline int
 hParseInt(const unsigned char **buf, size_t *lenBuf)
@@ -553,7 +558,6 @@ struct tokenized_parser_data_s {
 };
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
 static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
-void* tokenized_parser_data_constructor(ln_fieldList_t *);
 
 BEGINParser(Tokenized)
 	assert(str != NULL);
@@ -654,7 +658,7 @@ free:
 	if (field_decl) es_deleteStr(field_decl);
 }
 
-void* tokenized_parser_data_constructor(ln_fieldList_t *node) {
+void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx __attribute__((unused))) {
 	es_str_t *raw_data = node->raw_data;
 	static const char* const ARG_SEP = ":";
 	static const char* const TAIL_FIELD = "%tail:rest%";
@@ -681,6 +685,61 @@ free:
 	if (args) free(args);
 	return pData;
 }
+
+#ifdef FEATURE_REGEXP
+
+/**
+ * Parse string matched by provided posix extended regex.
+ *
+ * Please note that using regex field in most cases will be
+ * significantly slower than other field-types.
+ */
+BEGINParser(Regex)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+
+	regex_t *regexp = (regex_t*) node->parser_data;
+	const char* remaining_str = str + *offs;
+	regmatch_t match;
+	
+	if (regexec(regexp, remaining_str, 1, &match, REG_NOTEOL) == 0) {
+		if (match.rm_so == 0) {
+			*parsed = match.rm_eo;
+		}
+	}
+ENDParser
+
+void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+    char* name = es_str2cstr(node->name, NULL);
+	char* str = es_str2cstr(node->data, NULL);
+	regex_t *r = NULL;
+    if (str == NULL) {
+		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
+		return NULL;
+	} else {
+		r = malloc(sizeof(regex_t));
+		if (r == NULL) {
+			ln_dbgprintf(ctx, "couldn't allocate regex_t for regex-matched field: '%s'", name);
+		}
+		if (regcomp(r, str, REG_EXTENDED) != 0) {
+			regfree(r);
+			ln_dbgprintf(ctx, "couldn't compile regex for regex-matched field: '%s'", name);
+			r = NULL;
+		}
+	}
+	free(str);
+	free(name);
+	return r;
+}
+
+void regex_parser_data_destructor(void** dataPtr) {
+	regfree(*dataPtr);
+	*dataPtr = NULL;
+}
+
+#endif
+
 
 /**
  * Just get everything till the end of string.

@@ -114,7 +114,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	char *cstr;	/* for debug mode strings */
 	unsigned char *buf;
 	es_size_t lenBuf;
-	void* (*constructor_fn)(ln_fieldList_t *) = NULL;
+	void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
 
 	assert(subtree != NULL);
 
@@ -199,7 +199,15 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ln_parseTokenized;
 		constructor_fn = tokenized_parser_data_constructor;
 		node->parser_data_destructor = tokenized_parser_data_destructor;
-	} else {
+	}
+#ifdef FEATURE_REGEXP
+	else if(!es_strconstcmp(*str, "regex")) {
+		node->parser = ln_parseRegex;
+		constructor_fn = regex_parser_data_constructor;
+		node->parser_data_destructor = regex_parser_data_destructor;
+	}
+#endif
+	else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
 		free(cstr);
@@ -228,7 +236,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		}
 	}
 
-	if (constructor_fn) node->parser_data = constructor_fn(node);
+	if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
 
 
 	/* finished */
