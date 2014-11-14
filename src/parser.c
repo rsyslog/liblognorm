@@ -39,6 +39,7 @@
 #ifdef FEATURE_REGEXP
 #include <sys/types.h>
 #include <regex.h>
+#include <errno.h>
 #endif
 
 /* some helpers */
@@ -694,51 +695,143 @@ free:
  * Please note that using regex field in most cases will be
  * significantly slower than other field-types.
  */
+struct regex_parser_data_s {
+	regex_t r;
+	int consume_group;
+	int return_group;
+	int max_groups;
+};
+
 BEGINParser(Regex)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 
-	regex_t *regexp = (regex_t*) node->parser_data;
+	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
+    regmatch_t* matches = calloc(pData->max_groups, sizeof(regmatch_t));
 	const char* remaining_str = str + *offs;
-	regmatch_t match;
-	
-	if (regexec(regexp, remaining_str, 1, &match, REG_NOTEOL) == 0) {
-		if (match.rm_so == 0) {
-			*parsed = match.rm_eo;
+	if (regexec(&(pData->r), remaining_str, pData->max_groups, matches, REG_NOTBOL | REG_NOTEOL) == 0) {
+		*parsed = matches[pData->consume_group].rm_eo;
+		if (pData->consume_group != pData->return_group) {
+			char* val = NULL;
+			CHKN(val = strndup(remaining_str + matches[pData->return_group].rm_so, matches[pData->return_group].rm_eo));
+			if ((*value = json_object_new_string(val)) == NULL) {
+				free(val);
+				FAIL(LN_NOMEM);
+			}
 		}
 	}
 ENDParser
 
 void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	char* sep = ":";
     char* name = es_str2cstr(node->name, NULL);
-	char* data = es_str2cstr(node->raw_data, NULL);
+
+	struct regex_parser_data_s *pData = malloc(sizeof(struct regex_parser_data_s));
+	if (pData == NULL) {
+		ln_dbgprintf(ctx, "couldn't allocate parser-data for field: '%s'", name);
+		goto fail;
+	}
 	
-    if (data == NULL) {
+	char* args = es_str2cstr(node->raw_data, NULL);
+
+    if (args == NULL) {
 		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
 		goto free;
 	}
-	regex_t *r = malloc(sizeof(regex_t));
-	if (r == NULL) {
-		ln_dbgprintf(ctx, "couldn't allocate regex_t for regex-matched field: '%s'", name);
+	char* exp = NULL;
+	int regex_comp_flags = 0;
+	char* part = strstr(args, sep);
+	es_str_t *tmp = NULL;
+	if (part == NULL) {
+		exp = es_str2cstr(node->data, NULL);
+	} else if (part + 1 != '\0') {
+		tmp = es_newStrFromCStr(args, part - args);
+		if (tmp == NULL) {
+			ln_dbgprintf(ctx, "couldn't allocate regex string for: '%s'", name);
+		}
+		es_unescapeStr(tmp);
+		exp = es_str2cstr(tmp, NULL);
+		part++;
+		char* next_part = strstr(part, sep);
+		if (next_part == NULL) {
+			next_part = part + strlen(part);
+		}
+		if ((next_part - part) != 3) {
+			ln_dbgprintf(ctx, "found invalid regex type(only BRE or ERE are supported types) for: '%s'", name);
+			goto fail;
+		}
+		if (strncmp("ERE", part, 3) == 0) {
+			regex_comp_flags = REG_EXTENDED;
+		} else if (strncmp("BRE", part, 3) != 0) {
+			ln_dbgprintf(ctx, "found invalid regex type(only BRE or ERE are supported types) for: '%s'", name);
+			goto fail;
+		}
+		
+		part = next_part;
+		if (*(part + 1) != '\0') {
+			part++;
+			errno = 0;
+			pData->consume_group = strtol(part, &next_part, 10);
+			if (errno != 0) {
+				ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
+				goto fail;
+			}
+			if (*next_part == ':') {
+				part = next_part;
+				if (part + 1 != '\0') {
+					part++;
+					errno = 0;
+					pData->return_group = strtol(part, &next_part, 10);
+					if (errno != 0 || *next_part != '\0') {
+						ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
+						goto fail;
+					}
+				} else {
+					ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
+					goto fail;
+				}
+			} else if (*next_part == '\0') {
+				pData->return_group = pData->consume_group;
+			} else {
+				ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
+				goto fail;
+			}
+		} else if (*part != '\0') {
+			ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
+			goto fail;
+		}
+	} else {
+		ln_dbgprintf(ctx, "found invalid regex type(only BRE and ERE are supported types) for: '%s'", name);
 		goto fail;
 	}
 	
-	if (regcomp(r, data, REG_EXTENDED) != 0) {
+	if (regcomp(&(pData->r), exp, regex_comp_flags) != 0) {
 		ln_dbgprintf(ctx, "couldn't compile regex for regex-matched field: '%s'", name);
 		goto fail;
 	}
+
+	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group : pData->return_group) + 1;
+	goto free;
 fail:
-	if (r != NULL) regfree(r);
-	r = NULL;
+	if (exp != NULL) free(exp);
+	if (pData != NULL) {
+		regfree(&(pData->r));
+		free(pData);
+	}
 free:
-	if (data != NULL) free(data);
+	if (tmp != NULL) es_deleteStr(tmp);
+	if (args != NULL) free(args);
 	if (name != NULL) free(name);
-	return r;
+	return pData;
 }
 
 void regex_parser_data_destructor(void** dataPtr) {
-	regfree(*dataPtr);
+	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
+	if (pData != NULL) {
+		regfree(&(pData->r));
+	}
+	free(pData);
 	*dataPtr = NULL;
 }
 
