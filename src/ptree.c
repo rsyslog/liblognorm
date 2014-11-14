@@ -76,6 +76,10 @@ ln_deletePTreeNode(ln_fieldList_t *node)
 	es_deleteStr(node->name);
 	if(node->data != NULL)
 		es_deleteStr(node->data);
+	if(node->raw_data != NULL)
+		es_deleteStr(node->raw_data);
+	if(node->parser_data != NULL)
+		node->parser_data_destructor(&(node->parser_data));
 	free(node);
 }
 
@@ -373,9 +377,9 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 	for(curr = (*tree)->froot ; curr != NULL ; curr = curr->next) {
 		if(!es_strcmp(curr->name, node->name) 
 				&& curr->parser == node->parser
-				&& ((curr->data == NULL && node->data == NULL)
-					|| (curr->data != NULL && node->data != NULL
-						&& !es_strcmp(curr->data, node->data)))) {
+				&& ((curr->raw_data == NULL && node->raw_data == NULL)
+					|| (curr->raw_data != NULL && node->raw_data != NULL
+						&& !es_strcmp(curr->raw_data, node->raw_data)))) {
 			*tree = curr->subtree;
 			ln_deletePTreeNode(node);
 			r = 0;
@@ -716,7 +720,7 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 			}
 		} else {
 			value = NULL;
-			localR = node->parser(str, strLen, &i, node->data, &parsed, &value);
+			localR = node->parser(str, strLen, &i, node, &parsed, &value);
 			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %zu", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
