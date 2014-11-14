@@ -712,24 +712,28 @@ ENDParser
 
 void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
     char* name = es_str2cstr(node->name, NULL);
-	char* str = es_str2cstr(node->data, NULL);
-	regex_t *r = NULL;
-    if (str == NULL) {
+	char* data = es_str2cstr(node->raw_data, NULL);
+	
+    if (data == NULL) {
 		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
-		return NULL;
-	} else {
-		r = malloc(sizeof(regex_t));
-		if (r == NULL) {
-			ln_dbgprintf(ctx, "couldn't allocate regex_t for regex-matched field: '%s'", name);
-		}
-		if (regcomp(r, str, REG_EXTENDED) != 0) {
-			regfree(r);
-			ln_dbgprintf(ctx, "couldn't compile regex for regex-matched field: '%s'", name);
-			r = NULL;
-		}
+		goto free;
 	}
-	free(str);
-	free(name);
+	regex_t *r = malloc(sizeof(regex_t));
+	if (r == NULL) {
+		ln_dbgprintf(ctx, "couldn't allocate regex_t for regex-matched field: '%s'", name);
+		goto fail;
+	}
+	
+	if (regcomp(r, data, REG_EXTENDED) != 0) {
+		ln_dbgprintf(ctx, "couldn't compile regex for regex-matched field: '%s'", name);
+		goto fail;
+	}
+fail:
+	if (r != NULL) regfree(r);
+	r = NULL;
+free:
+	if (data != NULL) free(data);
+	if (name != NULL) free(name);
 	return r;
 }
 
