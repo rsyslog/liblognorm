@@ -1,0 +1,1 @@
+rule=:%first:regex:[a-z]+% %second:regex:b[a-z]+%

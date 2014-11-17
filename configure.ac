@@ -49,6 +49,8 @@ PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
 PKG_CHECK_MODULES(JSON_C, json-c,, [
 	PKG_CHECK_MODULES(JSON_C, json)])
 
+AX_PATH_LIB_PCRE
+
 # Regular expressions
 AC_ARG_ENABLE(regexp,
         [AS_HELP_STRING([--enable-regexp],[Enable regular expressions support @<:@default=no@:>@])],
@@ -93,10 +95,22 @@ AS_IF([test "$enable_docs" = "yes" -a "x$SPHINXBUILD" = xno],
 )
 AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = yes])
 
+AC_ARG_ENABLE(testbench,
+        [AS_HELP_STRING([--enable-testbench],[testbench enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_testbench="yes" ;;
+          no) enable_testbench="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-testbench) ;;
+         esac],
+        [enable_testbench=no]
+)
+AM_CONDITIONAL(ENABLE_TESTBENCH, test x$enable_testbench = xyes)
+
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		doc/Makefile \
-		src/Makefile])
+		src/Makefile \
+		tests/Makefile])
 AC_OUTPUT
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -104,5 +118,9 @@ AC_CONFIG_MACRO_DIR([m4])
 echo "*****************************************************"
 echo "liblognorm will be compiled with the following settings:"
 echo
+echo "Regex enabled:               $enable_regexp"
+echo ""
+echo "Testbench enabled:           $enable_testbench"
 echo "Debug mode enabled:          $enable_debug"
+echo "Docs enabled:                $enable_docs"
 
