@@ -49,8 +49,6 @@ PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
 PKG_CHECK_MODULES(JSON_C, json-c,, [
 	PKG_CHECK_MODULES(JSON_C, json)])
 
-AX_PATH_LIB_PCRE
-
 # Regular expressions
 AC_ARG_ENABLE(regexp,
         [AS_HELP_STRING([--enable-regexp],[Enable regular expressions support @<:@default=no@:>@])],
@@ -63,6 +61,7 @@ AC_ARG_ENABLE(regexp,
 )
 AM_CONDITIONAL(ENABLE_REGEXP, test x$enable_regexp = xyes)
 if test "$enable_regexp" = "yes"; then
+        AX_PATH_LIB_PCRE
         AC_DEFINE(FEATURE_REGEXP, 1, [Regular expressions support enabled.])
 fi
 
