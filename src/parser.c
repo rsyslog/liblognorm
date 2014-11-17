@@ -762,23 +762,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 		}
 		es_unescapeStr(tmp);
 		exp = es_str2cstr(tmp, NULL);
-		part++;
-		char* next_part = strstr(part, sep);
-		if (next_part == NULL) {
-			next_part = part + strlen(part);
-		}
-		if ((next_part - part) != 3) {
-			ln_dbgprintf(ctx, "found invalid regex type(only BRE or ERE are supported types) for: '%s'", name);
-			goto fail;
-		}
-		if (strncmp("ERE", part, 3) == 0) {
-			regex_comp_flags = 1;//REG_EXTENDED;
-		} else if (strncmp("BRE", part, 3) != 0) {
-			ln_dbgprintf(ctx, "found invalid regex type(only BRE or ERE are supported types) for: '%s'", name);
-			goto fail;
-		}
-		
-		part = next_part;
+		char* next_part = NULL;
 		if ((args_len - (part - args)) > 0) {
 			part++;
 			errno = 0;
@@ -787,7 +771,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 				ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
 				goto fail;
 			}
-			if (*next_part == ':') {
+			if (*next_part == *sep) {
 				part = next_part;
 				if ((args_len - (part - args)) > 0) {
 					part++;
