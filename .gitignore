@@ -27,3 +27,6 @@ stamp-h1
 test-driver
 *.trs
 *.log
+test.out
+test.err
+tmp.rulebase

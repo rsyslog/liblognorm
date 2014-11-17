@@ -783,7 +783,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 			part++;
 			errno = 0;
 			pData->consume_group = strtol(part, &next_part, 10);
-			if (errno != 0) {
+			if (errno != 0 || strlen(part) == 0) {
 				ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
 				goto fail;
 			}
@@ -793,7 +793,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 					part++;
 					errno = 0;
 					pData->return_group = strtol(part, &next_part, 10);
-					if (errno != 0 || *next_part != '\0') {
+					if (errno != 0 || strlen(part) == 0 || *next_part != '\0') {
 						ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
 						goto fail;
 					}

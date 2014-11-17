@@ -7,8 +7,8 @@ execute 'ad1234abcd,4567ef12,8901abef'
 assert_output_contains '"first": "4567ef12"'
 assert_output_contains '"rest": "8901abef"'
 reset_rules
-# add_rule 'rule=:%first:regex:(([a-z]{2})(([a-f0-9]+),)+):ERE:2:4%%rest:rest%'
-# execute 'ad1234abcd,4567ef12,8901abef'
-# assert_output_contains '"first": "4567ef12"'
-# assert_output_contains '"rest": "1234abcd,4567ef12,8901abef"'
+add_rule 'rule=:%first:regex:(([a-z]{2})(([a-f0-9]+),)+):ERE:2:4%%rest:rest%'
+execute 'ad1234abcd,4567ef12,8901abef'
+assert_output_contains '"first": "4567ef12"'
+assert_output_contains '"rest": "1234abcd,4567ef12,8901abef"'
 
