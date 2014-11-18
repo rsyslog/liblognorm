@@ -102,6 +102,19 @@ char *ln_version(void);
 ln_ctx ln_initCtx(void);
 
 /**
+ * Inherit control attributes from a library context.
+ *
+ * This does not copy the parse-tree, but does copy
+ * behaviour-controling attributes such as enableRegex.
+ *
+ * Just as with ln_initCtx, ln_exitCtx() must be called on a library
+ * context that is no longer needed.
+ *
+ * @return new library context or NULL if an error occured
+ */
+ln_ctx ln_inherittedCtx(ln_ctx parent);
+
+/**
  * Discard a library context.
  *
  * Free's the ressources associated with the given library context. It

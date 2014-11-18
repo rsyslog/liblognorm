@@ -185,13 +185,24 @@ genDOT()
 	fwrite(es_getBufAddr(str), 1, es_strlen(str), fpDOT);
 }
 
+static void
+handle_generic_option(const char* optarg) {
+	if (strcmp("allowRegex", optarg) == 0) {
+		ctx->allowRegex = 1;
+	}
+}
+
 
 int main(int argc, char *argv[])
 {
 	int opt;
 	char *repository = NULL;
+
+	if((ctx = ln_initCtx()) == NULL) {
+		errout("Could not initialize liblognorm context");
+	}
 	
-	while((opt = getopt(argc, argv, "d:e:r:E:vpt:T")) != -1) {
+	while((opt = getopt(argc, argv, "d:e:r:E:vpt:T:o:")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -229,15 +240,15 @@ int main(int argc, char *argv[])
 			     are output */
 			mandatoryTag = es_newStrFromCStr(optarg, strlen(optarg));
 			break;
+		case 'o':
+			handle_generic_option(optarg);
+			break;
 		}
 	}
 	
 	if(repository == NULL) {
+		ln_exitCtx(ctx);
 		errout("samples repository must be given");
-	}
-
-	if((ctx = ln_initCtx()) == NULL) {
-		errout("Could not initialize liblognorm context");
 	}
 
 	if(verbose) {

@@ -658,21 +658,23 @@ free:
 	if (field_decl) es_deleteStr(field_decl);
 }
 
-void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx __attribute__((unused))) {
+void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	es_str_t *raw_data = node->raw_data;
 	static const char* const ARG_SEP = ":";
 	static const char* const TAIL_FIELD = "%tail:rest%";
 	static const int TAIL_FIELD_LEN = 11;
-	
+
+	if (raw_data == NULL) return NULL;
 	char *args = es_str2cstr(raw_data, NULL);
-	if (! args) return NULL;
+	if (args == NULL) return NULL;
 	char *field_type = strstr(args, ARG_SEP);
+	if (field_type == NULL)  return NULL;
 
 	tokenized_parser_data_t *pData = malloc(sizeof(tokenized_parser_data_t));
 	if (! pData)  goto fail;
 	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
 	es_unescapeStr(pData->tok_str);
-	if (! (pData->ctx = ln_initCtx())) goto fail;
+	if (! (pData->ctx = ln_inherittedCtx(ctx))) goto fail;
 	field_type++;//skip :
 	const int field_type_len = strlen(field_type);
 	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
@@ -732,16 +734,24 @@ ENDParser
 
 void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	char* sep = ":";
-    char* name = es_str2cstr(node->name, NULL);
+	char* exp = NULL;
+	es_str_t *tmp = NULL;
+	char* args = NULL;
+	char* name = es_str2cstr(node->name, NULL);
 
-	struct regex_parser_data_s *pData = malloc(sizeof(struct regex_parser_data_s));
+	struct regex_parser_data_s *pData = NULL;
+	if (! ctx->allowRegex) {
+		ln_dbgprintf(ctx, "regex support is not enabled for: '%s' (please check lognorm context initialization)", name);
+		goto fail;
+	}
+	pData = malloc(sizeof(struct regex_parser_data_s));
 	if (pData == NULL) {
 		ln_dbgprintf(ctx, "couldn't allocate parser-data for field: '%s'", name);
 		goto fail;
 	}
 	pData->re = NULL;
 	
-	char* args = es_str2cstr(node->raw_data, NULL);
+	args = es_str2cstr(node->raw_data, NULL);
 	int args_len = es_strlen(node->raw_data);
 	pData->consume_group = pData->return_group = 0;
 
@@ -749,10 +759,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
 		goto free;
 	}
-	char* exp = NULL;
-	int regex_comp_flags = 0;
 	char* part = strstr(args, sep);
-	es_str_t *tmp = NULL;
 	if (part == NULL) {
 		exp = es_str2cstr(node->data, NULL);
 	} else if ((args_len - (part - args)) > 0) {
@@ -821,10 +828,12 @@ free:
 }
 
 void regex_parser_data_destructor(void** dataPtr) {
-	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
-	if (pData != NULL) pcre_free(pData->re);
-	free(pData);
-	*dataPtr = NULL;
+	if ((*dataPtr) != NULL) {
+		struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
+		if (pData->re != NULL) pcre_free(pData->re);
+		free(pData);
+		*dataPtr = NULL;
+	}
 }
 
 #endif

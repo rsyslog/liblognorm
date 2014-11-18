@@ -1,5 +1,6 @@
 # added 2014-11-17 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
+export ln_opts='-oallowRegex'
 source ./exec.sh $0 "regex field with negation"
 add_rule 'rule=:%text:regex:[^,]+%,%more:rest%'
 execute '123,abc'

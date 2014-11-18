@@ -46,6 +46,15 @@ ln_version(void)
 	return VERSION;
 }
 
+ln_ctx
+ln_inherittedCtx(ln_ctx parent)
+{
+	ln_ctx child = ln_initCtx();
+	if (child != NULL) {
+		child->allowRegex = parent->allowRegex;
+	}
+	return child;
+}
 
 ln_ctx
 ln_initCtx(void)
@@ -56,6 +65,7 @@ ln_initCtx(void)
 
 	ctx->objID = LN_ObjID_CTX;
 	ctx->dbgCB = NULL;
+	ctx->allowRegex = 0;
 
 	/* we add an root for the empty word, this simplifies parse
 	 * tree handling.

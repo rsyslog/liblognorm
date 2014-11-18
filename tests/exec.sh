@@ -7,7 +7,7 @@ echo "[${test_file}]: test for ${2}"
 set -e
 
 function execute() {
-    echo $1 | ../src/lognormalizer -r tmp.rulebase -e json 1>test.out 2>test.err
+    echo $1 | ../src/lognormalizer $ln_opts -r tmp.rulebase -e json 1>test.out 2>test.err
 }
 
 function assert_output_contains() {

@@ -1,5 +1,6 @@
 TESTS = \
-	tokenization.sh
+	field_tokenized.sh \
+	field_tokenized_with_invalid_ruledef.sh
 
 if ENABLE_REGEXP
 TESTS +=  \
@@ -8,6 +9,7 @@ TESTS +=  \
 	field_regex_with_consume_group.sh \
 	field_regex_with_consume_group_and_return_group.sh \
 	field_regex_with_negation.sh \
-	tokenized_with_regex.sh
+	field_tokenized_with_regex.sh \
+	field_regex_while_regex_support_is_disabled.sh
 endif
 

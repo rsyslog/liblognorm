@@ -1,5 +1,6 @@
 # added 2014-11-14 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
+export ln_opts='-oallowRegex'
 source ./exec.sh $0 "regex field with consume-group and return-group"
 set -x
 add_rule 'rule=:%first:regex:[a-z]{2}(([a-f0-9]+),)+:0:2%%rest:rest%'
