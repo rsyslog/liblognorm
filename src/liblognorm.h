@@ -128,6 +128,16 @@ int ln_exitCtx(ln_ctx ctx);
 
 
 /**
+ * Set options on ctx.
+ *
+ * @param ctx The context to be modified.
+ * @param allow_regex A boolean indicating regex-usage should/shouldn't be allowed
+ */
+void
+ln_setCtxOpts(ln_ctx ctx, int allow_regex);
+
+
+/**
  * Set a debug message handler (callback).
  *
  * Liblognorm can provide helpful information for debugging

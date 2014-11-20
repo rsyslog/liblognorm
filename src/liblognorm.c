@@ -87,6 +87,11 @@ done:
 	return ctx;
 }
 
+void
+ln_setCtxOpts(ln_ctx ctx, int allow_regex) {
+	ctx->allowRegex = allow_regex;
+}
+
 
 int
 ln_exitCtx(ln_ctx ctx)

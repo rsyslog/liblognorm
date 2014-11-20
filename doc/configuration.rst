@@ -248,6 +248,58 @@ it would produce: { some_nos: [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ],
 Note how colon (:) is used unescaped when using as field-pattern, but is escaped when 
 used as tokenizer subsequence. The same would appply to use of % character.
 
+regex
+#####
+
+Field matched by a given regex.
+
+This internally uses PCRE (http://www.pcre.org/).
+
+Note that regex based field is slower and computationally heavier
+compared to other statically supported field-types. Because of potential
+performance penalty, support for regex is disabled by default. It can be enabled
+by providing appropriate options to tooling/library/scripting layer that interfaces with
+liblognorm (for instance, by using '-oallowRegex' as a commandline arg with lognormalizer
+or using 'allow_regex="on"' in rsyslog module load statement).
+
+Additional arguments are regular-expression (mandatory), followed by 2 optional arguments,
+namely consume-group and return-group. Consume-group identifies the matched-subsequence
+which will be treated as part of string consumed by the field, and the return-group is the 
+part of string which the field returns (that is, the picked value for the field). Both 
+consume-group and return-group default to 0(which is the portion matched by entire expression). 
+If consume-group number is provided, return-group number defaults to consume-group as well.
+
+Special characters occuring in regular-expression must be escaped.
+
+Here is an example of regex based field declaration (with default consume and return group), 
+which is equivallent to native field-type 'word'.
+
+::
+
+    %a_word:regex:[^ ]+%
+
+Here is an expression that'd extract a numeric-sequence surrounded by some relevant text,
+some of which we want to consume as a part of matching this field, and parts which we 
+want to leave for next field to consume. With input "sales 200k with margin 6%"
+this should produce: { margin_pct: "6", sale_worth: "200" }
+
+::
+
+    %sale_worth:regex:(sales (\d+)k with) margin:1:2% %margin_pct:regex:margin (\d+)\x25:0:1%
+
+It can sometimes be useful in places where eger matching by native field-type-definitions
+become a problem, such as trying to extract hostnames from this string "hostnames are foo.bar,
+bar.baz, baz.quux". Using %hostnames:tokenized:, :word% doesn't work, becuase word ends up 
+consuming the comma as well. So the using regex here can be helpful.
+
+::
+
+   hostnames are %hostnames:tokenized:, :regex:[^, ]+%
+
+Note that consume-group must match content starting at the begining of string, else it wouldn't
+be considererd matching anything at all.
+
+
 iptables
 ########    
 

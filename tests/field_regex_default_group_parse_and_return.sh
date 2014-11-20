@@ -2,8 +2,8 @@
 # This file is part of the liblognorm project, released under ASL 2.0
 export ln_opts='-oallowRegex'
 source ./exec.sh $0 "type ERE for regex field"
-add_rule 'rule=:%first:regex:[a-z]+% %second:regex:b[a-z]{2}%'
-execute 'foo bar'
+add_rule 'rule=:%first:regex:[a-z]+% %second:regex:\d+\x25\x3a[a-f0-9]+\x25%'
+execute 'foo 122%:7a%'
 assert_output_contains '"first": "foo"'
-assert_output_contains '"second": "bar"'
+assert_output_contains '"second": "122%:7a%"'
 

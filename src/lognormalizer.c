@@ -188,7 +188,7 @@ genDOT()
 static void
 handle_generic_option(const char* optarg) {
 	if (strcmp("allowRegex", optarg) == 0) {
-		ctx->allowRegex = 1;
+		ln_setCtxOpts(ctx, 1);
 	}
 }
 
