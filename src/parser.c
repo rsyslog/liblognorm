@@ -29,8 +29,8 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
-#include <json.h>
 
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "internal.h"

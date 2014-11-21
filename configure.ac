@@ -46,8 +46,16 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(JSON_C, json-c,, [
-	PKG_CHECK_MODULES(JSON_C, json)])
+PKG_CHECK_MODULES(JSON_C, json-c,, [PKG_CHECK_MODULES(JSON_C, json)])
+
+CFLAGS_BEFORE="$CFLAGS"
+LIBS_BEFORE="$LIBS"
+CFLAGS="$CFLAGS $JSON_C_CFLAGS"
+LIBS="$LIBS $JSON_C_LIBS"
+AC_CHECK_FUNCS(json_object_object_get_ex,,)
+AC_CHECK_FUNCS(json_object_get_string_len,,)
+LIBS="$LIBS_BEFORE"
+CFLAGS="$CFLAGS_BEFORE"
 
 # Regular expressions
 AC_ARG_ENABLE(regexp,

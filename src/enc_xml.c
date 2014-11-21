@@ -39,8 +39,7 @@
 #include <assert.h>
 #include <string.h>
 
-#include <json.h>
-
+#include "json_compatibility.h"
 #include "lognorm.h"
 #include "internal.h"
 

@@ -36,7 +36,8 @@
 #include <string.h>
 #include <getopt.h>
 #include <libestr.h>
-#include <json.h>
+
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "ptree.h"
 #include "lognorm.h"
@@ -186,8 +187,8 @@ genDOT()
 }
 
 static void
-handle_generic_option(const char* optarg) {
-	if (strcmp("allowRegex", optarg) == 0) {
+handle_generic_option(const char* opt) {
+	if (strcmp("allowRegex", opt) == 0) {
 		ln_setCtxOpts(ctx, 1);
 	}
 }

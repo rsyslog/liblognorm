@@ -23,7 +23,8 @@ liblognorm_la_SOURCES = \
 	parser.c \
 	enc_syslog.c \
 	enc_csv.c \
-	enc_xml.c
+	enc_xml.c \
+	json_compatibility.c
 
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr

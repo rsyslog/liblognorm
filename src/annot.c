@@ -34,6 +34,7 @@
 #include <ctype.h>
 #include <libestr.h>
 
+#include "json_compatibility.h"
 #include "lognorm.h"
 #include "samp.h"
 #include "annot.h"
