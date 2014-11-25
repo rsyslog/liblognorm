@@ -736,8 +736,8 @@ BEGINParser(Regex)
 				}
 			}
 		}
+		free(ovector);
 	}
-	free(ovector);
 ENDParser
 
 const char* regex_parser_configure_consume_and_return_group(const char* part, struct regex_parser_data_s *pData, int args_len, const char* args, const char* sep) {
