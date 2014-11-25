@@ -573,8 +573,9 @@ BEGINParser(Tokenized)
 	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
 
 	if (! pData) {
-		r = LN_BADPARSERSTATE;
-		goto fail;
+		json_object_put(json_p);
+		json_object_put(matches);
+		FAIL(LN_BADPARSERSTATE);
 	}
 
 	int remaining_len = strLen - *offs;
@@ -595,8 +596,8 @@ BEGINParser(Tokenized)
 				break;
 			} else {
 				json_object_put(json_p);
-				r = LN_WRONGPARSER;
-				goto fail;
+				json_object_put(matches);
+				FAIL(LN_WRONGPARSER);
 			}
 		}
 
@@ -663,14 +664,17 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	static const char* const ARG_SEP = ":";
 	static const char* const TAIL_FIELD = "%tail:rest%";
 	static const int TAIL_FIELD_LEN = 11;
+	tokenized_parser_data_t *pData = NULL;
+	char *args = NULL;
+	char *field_type = NULL;
 
-	if (raw_data == NULL) return NULL;
-	char *args = es_str2cstr(raw_data, NULL);
+	if (raw_data == NULL) goto fail;
+	args = es_str2cstr(raw_data, NULL);
 	if (args == NULL) return NULL;
-	char *field_type = strstr(args, ARG_SEP);
-	if (field_type == NULL)  return NULL;
+	field_type = strstr(args, ARG_SEP);
+	if (field_type == NULL)  goto fail;
 
-	tokenized_parser_data_t *pData = malloc(sizeof(tokenized_parser_data_t));
+	pData = malloc(sizeof(tokenized_parser_data_t));
 	if (! pData)  goto fail;
 	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
 	es_unescapeStr(pData->tok_str);
@@ -707,10 +711,12 @@ BEGINParser(Regex)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
+	unsigned int* ovector = NULL;
 
 	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
     if (pData != NULL) {
-        unsigned int* ovector = calloc(pData->max_groups, sizeof(int) * 3);
+        ovector = calloc(pData->max_groups, sizeof(int) * 3);
+		if (ovector == NULL) FAIL(LN_NOMEM);
 		
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
@@ -724,13 +730,43 @@ BEGINParser(Regex)
 					*value = json_object_new_string(val);
 					free(val);
 					if (*value == NULL) {
+						free(ovector);
 						FAIL(LN_NOMEM);
 					}
 				}
 			}
 		}
 	}
+	free(ovector);
 ENDParser
+
+const char* regex_parser_configure_consume_and_return_group(const char* part, struct regex_parser_data_s *pData, int args_len, const char* args, const char* sep) {
+	char* next_part = NULL;
+	part++;
+	errno = 0;
+	pData->consume_group = strtol(part, &next_part, 10);
+	if (errno != 0 || strlen(part) == 0) {
+		return "couldn't parse consume-group number";
+	}
+	if (*next_part == *sep) {
+		part = next_part;
+		if ((args_len - (part - args)) > 0) {
+			part++;
+			errno = 0;
+			pData->return_group = strtol(part, &next_part, 10);
+			if (errno != 0 || strlen(part) == 0 || *next_part != '\0') {
+				return "couldn't parse return-group number";
+			}
+		} else {
+			return "couldn't parse return-group number";
+		}
+	} else if (*next_part == '\0') {
+		pData->return_group = pData->consume_group;
+	} else {
+		return "couldn't parse return-group number";
+	}
+	return NULL;
+}
 
 void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	char* sep = ":";
@@ -769,33 +805,10 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 		}
 		es_unescapeStr(tmp);
 		exp = es_str2cstr(tmp, NULL);
-		char* next_part = NULL;
 		if ((args_len - (part - args)) > 0) {
-			part++;
-			errno = 0;
-			pData->consume_group = strtol(part, &next_part, 10);
-			if (errno != 0 || strlen(part) == 0) {
-				ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
-				goto fail;
-			}
-			if (*next_part == *sep) {
-				part = next_part;
-				if ((args_len - (part - args)) > 0) {
-					part++;
-					errno = 0;
-					pData->return_group = strtol(part, &next_part, 10);
-					if (errno != 0 || strlen(part) == 0 || *next_part != '\0') {
-						ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
-						goto fail;
-					}
-				} else {
-					ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
-					goto fail;
-				}
-			} else if (*next_part == '\0') {
-				pData->return_group = pData->consume_group;
-			} else {
-				ln_dbgprintf(ctx, "couldn't parse return-group number for: '%s'", name);
+			const char* err = regex_parser_configure_consume_and_return_group(part, pData, args_len, args, sep);
+			if (err != NULL) {
+				ln_dbgprintf(ctx, "%s for: '%s'", err, name);
 				goto fail;
 			}
 		} else if (*part != '\0') {
@@ -803,7 +816,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 			goto fail;
 		}
 	} else {
-		ln_dbgprintf(ctx, "found invalid regex type(only BRE and ERE are supported types) for: '%s'", name);
+		ln_dbgprintf(ctx, "found invalid options for: '%s'", name);
 		goto fail;
 	}
 

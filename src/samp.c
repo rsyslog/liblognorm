@@ -123,7 +123,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	lenBuf = es_strlen(rule);
 	assert(buf[i] == '%');
 	++i;	/* "eat" ':' */
-	CHKN(node = malloc(sizeof(ln_fieldList_t)));
+	CHKN(node = calloc(1, sizeof(ln_fieldList_t)));
 	node->subtree = NULL;
 	node->next = NULL;
 	node->data = NULL;
@@ -245,7 +245,12 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	*bufOffs = i;
 	r = 0;
 
-done:	return r;
+done:
+	if (r != 0) {
+		if (node->name != NULL) es_deleteStr(node->name);
+		free(node);
+	}
+	return r;
 }
 
 
@@ -279,7 +284,7 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 			if(i+1 < lenBuf && buf[i+1] != '%') {
 				break; /* field start is end of literal */
 			}
-			++i;
+			if (++i == lenBuf) break;
 		}
 		CHKR(es_addChar(str, buf[i]));
 		++i;

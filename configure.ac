@@ -113,11 +113,25 @@ AC_ARG_ENABLE(testbench,
 )
 AM_CONDITIONAL(ENABLE_TESTBENCH, test x$enable_testbench = xyes)
 
+AC_ARG_ENABLE(valgrind,
+        [AS_HELP_STRING([--enable-valgrind],[valgrind enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_valgrind="yes" ;;
+          no) enable_valgrind=="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-valgrind) ;;
+         esac],
+        [enable_valgrind=no]
+)
+AM_CONDITIONAL(ENABLE_VALGRIND, test x$enable_valgrind = xyes)
+VALGRIND="$enable_valgrind"
+AC_SUBST(VALGRIND)
+
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		doc/Makefile \
 		src/Makefile \
-		tests/Makefile])
+		tests/Makefile \
+		tests/options.sh])
 AC_OUTPUT
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -126,8 +140,8 @@ echo "*****************************************************"
 echo "liblognorm will be compiled with the following settings:"
 echo
 echo "Regex enabled:               $enable_regexp"
-echo ""
 echo "Testbench enabled:           $enable_testbench"
+echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
 echo "Docs enabled:                $enable_docs"
 

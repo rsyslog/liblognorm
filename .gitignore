@@ -28,5 +28,6 @@ test-driver
 *.trs
 *.log
 test.out
-test.err
 tmp.rulebase
+src/ln_test
+tests/options.sh
