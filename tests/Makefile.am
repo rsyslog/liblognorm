@@ -1,6 +1,13 @@
+check_PROGRAMS = json_eq
+json_eq_SOURCES = json_eq.c $(top_srcdir)/src/json_compatibility.c
+json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) -I$(top_srcdir)/src
+json_eq_LDADD = $(JSON_C_LIBS)
+json_eq_LDFLAGS = -no-install
+
 TESTS = \
 	field_tokenized.sh \
-	field_tokenized_with_invalid_ruledef.sh
+	field_tokenized_with_invalid_ruledef.sh \
+	field_recursive.sh
 
 if ENABLE_REGEXP
 TESTS +=  \

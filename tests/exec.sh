@@ -18,6 +18,11 @@ function assert_output_contains() {
     cat test.out | grep -F "$1"
 }
 
+function assert_output_json_eq() {
+    ./json_eq "$1" "$(cat test.out)"
+}
+
+
 function reset_rules() {
     rm -f tmp.rulebase
 }
