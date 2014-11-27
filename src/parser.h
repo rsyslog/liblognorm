@@ -127,5 +127,12 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void regex_parser_data_destructor(void** dataPtr);
 #endif
 
+/** 
+ * Get all tokens separated by tokenizer-string as array.
+ */
+int ln_parseRecursive(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void recursive_parser_data_destructor(void** dataPtr);
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */

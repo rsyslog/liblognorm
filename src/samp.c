@@ -210,7 +210,11 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser_data_destructor = regex_parser_data_destructor;
 	}
 #endif
-	else {
+    else if (!es_strconstcmp(*str, "recursive")) {
+        node->parser = ln_parseRecursive;
+        constructor_fn = recursive_parser_data_constructor;
+        node->parser_data_destructor = recursive_parser_data_destructor;
+    } else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
 		free(cstr);

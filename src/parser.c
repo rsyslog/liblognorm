@@ -896,6 +896,38 @@ void regex_parser_data_destructor(void** dataPtr) {
 
 #endif
 
+/**
+ * Just get everything till the end of string.
+ */
+BEGINParser(Recursive) {
+
+    assert(str != NULL);
+    assert(offs != NULL);
+    assert(parsed != NULL);
+
+    int remaining_len = strLen - *offs;
+	const char *remaining_str = str + *offs;
+    
+    json_object *json_p = NULL;
+    json_object *unparsed = NULL;
+    CHKN(json_p = json_object_new_object());
+
+    ln_ctx ctx = (ln_ctx) node->parser_data;
+
+    ln_normalize(ctx, remaining_str, remaining_len, &json_p);
+
+    if (json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &unparsed)) {
+        json_object_put(json_p);
+        *parsed = 0;
+    } else {
+        *parsed = strLen - *offs;
+        *value = json_p;
+    }
+} ENDParser
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) { return ctx; }
+
+void recursive_parser_data_destructor(void** dataPtr) {};
 
 /**
  * Just get everything till the end of string.

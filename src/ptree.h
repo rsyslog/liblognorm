@@ -32,6 +32,9 @@
 #define	LIBLOGNORM_PTREE_H_INCLUDED
 #include <libestr.h>
 
+#define ORIGINAL_MSG_KEY "originalmsg"
+#define UNPARSED_DATA_KEY "unparsed-data"
+
 typedef struct ln_ptree ln_ptree; /**< the parse tree object */
 typedef struct ln_fieldList_s ln_fieldList_t;
 

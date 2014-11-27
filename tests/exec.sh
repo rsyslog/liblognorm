@@ -12,6 +12,8 @@ source ./options.sh
 
 function execute() {
     echo $1 | $cmd $ln_opts -r tmp.rulebase -e json > test.out 
+    echo "Out:"
+    cat test.out
 }
 
 function assert_output_contains() {
