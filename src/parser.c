@@ -584,84 +584,92 @@ ENDParser
 struct tokenized_parser_data_s {
 	es_str_t *tok_str;
 	ln_ctx ctx;
+	char *remaining_field;
+	int free_ctx;
+	int use_default_field;
 };
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
 static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
 
-BEGINParser(Tokenized)
+BEGINParser(Tokenized) {
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 
-	json_object *json_p = NULL;
-	CHKN(json_p = json_object_new_object());
-	json_object *matches = NULL;
-	CHKN(matches = json_object_new_array());
-
-
 	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
+	
 
-	if (! pData) {
+	if (pData != NULL ) {
+		json_object *json_p = NULL;
+		if (pData->use_default_field) CHKN(json_p = json_object_new_object());
+		json_object *matches = NULL;
+		CHKN(matches = json_object_new_array());
+
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		json_object *remaining = NULL;
+		json_object *match = NULL;
+	
+		while (remaining_len > 0) {
+			if (! pData->use_default_field) {
+				json_object_put(json_p);
+				json_p = json_object_new_object();
+			} //TODO: handle null condition gracefully
+			
+			ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
+
+			if (remaining) json_object_put(remaining);
+
+			if (pData->use_default_field && json_object_object_get_ex(json_p, "default", &match)) {
+				json_object_array_add(matches, json_object_get(match));
+			} else if (! (pData->use_default_field || json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
+				json_object_array_add(matches, json_object_get(json_p));
+			} else {
+				if (json_object_array_length(matches) > 0) {
+					remaining_len += es_strlen(pData->tok_str);
+					break;
+				} else {
+					json_object_put(json_p);
+					json_object_put(matches);
+					FAIL(LN_WRONGPARSER);
+				}
+			}
+
+			if (json_object_object_get_ex(json_p, pData->remaining_field, &remaining)) {
+				remaining_len = json_object_get_string_len(remaining);
+				if (remaining_len > 0) {
+					remaining_str = json_object_get_string(json_object_get(remaining));
+					json_object_object_del(json_p, pData->remaining_field);
+					if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
+						break;
+					} else {
+						json_object_get(remaining);
+						remaining_str += es_strlen(pData->tok_str);
+						remaining_len -= es_strlen(pData->tok_str);
+					}
+				}
+			} else {
+				remaining_len = 0;
+				break;
+			}
+
+			if (pData->use_default_field) json_object_object_del(json_p, "default");
+		}
 		json_object_put(json_p);
-		json_object_put(matches);
+
+		/* success, persist */
+		*parsed = (strLen - *offs) - remaining_len;
+		*value =  matches;
+	} else {
 		FAIL(LN_BADPARSERSTATE);
 	}
 
-	int remaining_len = strLen - *offs;
-	const char *remaining_str = str + *offs;
-	json_object *remaining = NULL;
-	json_object *match = NULL;
-	
-	while (remaining_len > 0) {
-		ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
-
-		if (remaining) json_object_put(remaining);
-
-		if (json_object_object_get_ex(json_p, "default", &match)) {
-			json_object_array_add(matches, json_object_get(match));
-		} else {
-			if (json_object_array_length(matches) > 0) {
-				remaining_len += es_strlen(pData->tok_str);
-				break;
-			} else {
-				json_object_put(json_p);
-				json_object_put(matches);
-				FAIL(LN_WRONGPARSER);
-			}
-		}
-
-		if (json_object_object_get_ex(json_p, "tail", &remaining)) {
-			remaining_len = json_object_get_string_len(remaining);
-			if (remaining_len > 0) {
-				remaining_str = json_object_get_string(remaining);
-				if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
-					break;
-				} else {
-					json_object_get(remaining);
-					remaining_str += es_strlen(pData->tok_str);
-					remaining_len -= es_strlen(pData->tok_str);
-				}
-			}
-		} else {
-			remaining_len = 0;
-			break;
-		}
-
-		json_object_object_del(json_p, "default");
-		json_object_object_del(json_p, "tail");
-	}
-	json_object_put(json_p);
-
-	/* success, persist */
-	*parsed = (strLen - *offs) - remaining_len;
-	*value =  matches;
-
-ENDParser
+} ENDParser
 
 void tokenized_parser_data_destructor(void** dataPtr) {
 	tokenized_parser_data_t *data = (tokenized_parser_data_t*) *dataPtr;
 	if (data->tok_str) es_deleteStr(data->tok_str);
-	if (data->ctx) ln_exitCtx(data->ctx);
+	if (data->free_ctx && data->ctx) ln_exitCtx(data->ctx);
 	free(data);
 	*dataPtr = NULL;
 }
@@ -714,11 +722,21 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	if (! pData)  goto fail;
 	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
 	es_unescapeStr(pData->tok_str);
-	if (! (pData->ctx = ln_inherittedCtx(ctx))) goto fail;
 	field_type++;//skip :
-	const int field_type_len = strlen(field_type);
-	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
-	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, "", 0);
+	if (strcmp(field_type, "recursive") == 0) {
+		pData->free_ctx = 0;
+		pData->use_default_field = 0;
+		pData->remaining_field = "tail";
+		pData->ctx = ctx;
+	} else {
+		pData->free_ctx = 1;
+		pData->use_default_field = 1;
+		pData->remaining_field = "tail";
+		if (! (pData->ctx = ln_inherittedCtx(ctx))) goto fail;
+		const int field_type_len = strlen(field_type);
+		load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
+		load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, "", 0);
+	}
 	goto free;
 fail:
 	if (pData) tokenized_parser_data_destructor((void**) &pData);
@@ -897,37 +915,72 @@ void regex_parser_data_destructor(void** dataPtr) {
 #endif
 
 /**
- * Just get everything till the end of string.
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
  */
-BEGINParser(Recursive) {
+struct recursive_parser_data_s {
+	ln_ctx ctx;
+	char* remaining_field;
+};
 
-    assert(str != NULL);
-    assert(offs != NULL);
-    assert(parsed != NULL);
+BEGINParser(Recursive)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
 
-    int remaining_len = strLen - *offs;
-	const char *remaining_str = str + *offs;
-    
-    json_object *json_p = NULL;
-    json_object *unparsed = NULL;
-    CHKN(json_p = json_object_new_object());
+	struct recursive_parser_data_s* pData = (struct recursive_parser_data_s*) node->parser_data;
 
-    ln_ctx ctx = (ln_ctx) node->parser_data;
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+	
+		json_object *unparsed = NULL;
+		CHKN(*value = json_object_new_object());
 
-    ln_normalize(ctx, remaining_str, remaining_len, &json_p);
+		ln_normalize(pData->ctx, remaining_str, remaining_len, value);
 
-    if (json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &unparsed)) {
-        json_object_put(json_p);
-        *parsed = 0;
-    } else {
-        *parsed = strLen - *offs;
-        *value = json_p;
-    }
-} ENDParser
+		if (json_object_object_get_ex(*value, UNPARSED_DATA_KEY, &unparsed)) {
+			json_object_put(*value);
+			*value = NULL;
+			*parsed = 0;
+		} else if (pData->remaining_field != NULL && json_object_object_get_ex(*value, pData->remaining_field, &unparsed)) {
+			*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			json_object_object_del(*value, pData->remaining_field);
+		} else {
+			*parsed = strLen - *offs;
+		}
+	}
+ENDParser
 
-void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) { return ctx; }
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	char* name = es_str2cstr(node->name, NULL);
+	struct recursive_parser_data_s *pData = malloc(sizeof(struct recursive_parser_data_s));
+	if (pData != NULL) {
+		pData->remaining_field = NULL;
+		pData->ctx = ctx;
+		if (node->data != NULL) {
+			pData->remaining_field = es_str2cstr(node->data, NULL);
+			if (pData->remaining_field == NULL) {
+				ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for recursive field: %s", name);
+				free(pData);
+				pData = NULL;
+			}
+		}
+	} else {
+		ln_dbgprintf(ctx, "couldn't allocate memory for recursive field: %s", name); 
+	}
+	free(name);
+	return pData;
+}
 
-void recursive_parser_data_destructor(void** dataPtr) {};
+void recursive_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct recursive_parser_data_s *pData = (struct recursive_parser_data_s*) *dataPtr;
+		if (pData->remaining_field != NULL) free(pData->remaining_field);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
 
 /**
  * Just get everything till the end of string.

@@ -106,8 +106,20 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
  * @returns 0 on success, something else otherwise
  */
 static inline int
-parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
+addFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	        es_size_t *bufOffs, es_str_t **str)
+{
+	int r;
+	ln_fieldList_t *node = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
+	assert(subtree != NULL);
+
+	if (node != NULL) CHKR(ln_addFDescrToPTree(subtree, node));
+done:
+	return r;
+}
+
+ln_fieldList_t*
+ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **str, int* ret)
 {
 	int r;
 	ln_fieldList_t *node;
@@ -116,8 +128,6 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	unsigned char *buf;
 	es_size_t lenBuf;
 	void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
-
-	assert(subtree != NULL);
 
 	buf = es_getBufAddr(rule);
 	lenBuf = es_strlen(rule);
@@ -246,19 +256,16 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
 
 
-	/* finished */
-	CHKR(ln_addFDescrToPTree(subtree, node));
 	*bufOffs = i;
-	r = 0;
-
 done:
 	if (r != 0) {
 		if (node->name != NULL) es_deleteStr(node->name);
 		free(node);
+		node = NULL;
 	}
-	return r;
+	*ret = r;
+	return node;
 }
-
 
 /**
  * Parse a Literal string out of the template and add it to the tree.
@@ -341,7 +348,7 @@ addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
 		/* After the literal there can be field only*/
 		if (i < es_strlen(rule)) {
-			CHKR(parseFieldDescr(ctx, &subtree, rule, &i, &str));
+			CHKR(addFieldDescr(ctx, &subtree, rule, &i, &str));
 			if (i == es_strlen(rule)) {
 				/* finish the tree with empty literal to avoid false merging*/
 				CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));

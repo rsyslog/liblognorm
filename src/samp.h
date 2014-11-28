@@ -114,4 +114,21 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof);
 void
 ln_sampFree(ln_ctx ctx, struct ln_samp *samp);
 
+
+/**
+ * Parse a given sample
+ *
+ * @param[in] ctx current library context
+ * @param[in] rule string (with prefix and suffix '%' markers)
+ * @param[in] offset in rule-string to start at (it should be pointed to
+ *  starting character: '%')
+ * @param[in] temp string buffer(working space),
+ *  externalized for efficiency reasons
+ * @param[out] return code (0 means success)
+ * @return newly created node, which can be added to sample tree.
+ */
+ln_fieldList_t*
+ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs,
+				   es_str_t **str, int* ret);
+
 #endif /* #ifndef LIBLOGNORM_SAMPLES_H_INCLUDED */

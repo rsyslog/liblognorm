@@ -5,15 +5,25 @@ echo ===========================================================================
 echo "[${test_file}]: test for ${2}"
 
 set -e
+ulimit -c unlimited
 
 cmd=../src/ln_test
 
 source ./options.sh
 
 function execute() {
+    if [ "x$debug" == "xon" ]; then
+	echo "======rulebase======="
+	cat tmp.rulebase
+	echo "====================="
+	set -x
+    fi
     echo $1 | $cmd $ln_opts -r tmp.rulebase -e json > test.out 
     echo "Out:"
     cat test.out
+    if [ "x$debug" == "xon" ]; then
+	set +x
+    fi
 }
 
 function assert_output_contains() {
