@@ -5,7 +5,9 @@ echo ===========================================================================
 echo "[${test_file}]: test for ${2}"
 
 set -e
-ulimit -c unlimited
+if [ "x$debug" == "xon" ]; then #get core-dump on crash
+    ulimit -c unlimited
+fi
 
 cmd=../src/ln_test
 

@@ -106,13 +106,20 @@ struct ln_ptree* ln_newPTree(ln_ctx ctx, struct ln_ptree** parent);
 
 
 /**
- * Free a parse tree node and destruct all members.
+ * Free a parse tree and destruct all members.
  * @memberof ln_ptree
  *
  * @param[in] tree pointer to ptree to free
  */
 void ln_deletePTree(struct ln_ptree *tree);
 
+/**
+ * Free a parse tree node and destruct all members.
+ * @memberof ln_ptree
+ *
+ * @param[in] node pointer to free
+ */
+void ln_deletePTreeNode(ln_fieldList_t *node);
 
 /**
  * Add a field description to the a tree.

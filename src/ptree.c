@@ -69,7 +69,7 @@ ln_newPTree(ln_ctx ctx, struct ln_ptree **parentptr)
 done:	return tree;
 }
 
-static void
+void
 ln_deletePTreeNode(ln_fieldList_t *node)
 {
 	ln_deletePTree(node->subtree);

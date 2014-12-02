@@ -1,3 +1,4 @@
 *.o
 json_eq
 .deps
+core
