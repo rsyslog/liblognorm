@@ -258,6 +258,69 @@ it would produce: { some_nos: [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ],
 Note how colon (:) is used unescaped when using as field-pattern, but is escaped when 
 used as tokenizer subsequence. The same would appply to use of % character.
 
+recursive
+#########
+
+Value that matches some other rule defined in the same rulebase. Its called
+recursive because it invokes the entire parser-tree again.
+
+The invocation below will call the entire ruleset again and put the parsed
+content under the key 'foo'.
+
+::
+
+    %foo:recursive%
+
+However, matching initial fragment of text requires the remaining 
+(suffix-fragment) portion of it to be matched and given back to 
+original field so it can be matched by remaining portion of rule
+which follows the matched rule(remember, it is being called to match 
+only a portion of text from another rule). 
+
+Additional argument can be passed to pick field-name to be used for 
+returning unmatched text. It is optional, and defaults to 'tail'. The
+example below uses 'remains' as the field name insteed of 'tail'.
+
+::
+
+    %foo:recursive:remains%
+
+Recursive fields are often useful in combination with tokenized text.
+This ruleset for instance, will match multiple IPv4 addresses or 
+Subnets in expected message.
+
+::
+
+    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%tail:rest%
+    rule=:%ip_addr:ipv4%%tail:rest%
+    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive% to %server_ip:ipv4%
+
+Given "blocked inbound via: 192.168.1.1 from: 1.2.3.4, 16.17.18.0/8, 12.13.14.15, 19.20.21.24/3 to 192.168.1.5"
+would produce: 
+
+.. code-block:: json
+
+  {
+  "addresses": [
+    {"ip_addr": "1.2.3.4"}, 
+    {"subnet_addr": "16.17.18.0", "subnet_mask": "8"}, 
+    {"ip_addr": "12.13.14.15"}, 
+    {"subnet_addr": "19.20.21.24", "subnet_mask": "3"}], 
+  "server_ip": "192.168.1.5",
+  "via_ip": "192.168.1.1"}
+
+Notice how 'tail' field is used in first two rules to capture unmatched 
+text, which is then matched against the remaining portion of rule.
+This example can be rewritten to use arbitrary field-name to capture 
+unmatched portion of text. The example below is rewritten to use field 
+'remains' to capture it insteed of 'tail'.
+
+::
+
+    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%remains:rest%
+    rule=:%ip_addr:ipv4%%remains:rest%
+    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive:remains% to %server_ip:ipv4%
+
 regex
 #####
 
@@ -270,7 +333,8 @@ compared to other statically supported field-types. Because of potential
 performance penalty, support for regex is disabled by default. It can be enabled
 by providing appropriate options to tooling/library/scripting layer that interfaces with
 liblognorm (for instance, by using '-oallowRegex' as a commandline arg with lognormalizer
-or using 'allowRegex="on"' in rsyslog module load statement).
+or using 'allowRegex="on"' in rsyslog module load statement). In many cases use of regex
+can be avoided by use of 'recursive' field.
 
 Additional arguments are regular-expression (mandatory), followed by 2 optional arguments,
 namely consume-group and return-group. Consume-group identifies the matched-subsequence
