@@ -61,10 +61,9 @@ dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	printf("liblognorm: %s\n", msg);
 }
 
-void errout(char *errmsg)
+void complain(const char *errmsg)
 {
 	fprintf(stderr, "%s\n", errmsg);
-	exit(1);
 }
 
 
@@ -193,24 +192,47 @@ handle_generic_option(const char* opt) {
 	}
 }
 
+static void usage(void)
+{
+fprintf(stderr,
+	"Options:\n"
+	"    -r<rulebase> Rulebase to use. This is required option\n"
+	"    -e<json|xml|csv>\n"
+	"                 Change output format. By default, Mitre CEE is used\n"
+	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
+	"    -T           Include 'event.tags' in JSON format\n"
+	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
+	"    -p           Print back only if the message has been parsed succesfully\n"
+	"    -t<tag>      Print back only messages matching the tag\n"
+	"    -v           Print debug. When used 3 times, prints parse tree\n"
+	"    -d           Print DOT file to stdout and exit\n"
+	"    -d<filename> Save DOT file to the filename\n"
+	"\n"
+	);
+}
 
 int main(int argc, char *argv[])
 {
 	int opt;
 	char *repository = NULL;
+	int ret = 0;
 
 	if((ctx = ln_initCtx()) == NULL) {
-		errout("Could not initialize liblognorm context");
+		complain("Could not initialize liblognorm context");
+		ret = 1;
+		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:e:r:E:vpt:T:o:")) != -1) {
+	while((opt = getopt(argc, argv, "d:e:r:E:vpt:To:h")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
 				fpDOT = stdout;
 			} else {
 				if((fpDOT = fopen(optarg, "w")) == NULL) {
-					errout("cannot open DOT file");
+					complain("Cannot open DOT file");
+					ret = 1;
+					goto exit;
 				}
 			}
 		case 'v':
@@ -244,12 +266,18 @@ int main(int argc, char *argv[])
 		case 'o':
 			handle_generic_option(optarg);
 			break;
+		case 'h':
+			usage();
+			ret = 1;
+			goto exit;
+			break;
 		}
 	}
 	
 	if(repository == NULL) {
-		ln_exitCtx(ctx);
-		errout("samples repository must be given");
+		complain("Samples repository must be given (-r)");
+		ret = 1;
+		goto exit;
 	}
 
 	if(verbose) {
@@ -264,15 +292,17 @@ int main(int argc, char *argv[])
 
 	if(fpDOT != NULL) {
 		genDOT();
-		exit(1);
+		ret=1;
+		goto exit;
 	}
 
 	if(verbose > 2) ln_displayPTree(ctx->ptree, 0);
 
 	normalize();
 
-	ln_exitCtx(ctx);
+exit:
+	if (ctx) ln_exitCtx(ctx);
 	if (encFmt != NULL)
 		free(encFmt);
-	return 0;
+	return ret;
 }
