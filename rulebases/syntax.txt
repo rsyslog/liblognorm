@@ -1,3 +1,9 @@
+WARNING
+=======
+
+This file is somewhat obsolete, for current information look at doc/
+directory.
+
 Basic syntax
 ============
 

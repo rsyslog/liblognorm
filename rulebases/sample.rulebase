@@ -55,3 +55,12 @@ rule=rfc5424:%date1:date-rfc5424% %test:word% %test2:number%
 
 # quoted_string="Contents of a quoted string cannot include quote marks"
 rule=quote:quoted_string=%quote:quoted-string%
+
+# tokenized words: aaa.org; bbb.com; ccc.net
+rule=tokenized_words:tokenized words: %arr:tokenized:; :char-sep:\x3b%
+
+# tokenized regex: aaa.org; bbb.com; ccc.net
+rule=tokenized_regex:tokenized regex: %arr:tokenized:; :regex:[^; ]+%
+
+# regex: abcdef
+rule=regex:regex: %token:regex:abc.ef%
