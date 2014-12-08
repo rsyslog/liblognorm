@@ -24,3 +24,10 @@ m4/ltversion.m4
 m4/lt~obsolete.m4
 missing
 stamp-h1
+test-driver
+*.trs
+*.log
+test.out
+tmp.rulebase
+src/ln_test
+tests/options.sh

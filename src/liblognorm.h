@@ -61,7 +61,6 @@
 #ifndef LIBLOGNORM_H_INCLUDED
 #define LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
-#include <json.h>
 #include <libestr.h>
 
 /* error codes */
@@ -102,6 +101,19 @@ char *ln_version(void);
 ln_ctx ln_initCtx(void);
 
 /**
+ * Inherit control attributes from a library context.
+ *
+ * This does not copy the parse-tree, but does copy
+ * behaviour-controling attributes such as enableRegex.
+ *
+ * Just as with ln_initCtx, ln_exitCtx() must be called on a library
+ * context that is no longer needed.
+ *
+ * @return new library context or NULL if an error occured
+ */
+ln_ctx ln_inherittedCtx(ln_ctx parent);
+
+/**
  * Discard a library context.
  *
  * Free's the ressources associated with the given library context. It
@@ -112,6 +124,16 @@ ln_ctx ln_initCtx(void);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_exitCtx(ln_ctx ctx);
+
+
+/**
+ * Set options on ctx.
+ *
+ * @param ctx The context to be modified.
+ * @param allow_regex A boolean indicating regex-usage should/shouldn't be allowed
+ */
+void
+ln_setCtxOpts(ln_ctx ctx, int allow_regex);
 
 
 /**

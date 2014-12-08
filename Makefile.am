@@ -8,3 +8,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = lognorm.pc
 
 ACLOCAL_AMFLAGS = -I m4
+
+if ENABLE_TESTBENCH
+    SUBDIRS += tests
+endif

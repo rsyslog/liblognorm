@@ -29,12 +29,17 @@
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
-#include <json.h>
 
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "internal.h"
 #include "parser.h"
+
+#ifdef FEATURE_REGEXP
+#include <pcre.h>
+#include <errno.h>			
+#endif
 
 /* some helpers */
 static inline int
@@ -553,7 +558,6 @@ struct tokenized_parser_data_s {
 };
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
 static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
-void* tokenized_parser_data_constructor(ln_fieldList_t *);
 
 BEGINParser(Tokenized)
 	assert(str != NULL);
@@ -569,8 +573,9 @@ BEGINParser(Tokenized)
 	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
 
 	if (! pData) {
-		r = LN_BADPARSERSTATE;
-		goto fail;
+		json_object_put(json_p);
+		json_object_put(matches);
+		FAIL(LN_BADPARSERSTATE);
 	}
 
 	int remaining_len = strLen - *offs;
@@ -591,8 +596,8 @@ BEGINParser(Tokenized)
 				break;
 			} else {
 				json_object_put(json_p);
-				r = LN_WRONGPARSER;
-				goto fail;
+				json_object_put(matches);
+				FAIL(LN_WRONGPARSER);
 			}
 		}
 
@@ -654,21 +659,26 @@ free:
 	if (field_decl) es_deleteStr(field_decl);
 }
 
-void* tokenized_parser_data_constructor(ln_fieldList_t *node) {
+void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	es_str_t *raw_data = node->raw_data;
 	static const char* const ARG_SEP = ":";
 	static const char* const TAIL_FIELD = "%tail:rest%";
 	static const int TAIL_FIELD_LEN = 11;
-	
-	char *args = es_str2cstr(raw_data, NULL);
-	if (! args) return NULL;
-	char *field_type = strstr(args, ARG_SEP);
+	tokenized_parser_data_t *pData = NULL;
+	char *args = NULL;
+	char *field_type = NULL;
 
-	tokenized_parser_data_t *pData = malloc(sizeof(tokenized_parser_data_t));
+	if (raw_data == NULL) goto fail;
+	args = es_str2cstr(raw_data, NULL);
+	if (args == NULL) return NULL;
+	field_type = strstr(args, ARG_SEP);
+	if (field_type == NULL)  goto fail;
+
+	pData = malloc(sizeof(tokenized_parser_data_t));
 	if (! pData)  goto fail;
 	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
 	es_unescapeStr(pData->tok_str);
-	if (! (pData->ctx = ln_initCtx())) goto fail;
+	if (! (pData->ctx = ln_inherittedCtx(ctx))) goto fail;
 	field_type++;//skip :
 	const int field_type_len = strlen(field_type);
 	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
@@ -681,6 +691,166 @@ free:
 	if (args) free(args);
 	return pData;
 }
+
+#ifdef FEATURE_REGEXP
+
+/**
+ * Parse string matched by provided posix extended regex.
+ *
+ * Please note that using regex field in most cases will be
+ * significantly slower than other field-types.
+ */
+struct regex_parser_data_s {
+	pcre *re;
+	int consume_group;
+	int return_group;
+	int max_groups;
+};
+
+BEGINParser(Regex)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	unsigned int* ovector = NULL;
+
+	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
+    if (pData != NULL) {
+        ovector = calloc(pData->max_groups, sizeof(int) * 3);
+		if (ovector == NULL) FAIL(LN_NOMEM);
+		
+		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
+		if (result == 0) result = pData->max_groups;
+		if (result > pData->consume_group) {
+			if (ovector[2 * pData->consume_group] == *offs) {//please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic
+				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
+				if (pData->consume_group != pData->return_group) {
+					char* val = NULL;
+					CHKN(val = strndup(str + ovector[2 * pData->return_group],
+									   ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group]));
+					*value = json_object_new_string(val);
+					free(val);
+					if (*value == NULL) {
+						free(ovector);
+						FAIL(LN_NOMEM);
+					}
+				}
+			}
+		}
+		free(ovector);
+	}
+ENDParser
+
+const char* regex_parser_configure_consume_and_return_group(const char* part, struct regex_parser_data_s *pData, int args_len, const char* args, const char* sep) {
+	char* next_part = NULL;
+	part++;
+	errno = 0;
+	pData->consume_group = strtol(part, &next_part, 10);
+	if (errno != 0 || strlen(part) == 0) {
+		return "couldn't parse consume-group number";
+	}
+	if (*next_part == *sep) {
+		part = next_part;
+		if ((args_len - (part - args)) > 0) {
+			part++;
+			errno = 0;
+			pData->return_group = strtol(part, &next_part, 10);
+			if (errno != 0 || strlen(part) == 0 || *next_part != '\0') {
+				return "couldn't parse return-group number";
+			}
+		} else {
+			return "couldn't parse return-group number";
+		}
+	} else if (*next_part == '\0') {
+		pData->return_group = pData->consume_group;
+	} else {
+		return "couldn't parse return-group number";
+	}
+	return NULL;
+}
+
+void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	char* sep = ":";
+	char* exp = NULL;
+	es_str_t *tmp = NULL;
+	char* args = NULL;
+	char* name = es_str2cstr(node->name, NULL);
+
+	struct regex_parser_data_s *pData = NULL;
+	if (! ctx->allowRegex) {
+		ln_dbgprintf(ctx, "regex support is not enabled for: '%s' (please check lognorm context initialization)", name);
+		goto fail;
+	}
+	pData = malloc(sizeof(struct regex_parser_data_s));
+	if (pData == NULL) {
+		ln_dbgprintf(ctx, "couldn't allocate parser-data for field: '%s'", name);
+		goto fail;
+	}
+	pData->re = NULL;
+	
+	args = es_str2cstr(node->raw_data, NULL);
+	int args_len = es_strlen(node->raw_data);
+	pData->consume_group = pData->return_group = 0;
+
+    if (args == NULL) {
+		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
+		goto free;
+	}
+	char* part = strstr(args, sep);
+	if (part == NULL) {
+		exp = es_str2cstr(node->data, NULL);
+	} else if ((args_len - (part - args)) > 0) {
+		tmp = es_newStrFromCStr(args, part - args);
+		if (tmp == NULL) {
+			ln_dbgprintf(ctx, "couldn't allocate regex string for: '%s'", name);
+		}
+		es_unescapeStr(tmp);
+		exp = es_str2cstr(tmp, NULL);
+		if ((args_len - (part - args)) > 0) {
+			const char* err = regex_parser_configure_consume_and_return_group(part, pData, args_len, args, sep);
+			if (err != NULL) {
+				ln_dbgprintf(ctx, "%s for: '%s'", err, name);
+				goto fail;
+			}
+		} else if (*part != '\0') {
+			ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
+			goto fail;
+		}
+	} else {
+		ln_dbgprintf(ctx, "found invalid options for: '%s'", name);
+		goto fail;
+	}
+
+	const char *error;
+	int erroffset;
+	if ((pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL)) == NULL) {
+		ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
+					 "for regex-matched field: '%s'", error, erroffset, name);
+		goto fail;
+	}
+	
+	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group : pData->return_group) + 1;
+	goto free;
+fail:
+	regex_parser_data_destructor((void**)&pData);
+free:
+	if (exp != NULL) free(exp);
+	if (tmp != NULL) es_deleteStr(tmp);
+	if (args != NULL) free(args);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+void regex_parser_data_destructor(void** dataPtr) {
+	if ((*dataPtr) != NULL) {
+		struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
+		if (pData->re != NULL) pcre_free(pData->re);
+		free(pData);
+		*dataPtr = NULL;
+	}
+}
+
+#endif
+
 
 /**
  * Just get everything till the end of string.
