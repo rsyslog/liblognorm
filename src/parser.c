@@ -637,18 +637,25 @@ void tokenized_parser_data_destructor(void** dataPtr) {
 	*dataPtr = NULL;
 }
 
-static void load_tokenized_parser_samples(ln_ctx ctx, const char* const field_type, const int field_type_len, const char* const suffix, const int length) {
-	static const char* const RULE_PREFIX = "rule=:%default:";//TODO: extract nice constants
+static void load_tokenized_parser_samples(ln_ctx ctx,
+	const char* const field_type, const int field_type_len,
+	const char* const suffix, const int length) {
+
+	//TODO: extract nice constants
+	static const char* const RULE_PREFIX = "rule=:%default:";
 	static const int RULE_PREFIX_LEN = 15;
+	char *sample_str = NULL;
 	
 	es_str_t *field_decl = es_newStrFromCStr(RULE_PREFIX, RULE_PREFIX_LEN);
 	if (! field_decl) goto free;
 
-	if (es_addBuf(&field_decl, field_type, field_type_len) || es_addBuf(&field_decl, "%", 1) || es_addBuf(&field_decl, suffix, length)) {
+	if (es_addBuf(&field_decl, field_type, field_type_len) 
+		|| es_addBuf(&field_decl, "%", 1) 
+		|| es_addBuf(&field_decl, suffix, length)) {
 		ln_dbgprintf(ctx, "couldn't prepare field for tokenized field-picking: '%s'", field_type);
 		goto free;
 	}
-	char *sample_str = es_str2cstr(field_decl, NULL);
+	sample_str = es_str2cstr(field_decl, NULL);
 	if (! sample_str) {
 		ln_dbgprintf(ctx, "couldn't prepare sample-string for: '%s'", field_type);
 		goto free;
