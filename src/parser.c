@@ -728,12 +728,13 @@ BEGINParser(Regex)
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
-			if (ovector[2 * pData->consume_group] == *offs) {//please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic
+			//please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic
+			if (ovector[2 * pData->consume_group] == *offs) {
 				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
 				if (pData->consume_group != pData->return_group) {
 					char* val = NULL;
 					CHKN(val = strndup(str + ovector[2 * pData->return_group],
-									   ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group]));
+						ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group]));
 					*value = json_object_new_string(val);
 					free(val);
 					if (*value == NULL) {
