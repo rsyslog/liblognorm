@@ -721,8 +721,8 @@ BEGINParser(Regex)
 	unsigned int* ovector = NULL;
 
 	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
-    if (pData != NULL) {
-        ovector = calloc(pData->max_groups, sizeof(int) * 3);
+	if (pData != NULL) {
+		ovector = calloc(pData->max_groups, sizeof(int) * 3);
 		if (ovector == NULL) FAIL(LN_NOMEM);
 		
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
@@ -747,7 +747,9 @@ BEGINParser(Regex)
 	}
 ENDParser
 
-const char* regex_parser_configure_consume_and_return_group(const char* part, struct regex_parser_data_s *pData, int args_len, const char* args, const char* sep) {
+const char* regex_parser_configure_consume_and_return_group(const char* part,
+	struct regex_parser_data_s *pData, int args_len, const char* args,
+	const char* sep) {
 	char* next_part = NULL;
 	part++;
 	errno = 0;
@@ -798,9 +800,9 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	int args_len = es_strlen(node->raw_data);
 	pData->consume_group = pData->return_group = 0;
 
-    if (args == NULL) {
+	if (args == NULL) {
 		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
-		goto free;
+		goto fail;
 	}
 	char* part = strstr(args, sep);
 	if (part == NULL) {
@@ -809,9 +811,14 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 		tmp = es_newStrFromCStr(args, part - args);
 		if (tmp == NULL) {
 			ln_dbgprintf(ctx, "couldn't allocate regex string for: '%s'", name);
+			goto fail;
 		}
 		es_unescapeStr(tmp);
 		exp = es_str2cstr(tmp, NULL);
+		if (!exp) {
+			ln_dbgprintf(ctx, "couldn't allocate regex cstr for: '%s'", name);
+			goto fail;
+		}
 		if ((args_len - (part - args)) > 0) {
 			const char* err = regex_parser_configure_consume_and_return_group(part, pData, args_len, args, sep);
 			if (err != NULL) {
