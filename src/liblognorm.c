@@ -53,6 +53,8 @@ ln_inherittedCtx(ln_ctx parent)
 	ln_ctx child = ln_initCtx();
 	if (child != NULL) {
 		child->allowRegex = parent->allowRegex;
+		child->dbgCB = parent->dbgCB;
+		child->dbgCookie = parent->dbgCookie;
 	}
 	return child;
 }
