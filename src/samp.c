@@ -30,6 +30,7 @@
 #include <assert.h>
 #include <ctype.h>
 
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
@@ -114,7 +115,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	char *cstr;	/* for debug mode strings */
 	unsigned char *buf;
 	es_size_t lenBuf;
-	void* (*constructor_fn)(ln_fieldList_t *) = NULL;
+	void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
 
 	assert(subtree != NULL);
 
@@ -122,7 +123,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	lenBuf = es_strlen(rule);
 	assert(buf[i] == '%');
 	++i;	/* "eat" ':' */
-	CHKN(node = malloc(sizeof(ln_fieldList_t)));
+	CHKN(node = calloc(1, sizeof(ln_fieldList_t)));
 	node->subtree = NULL;
 	node->next = NULL;
 	node->data = NULL;
@@ -199,7 +200,15 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ln_parseTokenized;
 		constructor_fn = tokenized_parser_data_constructor;
 		node->parser_data_destructor = tokenized_parser_data_destructor;
-	} else {
+	}
+#ifdef FEATURE_REGEXP
+	else if(!es_strconstcmp(*str, "regex")) {
+		node->parser = ln_parseRegex;
+		constructor_fn = regex_parser_data_constructor;
+		node->parser_data_destructor = regex_parser_data_destructor;
+	}
+#endif
+	else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
 		free(cstr);
@@ -228,7 +237,7 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		}
 	}
 
-	if (constructor_fn) node->parser_data = constructor_fn(node);
+	if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
 
 
 	/* finished */
@@ -236,7 +245,12 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	*bufOffs = i;
 	r = 0;
 
-done:	return r;
+done:
+	if (r != 0) {
+		if (node->name != NULL) es_deleteStr(node->name);
+		free(node);
+	}
+	return r;
 }
 
 
@@ -270,7 +284,7 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 			if(i+1 < lenBuf && buf[i+1] != '%') {
 				break; /* field start is end of literal */
 			}
-			++i;
+			if (++i == lenBuf) break;
 		}
 		CHKR(es_addChar(str, buf[i]));
 		++i;

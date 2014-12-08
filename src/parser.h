@@ -108,8 +108,18 @@ int ln_parseIPv4(const char *str, size_t strlen, size_t *offs, const ln_fieldLis
  */
 int ln_parseTokenized(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-void* tokenized_parser_data_constructor(ln_fieldList_t *node);
+void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void tokenized_parser_data_destructor(void** dataPtr);
+
+#ifdef FEATURE_REGEXP
+/** 
+ * Get field matching regex
+ */
+int ln_parseRegex(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void regex_parser_data_destructor(void** dataPtr);
+#endif
 
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */

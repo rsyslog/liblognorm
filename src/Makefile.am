@@ -12,6 +12,13 @@ lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) 
 lognormalizer_DEPENDENCIES = liblognorm.la
 
+check_PROGRAMS = ln_test
+ln_test_SOURCES = $(lognormalizer_SOURCES)
+ln_test_CPPFLAGS = $(lognormalizer_CPPFLAGS)
+ln_test_LDADD = $(lognormalizer_LDADD)
+ln_test_DEPENDENCIES = $(lognormalizer_DEPENDENCIES)
+ln_test_LDFLAGS = -no-install
+
 lib_LTLIBRARIES = liblognorm.la
 
 liblognorm_la_SOURCES = \
@@ -23,7 +30,8 @@ liblognorm_la_SOURCES = \
 	parser.c \
 	enc_syslog.c \
 	enc_csv.c \
-	enc_xml.c
+	enc_xml.c \
+	json_compatibility.c
 
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) -lestr

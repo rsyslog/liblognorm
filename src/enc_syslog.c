@@ -38,8 +38,8 @@
 #include <string.h>
 
 #include <libestr.h>
-#include <json.h>
 
+#include "json_compatibility.h"
 #include "internal.h"
 #include "liblognorm.h"
 

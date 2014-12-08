@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "ptree.h"

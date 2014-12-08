@@ -46,8 +46,32 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(JSON_C, json-c,, [
-	PKG_CHECK_MODULES(JSON_C, json)])
+PKG_CHECK_MODULES(JSON_C, json-c,, [PKG_CHECK_MODULES(JSON_C, json)])
+
+CFLAGS_BEFORE="$CFLAGS"
+LIBS_BEFORE="$LIBS"
+CFLAGS="$CFLAGS $JSON_C_CFLAGS"
+LIBS="$LIBS $JSON_C_LIBS"
+AC_CHECK_FUNCS(json_object_object_get_ex,,)
+AC_CHECK_FUNCS(json_object_get_string_len,,)
+LIBS="$LIBS_BEFORE"
+CFLAGS="$CFLAGS_BEFORE"
+
+# Regular expressions
+AC_ARG_ENABLE(regexp,
+        [AS_HELP_STRING([--enable-regexp],[Enable regular expressions support @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_regexp="yes" ;;
+          no) enable_regexp="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-regexp) ;;
+         esac],
+        [enable_regexp="no"]
+)
+AM_CONDITIONAL(ENABLE_REGEXP, test x$enable_regexp = xyes)
+if test "$enable_regexp" = "yes"; then
+        AX_PATH_LIB_PCRE
+        AC_DEFINE(FEATURE_REGEXP, 1, [Regular expressions support enabled.])
+fi
 
 # debug mode settings
 AC_ARG_ENABLE(debug,
@@ -78,10 +102,36 @@ AS_IF([test "$enable_docs" = "yes" -a "x$SPHINXBUILD" = xno],
 )
 AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = yes])
 
+AC_ARG_ENABLE(testbench,
+        [AS_HELP_STRING([--enable-testbench],[testbench enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_testbench="yes" ;;
+          no) enable_testbench="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-testbench) ;;
+         esac],
+        [enable_testbench=no]
+)
+AM_CONDITIONAL(ENABLE_TESTBENCH, test x$enable_testbench = xyes)
+
+AC_ARG_ENABLE(valgrind,
+        [AS_HELP_STRING([--enable-valgrind],[valgrind enabled @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_valgrind="yes" ;;
+          no) enable_valgrind=="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-valgrind) ;;
+         esac],
+        [enable_valgrind=no]
+)
+AM_CONDITIONAL(ENABLE_VALGRIND, test x$enable_valgrind = xyes)
+VALGRIND="$enable_valgrind"
+AC_SUBST(VALGRIND)
+
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		doc/Makefile \
-		src/Makefile])
+		src/Makefile \
+		tests/Makefile \
+		tests/options.sh])
 AC_OUTPUT
 AC_CONFIG_MACRO_DIR([m4])
 
@@ -89,5 +139,9 @@ AC_CONFIG_MACRO_DIR([m4])
 echo "*****************************************************"
 echo "liblognorm will be compiled with the following settings:"
 echo
+echo "Regex enabled:               $enable_regexp"
+echo "Testbench enabled:           $enable_testbench"
+echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
+echo "Docs enabled:                $enable_docs"
 
