@@ -786,7 +786,8 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 
 	struct regex_parser_data_s *pData = NULL;
 	if (! ctx->allowRegex) {
-		ln_dbgprintf(ctx, "regex support is not enabled for: '%s' (please check lognorm context initialization)", name);
+		ln_dbgprintf(ctx, "WARNING: regex support is not enabled for: '%s'"
+			" (please check lognorm context initialization)", name);
 		goto fail;
 	}
 	pData = malloc(sizeof(struct regex_parser_data_s));
