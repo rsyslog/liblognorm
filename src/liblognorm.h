@@ -66,6 +66,7 @@
 /* error codes */
 #define LN_NOMEM -1
 #define LN_INVLDFDESCR -1
+#define LN_BADCONFIG -250
 #define LN_BADPARSERSTATE -500
 #define LN_WRONGPARSER -1000
 

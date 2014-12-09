@@ -7,7 +7,8 @@ json_eq_LDFLAGS = -no-install
 TESTS = \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
-	field_recursive.sh
+	field_recursive.sh \
+	field_tokenized_recursive.sh
 
 if ENABLE_REGEXP
 TESTS +=  \

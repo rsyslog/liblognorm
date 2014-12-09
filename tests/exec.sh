@@ -36,13 +36,22 @@ function assert_output_json_eq() {
     ./json_eq "$1" "$(cat test.out)"
 }
 
+function rulebase_file_name() {
+    if [ "x$1" == "x" ]; then
+	echo tmp.rulebase
+    else
+	echo $1.rulebase
+    fi
+}
 
 function reset_rules() {
-    rm -f tmp.rulebase
+    local rb_file=$(rulebase_file_name $1)
+    rm -f $rb_file
 }
 
 function add_rule() {
-    echo $1 >> tmp.rulebase
+    local rb_file=$(rulebase_file_name $2)
+    echo $1 >> $rb_file
 }
 
 reset_rules
