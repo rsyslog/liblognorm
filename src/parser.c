@@ -733,7 +733,7 @@ void recursive_parser_data_destructor(void** dataPtr) {
  * The token found is parsed according to the field-type provided after
  *  tokenizer char-seq.
  */
-#define DEFAULT_TOKENIZED_FIELD_NAME "default"
+#define DEFAULT_MATCHED_FIELD_NAME "default"
 
 struct tokenized_parser_data_s {
 	es_str_t *tok_str;
@@ -744,7 +744,6 @@ struct tokenized_parser_data_s {
 };
 
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
-static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
 
 BEGINParser(Tokenized) {
 	assert(str != NULL);
@@ -774,7 +773,7 @@ BEGINParser(Tokenized) {
 
 			if (remaining) json_object_put(remaining);
 
-			if (pData->use_default_field && json_object_object_get_ex(json_p, DEFAULT_TOKENIZED_FIELD_NAME, &match)) {
+			if (pData->use_default_field && json_object_object_get_ex(json_p, DEFAULT_MATCHED_FIELD_NAME, &match)) {
 				json_object_array_add(matches, json_object_get(match));
 			} else if (! (pData->use_default_field || json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
 				json_object_array_add(matches, json_object_get(json_p));
@@ -807,7 +806,7 @@ BEGINParser(Tokenized) {
 				break;
 			}
 
-			if (pData->use_default_field) json_object_object_del(json_p, DEFAULT_TOKENIZED_FIELD_NAME);
+			if (pData->use_default_field) json_object_object_del(json_p, DEFAULT_MATCHED_FIELD_NAME);
 		}
 		json_object_put(json_p);
 
@@ -829,10 +828,10 @@ void tokenized_parser_data_destructor(void** dataPtr) {
 	*dataPtr = NULL;
 }
 
-static void load_tokenized_parser_samples(ln_ctx ctx,
+static void load_generated_parser_samples(ln_ctx ctx,
 	const char* const field_descr, const int field_descr_len,
 	const char* const suffix, const int length) {
-	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_TOKENIZED_FIELD_NAME":";//TODO: extract nice constants
+	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";//TODO: extract nice constants
 	static const int RULE_PREFIX_LEN = 15;
 	char *sample_str = NULL;
 	
@@ -856,6 +855,22 @@ free:
 	if (field_decl) es_deleteStr(field_decl);
 }
 
+static ln_ctx generate_context_with_field_as_prefix(ln_ctx parent, const char* field_descr, int field_descr_len) {
+	int r = LN_BADCONFIG;
+	const char* remaining_field = "%"DEFAULT_REMAINING_FIELD_NAME":rest%";
+	ln_ctx ctx = NULL;
+	CHKN(ctx = ln_inherittedCtx(parent));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, remaining_field, strlen(remaining_field));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, "", 0);
+	r = 0;
+done:
+	if (r != 0) {
+		ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
 static ln_fieldList_t* parse_tokenized_content_field(ln_ctx ctx, const char* field_descr, size_t field_descr_len) {
 	es_str_t* tmp = NULL;
 	es_str_t* descr = NULL;
@@ -863,7 +878,7 @@ static ln_fieldList_t* parse_tokenized_content_field(ln_ctx ctx, const char* fie
 	int r = 0;
 	CHKN(tmp = es_newStr(80));
 	CHKN(descr = es_newStr(80));
-	const char* field_prefix = "%" DEFAULT_TOKENIZED_FIELD_NAME ":";
+	const char* field_prefix = "%" DEFAULT_MATCHED_FIELD_NAME ":";
 	CHKR(es_addBuf(&descr, field_prefix, strlen(field_prefix)));
 	CHKR(es_addBuf(&descr, field_descr, field_descr_len));
 	CHKR(es_addChar(&descr, '%'));
@@ -908,10 +923,7 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	} else {
 		pData->free_ctx = 1;
 		pData->use_default_field = 1;
-		const char* remaining_field = "%"DEFAULT_REMAINING_FIELD_NAME":rest%";
-		CHKN(pData->ctx = ln_inherittedCtx(ctx));
-		load_tokenized_parser_samples(pData->ctx, field_descr, field_descr_len, remaining_field, strlen(remaining_field));
-		load_tokenized_parser_samples(pData->ctx, field_descr, field_descr_len, "", 0);
+		CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_descr, field_descr_len));
 	}
 	if (pData->remaining_field == NULL) CHKN(pData->remaining_field = strdup(DEFAULT_REMAINING_FIELD_NAME));
 	r = 0;
@@ -1067,6 +1079,153 @@ void regex_parser_data_destructor(void** dataPtr) {
 }
 
 #endif
+
+/**
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
+ */
+typedef enum interpret_type {
+	/* If you change this, be sure to update json_type_to_name() too */
+	b10int,
+	b16int,
+	floating_pt,
+	boolean
+} interpret_type;
+
+struct interpret_parser_data_s {
+	ln_ctx ctx;
+	enum interpret_type intrprt;
+};
+
+static json_object* interpret_as_int(json_object *value, int base) {
+	if (json_object_is_type(value, json_type_string)) {
+		return json_object_new_int64(strtol(json_object_get_string(value), NULL, base));
+	} else if (json_object_is_type(value, json_type_int)) {
+		return value;
+	} else {
+		return NULL;
+	}
+}
+
+static json_object* interpret_as_double(json_object *value) {
+	double val = json_object_get_double(value);
+	return json_object_new_double(val);
+}
+
+static json_object* interpret_as_boolean(json_object *value) {
+	json_bool val;
+	if (json_object_is_type(value, json_type_string)) {
+		const char* str = json_object_get_string(value);
+		val = (strcasecmp(str, "false") == 0 || strcasecmp(str, "no") == 0) ? 0 : 1;
+	} else {
+		val = json_object_get_boolean(value);
+	}
+	return json_object_new_boolean(val);
+}
+
+static int reinterpret_value(json_object **value, enum interpret_type to_type) {
+	switch(to_type) {
+	case b10int:
+		*value = interpret_as_int(*value, 10);
+		break;
+	case b16int:
+		*value = interpret_as_int(*value, 16);
+		break;
+	case floating_pt:
+		*value = interpret_as_double(*value);
+		break;
+	case boolean:
+		*value = interpret_as_boolean(*value);
+		break;
+	default:
+		return 0;
+	}
+	return 1;
+}
+
+BEGINParser(Interpret)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	json_object *unparsed = NULL;
+	json_object *parsed_raw = NULL;
+
+	struct interpret_parser_data_s* pData = (struct interpret_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+	
+		CHKN(parsed_raw = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
+
+		if (json_object_object_get_ex(parsed_raw, UNPARSED_DATA_KEY, NULL)) {
+			*parsed = 0;
+		} else {
+			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, value);
+			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
+			if (reinterpret_value(value, pData->intrprt)) {
+				*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			}
+		}
+		json_object_put(parsed_raw);
+	}
+ENDParser
+
+void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	char* name = NULL;
+	struct interpret_parser_data_s *pData = NULL;
+	pcons_args_t *args = NULL;
+	int bad_interpret = 0;
+	const char* type_str = NULL;
+	const char *field_type = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(pData = calloc(1, sizeof(struct interpret_parser_data_s)));
+	CHKN(args = pcons_args(node->raw_data, 2));
+	CHKN(type_str = pcons_arg(args, 0, NULL));
+	if (strcmp(type_str, "int") == 0 || strcmp(type_str, "base10int") == 0) {
+		pData->intrprt = b10int;
+	} else if (strcmp(type_str, "base16int") == 0) {
+		pData->intrprt = b16int;
+	} else if (strcmp(type_str, "float") == 0) {
+		pData->intrprt = floating_pt;
+	} else if (strcmp(type_str, "bool") == 0) {
+		pData->intrprt = boolean;
+	} else {
+		bad_interpret = 1;
+		FAIL(LN_BADCONFIG);
+	}
+	
+	CHKN(field_type = pcons_arg(args, 1, NULL));
+	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for interpret-field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (type_str == NULL) ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
+		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s", type_str, name);
+		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching field: %s", name);
+
+		interpret_parser_data_destructor((void**) &pData);
+	}
+	free(name);
+	free_pcons_args(&args);
+	return pData;
+}
+
+void interpret_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct interpret_parser_data_s *pData = (struct interpret_parser_data_s*) *dataPtr;
+		if (pData->ctx != NULL) ln_exitCtx(pData->ctx);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
 
 /**
  * Just get everything till the end of string.
