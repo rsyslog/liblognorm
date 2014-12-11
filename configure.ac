@@ -54,6 +54,9 @@ CFLAGS="$CFLAGS $JSON_C_CFLAGS"
 LIBS="$LIBS $JSON_C_LIBS"
 AC_CHECK_FUNCS(json_object_object_get_ex,,)
 AC_CHECK_FUNCS(json_object_get_string_len,,)
+AC_CHECK_TYPE(json_bool,,,)
+AC_CHECK_FUNCS(json_object_get_int64,,)
+AC_CHECK_FUNCS(json_object_new_int64,,)
 LIBS="$LIBS_BEFORE"
 CFLAGS="$CFLAGS_BEFORE"
 
