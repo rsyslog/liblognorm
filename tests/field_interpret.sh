@@ -35,3 +35,12 @@ add_rule 'rule=:%latency_percentile:interpret:float:char-to:\x25%\x25ile latency
 execute '98%ile latency is 1.999123'
 assert_output_json_eq '{"latency_percentile": 98.0, "latency": 1.999123}'
 
+reset_rules
+add_rule 'rule=:%latency_percentile:interpret:float:number%'
+add_rule 'rule=:%latency_percentile:interpret:int:number%'
+add_rule 'rule=:%latency_percentile:interpret:base16int:number%'
+add_rule 'rule=:%latency_percentile:interpret:base10int:number%'
+add_rule 'rule=:%latency_percentile:interpret:boolean:number%'
+execute 'foo'
+assert_output_json_eq '{ "originalmsg": "foo", "unparsed-data": "foo" }'
+
