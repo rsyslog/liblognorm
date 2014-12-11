@@ -373,6 +373,93 @@ consuming the comma as well. So the using regex here can be helpful.
 Note that consume-group must match content starting at the begining of string, else it wouldn't
 be considererd matching anything at all.
 
+interpret
+#########
+
+Meta field-type to re-interpret matched content as any supported type.
+
+This field doesn't match text on its own, it just re-interprets the matched content and
+passes it out as desired type. The matcher field-type is passed as one of the arguments to 
+it.
+
+It needs 2 additional options, the first is desired type that matched content should 
+be re-interpreted to, and second is actual field-declaration which is used to match the content.
+
+Special characters such as percent(%) and colon(:) occuring as a part of arguments to 
+field-declaration must be escaped similar to first-class usage of the field.
+
+Here is an example that shows how reinterpret field can be used to extract an integer from 
+matched content.
+
+::
+
+    %count:interpret:int:word%
+
+Here is a more elaborate example which extracts multiple integer and double values. 
+(Note how latency_percentile field uses escaping, its no different from directly calling char-to).
+
+::
+
+    record count for shard [%shard:interpret:base16int:char-to:]%] is %record_count:interpret:base10int:number% and %latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word% %latency_unit:word%
+
+Given text "record count for shard [3F] is 50000 and 99.99%ile latency is 2.1 seconds" the 
+above rule would produce the following:
+
+.. code-block:: json
+
+  {"shard": 63, 
+   "record_count": 50000, 
+   "latency_percentile": 99.99, 
+   "latency": 2.1, 
+   "latency_unit" : "seconds"}
+
+To contrast this with a interpret-free version, the rule(without interpret) would look like:
+
+::
+
+    record count for shard [%shard:char-to:]%] is %record_count:number% and %latency_percentile:char-to:\x25%\x25ile latency is %latency:word% %latency_unit:word%
+
+And would produce:
+
+.. code-block:: json
+
+  {"shard": "3F", 
+   "record_count": "50000", 
+   "latency_percentile": "99.99", 
+   "latency": "2.1", 
+   "latency_unit" : "seconds"}
+
+Interpret fields is generally useful when generated json needs to be consumed by an indexing-system
+of some kind (eg. database), because ordering and indexing mechanism of a string is very different from
+that of a number or a boolean, and keeping it in its native type allows for powerful aggregation and 
+querying.
+
+Here is a table of supported interpretation:
+
++-----------+----------------------+---------------+----------------+
+| type      | description          | matched value | returned value |
++-----------+----------------------+---------------+----------------+
+| int       | integer value        | "100"         | 100            |
++-----------+----------------------+---------------+----------------+
+| base10int | integer value        | "100"         | 100            |
++-----------+----------------------+---------------+----------------+
+| base16int | integer value        | "3F"          | 163            |
++-----------+----------------------+---------------+----------------+
+| float     | floating point value | "19.35"       | 19.35          |
++-----------+----------------------+---------------+----------------+
+| bool      | boolean value        | "true"        | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "false"       | false          |
++-----------+----------------------+---------------+----------------+
+|           |                      | "yes"         | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "no"          | false          |
++-----------+----------------------+---------------+----------------+
+|           |                      | "TRUE"        | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "FALSE"       | false          |
++-----------+----------------------+---------------+----------------+
+
 
 iptables
 ########    

@@ -26,7 +26,7 @@ execute 'max sessions limit reached: NO'
 assert_output_json_eq '{"at_limit": false}'
 
 reset_rules
-add_rule 'rule=:record count for shard [%shard:interpret:base16int:char-to:]%] is %record_count:interpret:base10int:word% and %latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word% %latency_unit:word%'
+add_rule 'rule=:record count for shard [%shard:interpret:base16int:char-to:]%] is %record_count:interpret:base10int:number% and %latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word% %latency_unit:word%'
 execute 'record count for shard [3F] is 50000 and 99.99%ile latency is 2.1 seconds'
 assert_output_json_eq '{"shard": 63, "record_count": 50000, "latency_percentile": 99.99, "latency": 2.1, "latency_unit" : "seconds"}'
 
