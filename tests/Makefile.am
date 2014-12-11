@@ -8,7 +8,8 @@ TESTS = \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
 	field_recursive.sh \
-	field_tokenized_recursive.sh
+	field_tokenized_recursive.sh \
+	field_interpret.sh
 
 if ENABLE_REGEXP
 TESTS +=  \
