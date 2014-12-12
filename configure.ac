@@ -71,7 +71,11 @@ AM_CONDITIONAL(ENABLE_REGEXP, test x$enable_regexp = xyes)
 if test "$enable_regexp" = "yes"; then
         AX_PATH_LIB_PCRE
         AC_DEFINE(FEATURE_REGEXP, 1, [Regular expressions support enabled.])
+	FEATURE_REGEXP=1
+else
+	FEATURE_REGEXP=0
 fi
+AC_SUBST(FEATURE_REGEXP)
 
 # debug mode settings
 AC_ARG_ENABLE(debug,
@@ -130,6 +134,7 @@ AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		doc/Makefile \
 		src/Makefile \
+		src/lognorm-features.h \
 		tests/Makefile \
 		tests/options.sh])
 AC_OUTPUT
