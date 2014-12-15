@@ -6,3 +6,4 @@ Makefile.in
 .deps
 .libs
 lognormalizer
+lognorm-features.h

@@ -47,4 +47,4 @@ EXTRA_DIST = \
 	enc.h \
 	parser.h
 
-include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h enc.h parser.h
+include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h enc.h parser.h lognorm-features.h
