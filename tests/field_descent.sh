@@ -58,3 +58,12 @@ assert_output_json_eq '{"op": {"action": "blocked", "net": {"ip_addr": "10.20.30
 execute '10.20.30.40/16 unblocked on gw-2'
 assert_output_json_eq '{"op": {"action": "unblocked", "net": {"subnet_addr": "10.20.30.40", "mask": "16"}}, "device": "gw-2"}'
 
+#descent with file name having lognorm special char
+add_rule 'rule=:blocked on %device:word% %net:descent:'$srcdir'/part\x3anet.rulebase%at %tm:date-rfc5424%'
+reset_rules 'part:net'
+add_rule 'rule=:%ip_addr:ipv4% %tail:rest%' 'part:net'
+add_rule 'rule=:%subnet_addr:ipv4%/%mask:number% %tail:rest%' 'part:net'
+execute 'blocked on gw-1 10.20.30.40 at 2014-12-08T08:53:33.05+05:30'
+assert_output_json_eq '{"device": "gw-1", "net": {"ip_addr": "10.20.30.40"}, "tm": "2014-12-08T08:53:33.05+05:30"}'
+execute 'blocked on gw-1 10.20.30.40/16 at 2014-12-08T08:53:33.05+05:30'
+assert_output_json_eq '{"device": "gw-1", "net": {"subnet_addr": "10.20.30.40", "mask": "16"}, "tm": "2014-12-08T08:53:33.05+05:30"}'

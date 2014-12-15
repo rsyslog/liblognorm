@@ -708,12 +708,12 @@ static void* _recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive-field name");
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
 		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive normalizer context creation failed for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation failed for field: %s", name);
 		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
-															  "recursive field: %s", name);
+															  "recursive/descent field: %s", name);
 
 		recursive_parser_data_destructor((void**) &pData);
 	}
@@ -736,6 +736,7 @@ static ln_ctx child_recursive_parse_ctx_constructor(ln_ctx parent_ctx, pcons_arg
 	int r = LN_BADCONFIG;
 	const char* rb = NULL;
 	ln_ctx ctx = NULL;
+	pcons_unescape_arg(args, 0);
 	CHKN(rb = pcons_arg(args, 0, NULL));
 	CHKN(ctx = ln_inherittedCtx(parent_ctx));
 	CHKR(ln_loadSamples(ctx, rb));
