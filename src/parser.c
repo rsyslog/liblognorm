@@ -659,6 +659,7 @@ ENDParser
 struct recursive_parser_data_s {
 	ln_ctx ctx;
 	char* remaining_field;
+	int free_ctx;
 };
 
 BEGINParser(Recursive)
@@ -671,7 +672,6 @@ BEGINParser(Recursive)
 	if (pData != NULL) {
 		int remaining_len = strLen - *offs;
 		const char *remaining_str = str + *offs;
-	
 		json_object *unparsed = NULL;
 		CHKN(*value = json_object_new_object());
 
@@ -690,24 +690,30 @@ BEGINParser(Recursive)
 	}
 ENDParser
 
-void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+typedef ln_ctx (ctx_constructor)(ln_ctx, pcons_args_t*, const char*);
+
+static void* _recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx, int no_of_args, int remaining_field_arg_idx,
+												int free_ctx, ctx_constructor *fn) {
 	int r = LN_BADCONFIG;
 	char* name = NULL;
 	struct recursive_parser_data_s *pData = NULL;
 	pcons_args_t *args = NULL;
 	CHKN(name = es_str2cstr(node->name, NULL));
-	CHKN(pData = malloc(sizeof(struct recursive_parser_data_s)));
+	CHKN(pData = calloc(1, sizeof(struct recursive_parser_data_s)));
+	pData->free_ctx = free_ctx;
 	pData->remaining_field = NULL;
-	pData->ctx = ctx;
-	CHKN(args = pcons_args(node->raw_data, 1));
-	CHKN(pData->remaining_field = pcons_arg_copy(args, 0, DEFAULT_REMAINING_FIELD_NAME));
+	CHKN(args = pcons_args(node->raw_data, no_of_args));
+	CHKN(pData->ctx = fn(ctx, args, name));
+	CHKN(pData->remaining_field = pcons_arg_copy(args, remaining_field_arg_idx, DEFAULT_REMAINING_FIELD_NAME));
 	r = 0;
 done:
 	if (r != 0) {
 		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive-field name");
 		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for recursive field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive normalizer context creation failed for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
+															  "recursive field: %s", name);
 
 		recursive_parser_data_destructor((void**) &pData);
 	}
@@ -716,9 +722,46 @@ done:
 	return pData;
 }
 
+static ln_ctx identity_recursive_parse_ctx_constructor(ln_ctx parent_ctx,
+													   __attribute__((unused)) pcons_args_t* args,
+													   __attribute__((unused)) const char* field_name) {
+	return parent_ctx;
+}
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 1, 0, 0, identity_recursive_parse_ctx_constructor);
+}
+
+static ln_ctx child_recursive_parse_ctx_constructor(ln_ctx parent_ctx, pcons_args_t* args, const char* field_name) {
+	int r = LN_BADCONFIG;
+	const char* rb = NULL;
+	ln_ctx ctx = NULL;
+	CHKN(rb = pcons_arg(args, 0, NULL));
+	CHKN(ctx = ln_inherittedCtx(parent_ctx));
+	CHKR(ln_loadSamples(ctx, rb));
+done:
+	if (r != 0) {
+		if (rb == NULL) ln_dbgprintf(parent_ctx, "file-name for descent rulebase not provided for field: %s", field_name);
+		else if (ctx == NULL) ln_dbgprintf(parent_ctx, "couldn't allocate memory to create descent-field normalizer context "
+										   "for field: %s", field_name);
+		else ln_dbgprintf(parent_ctx, "couldn't load samples into descent context for field: %s", field_name);
+		if (ctx != NULL) ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
+void* descent_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 2, 1, 1, child_recursive_parse_ctx_constructor);
+}
+
 void recursive_parser_data_destructor(void** dataPtr) {
 	if (*dataPtr != NULL) {
 		struct recursive_parser_data_s *pData = (struct recursive_parser_data_s*) *dataPtr;
+		if (pData->free_ctx && pData->ctx != NULL) {
+			ln_exitCtx(pData->ctx);
+			pData->ctx = NULL;
+		}
 		if (pData->remaining_field != NULL) free(pData->remaining_field);
 		free(pData);
 		*dataPtr = NULL;
@@ -762,13 +805,13 @@ BEGINParser(Tokenized) {
 		const char *remaining_str = str + *offs;
 		json_object *remaining = NULL;
 		json_object *match = NULL;
-	
+
 		while (remaining_len > 0) {
 			if (! pData->use_default_field) {
 				json_object_put(json_p);
 				json_p = json_object_new_object();
 			} //TODO: handle null condition gracefully
-			
+
 			ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
 
 			if (remaining) json_object_put(remaining);
@@ -833,8 +876,8 @@ static void load_generated_parser_samples(ln_ctx ctx,
 	const char* const suffix, const int length) {
 	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";//TODO: extract nice constants
 	static const int RULE_PREFIX_LEN = 15;
+
 	char *sample_str = NULL;
-	
 	es_str_t *field_decl = es_newStrFromCStr(RULE_PREFIX, RULE_PREFIX_LEN);
 	if (! field_decl) goto free;
 
@@ -912,16 +955,18 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	CHKN(pData->tok_str = es_newStrFromCStr(tok, strlen(tok)));
 	CHKN(field_descr = pcons_arg(args, 1, NULL));
 	const int field_descr_len = strlen(field_descr);
+	pData->free_ctx = 1;
 	CHKN(field = parse_tokenized_content_field(ctx, field_descr, field_descr_len));
 	if (field->parser == ln_parseRecursive) {
 		pData->use_default_field = 0;
 		struct recursive_parser_data_s *dat = (struct recursive_parser_data_s*) field->parser_data;
 		if (dat != NULL) {
 			CHKN(pData->remaining_field = strdup(dat->remaining_field));
+			pData->free_ctx = dat->free_ctx;
+			pData->ctx = dat->ctx;
+			dat->free_ctx = 0;
 		}
-		pData->ctx = ctx;
 	} else {
-		pData->free_ctx = 1;
 		pData->use_default_field = 1;
 		CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_descr, field_descr_len));
 	}
@@ -936,8 +981,9 @@ done:
 		else if (pData->tok_str == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for token-separator for field: %s", name);
 		else if (field_descr == NULL) ln_dbgprintf(ctx, "field-type not provided for field: %s", name);
 		else if (field == NULL) ln_dbgprintf(ctx, "couldn't resolve single-token field-type for tokenized field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for normalizer-context for field: %s", name);
-		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field-name for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't initialize normalizer-context for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for "
+															  "remaining-field-name for field: %s", name);
 		if (pData) tokenized_parser_data_destructor((void**) &pData);
 	}
 	if (name != NULL) free(name);
@@ -971,7 +1017,7 @@ BEGINParser(Regex)
 	if (pData != NULL) {
 		ovector = calloc(pData->max_groups, sizeof(int) * 3);
 		if (ovector == NULL) FAIL(LN_NOMEM);
-		
+
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
@@ -1036,7 +1082,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	if (! ctx->allowRegex) FAIL(LN_BADCONFIG);
 	CHKN(pData = malloc(sizeof(struct regex_parser_data_s)));
 	pData->re = NULL;
-	
+
 	CHKN(args = pcons_args(node->raw_data, 3));
 	pData->consume_group = pData->return_group = 0;
 	CHKN(unescaped_exp = pcons_arg(args, 0, NULL));
@@ -1155,7 +1201,7 @@ BEGINParser(Interpret)
 	if (pData != NULL) {
 		int remaining_len = strLen - *offs;
 		const char *remaining_str = str + *offs;
-	
+
 		CHKN(parsed_raw = json_object_new_object());
 
 		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
@@ -1197,7 +1243,7 @@ void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 		bad_interpret = 1;
 		FAIL(LN_BADCONFIG);
 	}
-	
+
 	CHKN(field_type = pcons_arg(args, 1, NULL));
 	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
 	r = 0;
@@ -1207,9 +1253,12 @@ done:
 		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
 		else if (type_str == NULL) ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
-		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s", type_str, name);
-		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching field: %s", name);
+		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s",
+												  type_str, name);
+		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for "
+												  "field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching "
+												  "field: %s", name);
 
 		interpret_parser_data_destructor((void**) &pData);
 	}

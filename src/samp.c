@@ -224,6 +224,10 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
         node->parser = ln_parseRecursive;
         constructor_fn = recursive_parser_data_constructor;
         node->parser_data_destructor = recursive_parser_data_destructor;
+    } else if (!es_strconstcmp(*str, "descent")) {
+        node->parser = ln_parseRecursive;
+        constructor_fn = descent_parser_data_constructor;
+        node->parser_data_destructor = recursive_parser_data_destructor;
     } else if (!es_strconstcmp(*str, "interpret")) {
         node->parser = ln_parseInterpret;
         constructor_fn = interpret_parser_data_constructor;

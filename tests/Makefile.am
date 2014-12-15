@@ -10,7 +10,9 @@ TESTS = \
 	field_recursive.sh \
 	field_tokenized_recursive.sh \
 	field_interpret.sh \
-	field_interpret_with_invalid_ruledef.sh
+	field_interpret_with_invalid_ruledef.sh \
+	field_descent.sh \
+	field_descent_with_invalid_ruledef.sh
 
 if ENABLE_REGEXP
 TESTS +=  \

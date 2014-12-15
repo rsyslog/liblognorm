@@ -3,3 +3,4 @@ json_eq
 .deps
 core
 *.rulebase
+vgcore.*
