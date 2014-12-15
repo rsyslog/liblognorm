@@ -274,8 +274,8 @@ content under the key 'foo'.
 However, matching initial fragment of text requires the remaining 
 (suffix-fragment) portion of it to be matched and given back to 
 original field so it can be matched by remaining portion of rule
-which follows the matched rule(remember, it is being called to match 
-only a portion of text from another rule). 
+which follows the matched fragmet(remember, it is being called to 
+match only a portion of text from another rule). 
 
 Additional argument can be passed to pick field-name to be used for 
 returning unmatched text. It is optional, and defaults to 'tail'. The
@@ -285,7 +285,7 @@ example below uses 'remains' as the field name insteed of 'tail'.
 
     %foo:recursive:remains%
 
-Recursive fields are often useful in combination with tokenized text.
+Recursive fields are often useful in combination with tokenized field.
 This ruleset for instance, will match multiple IPv4 addresses or 
 Subnets in expected message.
 
@@ -320,6 +320,43 @@ unmatched portion of text. The example below is rewritten to use field
     rule=:%subnet_addr:ipv4%/%subnet_mask:number%%remains:rest%
     rule=:%ip_addr:ipv4%%remains:rest%
     rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive:remains% to %server_ip:ipv4%
+
+descent
+#######
+
+Value that matches some other rule defined in a different rulebase. Its called
+descent because it descends down to a child rulebase and invokes the entire 
+parser-tree again. Its like recursive, except it calls a different rulebase for
+recursive parsing(as opposed to recursive which calls itself). It takes two 
+arguments, first is the file name and second is optional argument explained 
+below.
+
+The invocation below will call the ruleset in /foo/bar.rulebase and put the 
+parsed content under the key 'foo'.
+
+::
+
+    %foo:descent:/foo/bar.rulebase%
+
+Like recursive, matching initial fragment of text requires the remaining 
+(suffix-fragment) portion of it to be matched and given back to 
+original field(this is explained in detail in documentation for recursive 
+field).
+
+Additional argument can be passed to pick field-name to be used for 
+returning unmatched text. It is optional, and defaults to 'tail'. The
+example below uses 'remains' as the field name insteed of 'tail'.
+
+::
+
+    %foo:descent:/foo/bar.rulebase:remains%
+
+Like recursive, descent field is often useful in combination with tokenized 
+field. The usage example for this would look very similar to that of recursive 
+(with field declaration changing to include rulebase path).
+
+This brings with it the overhead of having to maintain multiple rulebase files, 
+but also helps alleviate complexity when a single ruleset becomes too complex.
 
 regex
 #####
