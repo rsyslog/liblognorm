@@ -1133,10 +1133,10 @@ void regex_parser_data_destructor(void** dataPtr) {
  */
 typedef enum interpret_type {
 	/* If you change this, be sure to update json_type_to_name() too */
-	b10int,
-	b16int,
-	floating_pt,
-	boolean
+	it_b10int,
+	it_b16int,
+	it_floating_pt,
+	it_boolean
 } interpret_type;
 
 struct interpret_parser_data_s {
@@ -1172,16 +1172,16 @@ static json_object* interpret_as_boolean(json_object *value) {
 
 static int reinterpret_value(json_object **value, enum interpret_type to_type) {
 	switch(to_type) {
-	case b10int:
+	case it_b10int:
 		*value = interpret_as_int(*value, 10);
 		break;
-	case b16int:
+	case it_b16int:
 		*value = interpret_as_int(*value, 16);
 		break;
-	case floating_pt:
+	case it_floating_pt:
 		*value = interpret_as_double(*value);
 		break;
-	case boolean:
+	case it_boolean:
 		*value = interpret_as_boolean(*value);
 		break;
 	default:
@@ -1233,13 +1233,13 @@ void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	CHKN(args = pcons_args(node->raw_data, 2));
 	CHKN(type_str = pcons_arg(args, 0, NULL));
 	if (strcmp(type_str, "int") == 0 || strcmp(type_str, "base10int") == 0) {
-		pData->intrprt = b10int;
+		pData->intrprt = it_b10int;
 	} else if (strcmp(type_str, "base16int") == 0) {
-		pData->intrprt = b16int;
+		pData->intrprt = it_b16int;
 	} else if (strcmp(type_str, "float") == 0) {
-		pData->intrprt = floating_pt;
+		pData->intrprt = it_floating_pt;
 	} else if (strcmp(type_str, "bool") == 0) {
-		pData->intrprt = boolean;
+		pData->intrprt = it_boolean;
 	} else {
 		bad_interpret = 1;
 		FAIL(LN_BADCONFIG);
