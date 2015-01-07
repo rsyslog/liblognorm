@@ -260,7 +260,7 @@ compared to other statically supported field-types. Because of potential
 performance penalty, support for regex is disabled by default. It can be enabled
 by providing appropriate options to tooling/library/scripting layer that interfaces with
 liblognorm (for instance, by using '-oallowRegex' as a commandline arg with lognormalizer
-or using 'allow_regex="on"' in rsyslog module load statement).
+or using 'allowRegex="on"' in rsyslog module load statement).
 
 Additional arguments are regular-expression (mandatory), followed by 2 optional arguments,
 namely consume-group and return-group. Consume-group identifies the matched-subsequence
