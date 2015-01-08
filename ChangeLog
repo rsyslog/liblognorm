@@ -1,5 +1,8 @@
 ----------------------------------------------------------------------
-Version 1.0.2, 2014-04-??
+Version 1.1.0, 2015-01-08
+- added regular expression support
+  use this feature with great care, as it thrashes performance
+  Thanks to Janmejay Singh for implementing this feature.
 - fix build problem when --enable-debug was set
   closes: https://github.com/rsyslog/liblognorm/issues/5
 ----------------------------------------------------------------------
