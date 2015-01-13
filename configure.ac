@@ -69,7 +69,7 @@ AC_ARG_ENABLE(regexp,
 )
 AM_CONDITIONAL(ENABLE_REGEXP, test x$enable_regexp = xyes)
 if test "$enable_regexp" = "yes"; then
-        AX_PATH_LIB_PCRE
+        PKG_CHECK_MODULES(PCRE, libpcre)
         AC_DEFINE(FEATURE_REGEXP, 1, [Regular expressions support enabled.])
 	FEATURE_REGEXP=1
 else
