@@ -177,6 +177,8 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ln_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
 		node->parser = ln_parseWord;
+	} else if(!es_strconstcmp(*str, "alpha")) {
+		node->parser = ln_parseAlpha;
 	} else if(!es_strconstcmp(*str, "rest")) {
 		node->parser = ln_parseRest;
 	} else if(!es_strconstcmp(*str, "quoted-string")) {
