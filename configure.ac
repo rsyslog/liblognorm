@@ -96,7 +96,7 @@ fi
 
 # docs (html) build settings
 AC_ARG_ENABLE(docs,
-	[AS_HELP_STRING([--enable-docs],[Enable building HTML docs (requires Sphinx)])],
+	[AS_HELP_STRING([--enable-docs],[Enable building HTML docs (requires Sphinx) @<:@default=no@:>@])],
 	[case "${enableval}" in
 		yes) enable_docs="yes" ;;
 		no) enable_docs="no" ;;
