@@ -88,7 +88,7 @@ AC_ARG_ENABLE(debug,
         [enable_debug="no"]
 )
 if test "$enable_debug" = "yes"; then
-        AC_DEFINE(DEBUG, 1, [Defined if debug mode is enabled (it's easier to check in the code).])
+        AC_DEFINE(DEBUG, 1, [Defined if debug mode is enabled.])
 fi
 if test "$enable_debug" = "no"; then
         AC_DEFINE(NDEBUG, 1, [Defined if debug mode is disabled.])
