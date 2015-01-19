@@ -1,0 +1,14 @@
+language: c
+
+before_install:
+- travis_retry sudo apt-get install -qq python-sphinx
+- travis_retry sudo add-apt-repository ppa:adiscon/v8-devel -y
+- travis_retry sudo apt-get update -qq
+
+install:
+- travis_retry sudo apt-get install -qq libestr-dev libjson0-dev
+
+script:
+  - autoreconf --force --verbose --install
+  - ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64
+  - make && make dist && make check && sudo make install
