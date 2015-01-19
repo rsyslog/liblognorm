@@ -1,4 +1,11 @@
+check_PROGRAMS = user_test
+user_test_SOURCES = user_test.c
+user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+user_test_LDFLAGS = -no-install
+
 TESTS = \
+	user_test \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh
 

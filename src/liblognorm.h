@@ -62,6 +62,7 @@
 #define LIBLOGNORM_H_INCLUDED
 #include <stdlib.h>	/* we need size_t */
 #include <libestr.h>
+#include <json.h>
 
 /* error codes */
 #define LN_NOMEM -1
