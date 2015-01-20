@@ -88,7 +88,7 @@ AC_ARG_ENABLE(debug,
         [enable_debug="no"]
 )
 if test "$enable_debug" = "yes"; then
-        AC_DEFINE(DEBUG, 1, [Defined if debug mode is enabled (it's easier to check in the code).])
+        AC_DEFINE(DEBUG, 1, [Defined if debug mode is enabled.])
 fi
 if test "$enable_debug" = "no"; then
         AC_DEFINE(NDEBUG, 1, [Defined if debug mode is disabled.])
@@ -96,15 +96,21 @@ fi
 
 # docs (html) build settings
 AC_ARG_ENABLE(docs,
-	[AS_HELP_STRING([--disable-docs],[Disable building HTML docs (requires Sphinx)])],
-	[enable_docs="no"],
-	[enable_docs="yes"]
+	[AS_HELP_STRING([--enable-docs],[Enable building HTML docs (requires Sphinx) @<:@default=no@:>@])],
+	[case "${enableval}" in
+		yes) enable_docs="yes" ;;
+		no) enable_docs="no" ;;
+		*) AC_MSG_ERROR(bad value ${enableval} for --enable-docs) ;;
+	esac],
+	[enable_docs="no"]
 )
-AC_CHECK_PROGS([SPHINXBUILD], [sphinx-build sphinx-build3 sphinx-build2], [no])
-AS_IF([test "$enable_docs" = "yes" -a "x$SPHINXBUILD" = xno],
-    [AC_MSG_ERROR([sphinx-build is required to build documentation, install it or try --disable-docs])]
-)
-AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = yes])
+if test "$enable_docs" = "yes"; then
+	AC_CHECK_PROGS([SPHINXBUILD], [sphinx-build sphinx-build3 sphinx-build2], [no])
+	if test "$SPHINXBUILD" = "no"; then
+		AC_MSG_ERROR([sphinx-build is required to build documentation, install it or try --disable-docs])
+	fi
+fi
+AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = "yes"])
 
 AC_ARG_ENABLE(testbench,
         [AS_HELP_STRING([--enable-testbench],[testbench enabled @<:@default=no@:>@])],
