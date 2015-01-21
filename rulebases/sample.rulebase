@@ -66,5 +66,5 @@ rule=tokenized_regex:tokenized regex: %arr:tokenized:; :regex:[^; ]+%
 rule=regex:regex: %token:regex:abc.ef%
 
 # host451
-# generates this fields { basename:"host", hostid:451 }
+# generates  { basename:"host", hostid:451 }
 rule=:%basename:alpha%%hostid:number%
