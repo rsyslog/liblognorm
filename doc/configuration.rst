@@ -115,6 +115,16 @@ up to end of line.
 
     %host:word%
 
+alpha
+####    
+
+One or more alphabetic characters, up to the next whitspace, punctuation,
+decimal digit or control character.
+
+::
+
+    %host:alpha%
+
 char-to
 ####### 
 
