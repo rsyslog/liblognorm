@@ -179,6 +179,8 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 		node->parser = ln_parseWord;
 	} else if(!es_strconstcmp(*str, "rest")) {
 		node->parser = ln_parseRest;
+	} else if(!es_strconstcmp(*str, "op-quoted-string")) {
+		node->parser = ln_parseOpQuotedString;
 	} else if(!es_strconstcmp(*str, "quoted-string")) {
 		node->parser = ln_parseQuotedString;
 	} else if(!es_strconstcmp(*str, "date-iso")) {

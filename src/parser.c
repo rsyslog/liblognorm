@@ -884,6 +884,56 @@ BEGINParser(Rest)
 
 ENDParser
 
+/**
+ * Parse a possibly quoted string. In this initial implementation, escaping of the quote
+ * char is not supported. A quoted string is one start starts with a double quote,
+ * has some text (not containing double quotes) and ends with the first double
+ * quote character seen. The extracted string does NOT include the quote characters.
+ * swisskid, 2015-01-21
+ */
+BEGINParser(OpQuotedString)
+	const char *c;
+	size_t i;
+	char *cstr;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	if(c[i] != '"') {
+		while(i < strLen && c[i] != ' ') 
+			i++;
+
+		if(i == *offs) {
+			goto fail;
+		}
+
+		/* success, persist */
+		*parsed = i - *offs;
+		/* create JSON value to save quoted string contents */
+		CHKN(cstr = strndup((char*)c + *offs, *parsed));
+	} else {
+	    ++i;
+
+	    /* search end of string */
+	    while(i < strLen && c[i] != '"') 
+		    i++;
+
+	    if(i == strLen || c[i] != '"') {
+		    r = LN_WRONGPARSER;
+		    goto fail;
+	    }
+	    /* success, persist */
+	    *parsed = i + 1 - *offs; /* "eat" terminal double quote */
+	    /* create JSON value to save quoted string contents */
+	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+	}
+	CHKN(*value = json_object_new_string(cstr));
+	free(cstr);
+
+ENDParser
 
 /**
  * Parse a quoted string. In this initial implementation, escaping of the quote
