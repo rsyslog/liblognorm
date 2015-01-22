@@ -115,6 +115,17 @@ up to end of line.
 
     %host:word%
 
+string-to
+######### 
+
+One or more characters, up to the next string given in
+extra data.
+
+::
+
+    %field_name:char-to:,%
+    %field_name:char-to:\x25%
+
 char-to
 ####### 
 

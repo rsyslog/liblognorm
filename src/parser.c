@@ -478,6 +478,54 @@ ENDParser
 
 
 /**
+ * Parse everything up to a specific string.
+ * swisskid, 2015-01-21
+ */
+BEGINParser(StringTo)
+	const char *c;
+	const char *toFind;
+	size_t i, j, k, m;
+	int chkstr;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	assert(ed != NULL);
+	k = es_strlen(ed) - 1;
+	toFind = es_str2cstr(ed, NULL);
+	c = str;
+	i = *offs;
+	chkstr = 0;
+
+	/* Total hunt for letter */
+	while(chkstr == 0 && i < strLen ) {
+	    i++;
+	    if(c[i] == toFind[0]) {
+		/* Found the first letter, now find the rest of the string */
+		j = 0;
+		m = i;
+		while(m < strLen && j < k ) {
+		    m++;
+		    j++;
+		    if(c[m] != toFind[j])
+			break;
+		    if (j == k) 
+			chkstr = 1;
+		}
+	    }
+	}
+	if(i == *offs || i == strLen || c[i] != toFind[0]) {
+		r = LN_WRONGPARSER;
+		goto fail;
+	} 
+
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+
+
+/**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
  * It is a program error if strlen(ed) != 1. It is considered a format error if

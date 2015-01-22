@@ -192,6 +192,9 @@ parseFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;
+	} else if(!es_strconstcmp(*str, "string-to")) {
+		// TODO: check extra data!!!! (very important)
+		node->parser = ln_parseStringTo;
 	} else if(!es_strconstcmp(*str, "char-to")) {
 		// TODO: check extra data!!!! (very important)
 		node->parser = ln_parseCharTo;
