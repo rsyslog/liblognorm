@@ -159,6 +159,18 @@ Quote marks are stripped from the match.
 
     %field_name:quoted-string%
 
+op-quoted-string
+################   
+
+
+Zero or more characters, possibly surrounded by double quote marks.
+If the first character is a quote mark, operates like quoted-string. Otherwise, operates like "word"
+Quote marks are stripped from the match.
+
+::
+
+    %field_name:quoted-string%
+
 date-iso
 ########    
 
