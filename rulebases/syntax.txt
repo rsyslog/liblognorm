@@ -63,6 +63,12 @@ Matches:		One or more characters, up to the next space (\x20), or
 Extra data:		Not used
 Example:		%field_name:word%
 
+Field type:		'alpha'
+Matches:		One or more alphabetic characters, up to the next
+				whitespace, punctuation, decimal digit or ctrl.
+Extra data:		Not used
+Example:		%field_name:alpha%
+
 Field type:		'char-to'
 Matches:		One or more characters, up to the next character given in
 				extra data.

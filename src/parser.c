@@ -478,6 +478,35 @@ ENDParser
 
 
 /**
+ * Parse a alphabetic word.
+ * A alpha word is composed of characters for which isalpha returns true.
+ * The parser fails if there is no alpha character at all.
+ */
+BEGINParser(Alpha)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* search end of word */
+	while(i < strLen && isalpha(c[i])) 
+		i++;
+
+	if(i == *offs) {
+		goto fail;
+	}
+
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+
+
+/**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
  * It is a program error if strlen(ed) != 1. It is considered a format error if
