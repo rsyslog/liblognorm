@@ -126,6 +126,16 @@ extra data.
     %field_name:string-to:Auth%
     %field_name:string-to:Auth\x25%
 
+alpha
+####    
+
+One or more alphabetic characters, up to the next whitspace, punctuation,
+decimal digit or control character.
+
+::
+
+    %host:alpha%
+
 char-to
 ####### 
 

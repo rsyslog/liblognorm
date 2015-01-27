@@ -65,6 +65,12 @@ int ln_parseWord(const char *str, size_t strlen, size_t *offs, const ln_fieldLis
 int ln_parseStringTo(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
+ * Parser for Alphabetic words (no numbers, punct, ctrl, space).
+ */
+int ln_parseAlpha(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+
+/** 
  * Parse everything up to a specific character.
  */
 int ln_parseCharTo(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);

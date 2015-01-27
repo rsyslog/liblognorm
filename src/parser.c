@@ -486,7 +486,6 @@ BEGINParser(StringTo)
 	const char *toFind;
 	size_t i, j, k, m;
 	int chkstr;
-
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -518,6 +517,33 @@ BEGINParser(StringTo)
 		r = LN_WRONGPARSER;
 		goto fail;
 	} 
+
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+/**
+ * Parse a alphabetic word.
+ * A alpha word is composed of characters for which isalpha returns true.
+ * The parser fails if there is no alpha character at all.
+ */
+BEGINParser(Alpha)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* search end of word */
+	while(i < strLen && isalpha(c[i])) 
+		i++;
+
+	if(i == *offs) {
+		goto fail;
+	}
 
 	/* success, persist */
 	*parsed = i - *offs;
