@@ -123,8 +123,8 @@ extra data.
 
 ::
 
-    %field_name:char-to:,%
-    %field_name:char-to:\x25%
+    %field_name:string-to:Auth%
+    %field_name:string-to:Auth\x25%
 
 char-to
 ####### 
