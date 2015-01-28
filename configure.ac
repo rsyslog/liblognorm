@@ -140,11 +140,23 @@ AM_CONDITIONAL(ENABLE_VALGRIND, test x$enable_valgrind = xyes)
 VALGRIND="$enable_valgrind"
 AC_SUBST(VALGRIND)
 
+AC_ARG_ENABLE(tools,
+        [AS_HELP_STRING([--enable-tools],[lognorm toolset enabled @<:@default=yes@:>@])],
+        [case "${enableval}" in
+         yes) enable_tools="yes" ;;
+          no) enable_tools="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-tools) ;;
+         esac],
+        [enable_tools=yes]
+)
+AM_CONDITIONAL(ENABLE_TOOLS, test x$enable_tools = xyes)
+
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		doc/Makefile \
 		src/Makefile \
 		src/lognorm-features.h \
+		tools/Makefile \
 		tests/Makefile \
 		tests/options.sh])
 AC_OUTPUT
@@ -158,5 +170,6 @@ echo "Regex enabled:               $enable_regexp"
 echo "Testbench enabled:           $enable_testbench"
 echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
+echo "Tools enabled:               $enable_tools"
 echo "Docs enabled:                $enable_docs"
 
