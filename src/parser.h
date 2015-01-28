@@ -127,5 +127,21 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void regex_parser_data_destructor(void** dataPtr);
 #endif
 
+/** 
+ * Match using the 'current' or 'separate rulebase' all over again from current match position
+ */
+int ln_parseRecursive(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void* descent_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void recursive_parser_data_destructor(void** dataPtr);
+
+/** 
+ * Get interpreted field 
+ */
+int ln_parseInterpret(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void interpret_parser_data_destructor(void** dataPtr);
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
