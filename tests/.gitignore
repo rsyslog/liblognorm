@@ -4,3 +4,5 @@ json_eq
 core
 *.rulebase
 vgcore.*
+.libs
+user_test
