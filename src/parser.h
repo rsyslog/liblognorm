@@ -27,15 +27,19 @@
 #define	LIBLOGNORM_PARSER_H_INCLUDED
 #include "ptree.h"
 
+
 /**
- * Parser interface.
- * @param[in] str input string
- * @param[in] offs offset where parsing has to start inside str.
- * @param[in] ed string with extra data (if needed)
- * @param[out] parsed int number of characters consumed by the parser.
+ * Parser interface
+ * @param[in] str the to-be-parsed string
+ * @param[in] strLen length of the to-be-parsed string
+ * @param[in] offs an offset into the string
+ * @param[in] node fieldlist with additional data; for simple
+ *            parsers, this sets variable "ed", which just is
+ *            string data.
+ * @param[out] parsed bytes
+ * @param[out] json object containing parsed data (can be unused)
  * @return 0 on success, something else otherwise
  */
-
 
 /** 
  * Parser for RFC5424 date.

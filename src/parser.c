@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -68,7 +68,9 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  * @param[in] str the to-be-parsed string
  * @param[in] strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
- * @param[in] ed string with extra data for parser use
+ * @param[in] node fieldlist with additional data; for simple
+ *            parsers, this sets variable "ed", which just is
+ *            string data.
  * @param[out] parsed bytes
  * @param[out] json object containing parsed data (can be unused)
  *
