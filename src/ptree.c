@@ -69,7 +69,7 @@ ln_newPTree(ln_ctx ctx, struct ln_ptree **parentptr)
 done:	return tree;
 }
 
-static void
+void
 ln_deletePTreeNode(ln_fieldList_t *node)
 {
 	ln_deletePTree(node->subtree);
@@ -78,7 +78,7 @@ ln_deletePTreeNode(ln_fieldList_t *node)
 		es_deleteStr(node->data);
 	if(node->raw_data != NULL)
 		es_deleteStr(node->raw_data);
-	if(node->parser_data != NULL)
+	if(node->parser_data != NULL && node->parser_data_destructor != NULL)
 		node->parser_data_destructor(&(node->parser_data));
 	free(node);
 }
@@ -538,13 +538,13 @@ addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *j
 	if (value == NULL) {
 		goto done;
 	}
-	json_object_object_add(json, "originalmsg", value);
+	json_object_object_add(json, ORIGINAL_MSG_KEY, value);
 	
 	value = json_object_new_string(s + offs);
 	if (value == NULL) {
 		goto done;
 	}
-	json_object_object_add(json, "unparsed-data", value);
+	json_object_object_add(json, UNPARSED_DATA_KEY, value);
 
 	r = 0;
 done:

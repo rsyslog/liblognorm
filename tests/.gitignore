@@ -1,0 +1,8 @@
+*.o
+json_eq
+.deps
+core
+*.rulebase
+vgcore.*
+.libs
+user_test

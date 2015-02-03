@@ -28,6 +28,5 @@ test-driver
 *.trs
 *.log
 test.out
-tmp.rulebase
 src/ln_test
 tests/options.sh

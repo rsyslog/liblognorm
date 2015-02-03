@@ -1,6 +1,5 @@
 # added 2014-11-18 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-
 source ./exec.sh $0 "tokenized field with invalid rule definition"
 
 add_rule 'rule=:%arr:tokenized%'

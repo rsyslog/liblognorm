@@ -35,6 +35,7 @@
 #include "lognorm.h"
 #include "internal.h"
 #include "parser.h"
+#include "samp.h"
 
 #ifdef FEATURE_REGEXP
 #include <pcre.h>
@@ -97,6 +98,81 @@ fail: \
 	return r; \
 }
 
+/**
+ * Utilities to allow constructors of complex parser's to
+ *  easily process field-declaration arguments.
+ */
+#define FIELD_ARG_SEPERATOR ":"
+#define MAX_FIELD_ARGS 10
+
+struct pcons_args_s {
+	int argc;
+	char *argv[MAX_FIELD_ARGS];
+};
+
+typedef struct pcons_args_s pcons_args_t;
+
+static void free_pcons_args(pcons_args_t** dat_p) {
+	pcons_args_t *dat = *dat_p;
+	while((--(dat->argc)) >= 0) {
+		if (dat->argv[dat->argc] != NULL) free(dat->argv[dat->argc]);
+	}
+	free(dat);
+	*dat_p = NULL;
+}
+
+static pcons_args_t* pcons_args(es_str_t *args, int expected_argc) {
+	pcons_args_t *dat = NULL;
+	char* orig_str = NULL;
+	if ((dat = malloc(sizeof(pcons_args_t))) == NULL) goto fail;
+	dat->argc = 0;
+	if (args != NULL) {
+		orig_str = es_str2cstr(args, NULL);
+		char *str = orig_str;
+		while (dat->argc < MAX_FIELD_ARGS) {
+			int i = dat->argc++;
+			char *next = (dat->argc == expected_argc) ? NULL : strstr(str, FIELD_ARG_SEPERATOR);
+			if (next == NULL) {
+				if ((dat->argv[i] = strdup(str)) == NULL) goto fail;
+				break;
+			} else {
+				if ((dat->argv[i] = strndup(str, next - str)) == NULL) goto fail;
+				next++;
+			}
+			str = next;
+		}
+	}
+	goto done;
+fail:
+	if (dat != NULL) free_pcons_args(&dat);
+done:
+	if (orig_str != NULL) free(orig_str);
+	return dat;
+}
+
+static const char* pcons_arg(pcons_args_t *dat, int i, const char* dflt_val) {
+	if (i >= dat->argc) return dflt_val;
+	return dat->argv[i];
+}
+
+static char* pcons_arg_copy(pcons_args_t *dat, int i, const char* dflt_val) {
+	const char *str = pcons_arg(dat, i, dflt_val);
+	return (str == NULL) ? NULL : strdup(str);
+}
+
+static void pcons_unescape_arg(pcons_args_t *dat, int i) {
+	char *arg = (char*) pcons_arg(dat, i, NULL);
+	es_str_t *str = NULL;
+	if (arg != NULL) {
+		str = es_newStrFromCStr(arg, strlen(arg));
+		if (str != NULL) {
+			es_unescapeStr(str);
+			free(arg);
+			dat->argv[i] = es_str2cstr(str, NULL);
+			es_deleteStr(str);
+		}
+	}
+}
 
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
@@ -329,6 +405,7 @@ BEGINParser(RFC3164Date)
 	case 'n':
 	case 'N':
 		if(*p == 'o' || *p == 'O') {
+
 			++p;
 			if(*p == 'v' || *p == 'V') {
 				++p;
@@ -619,6 +696,125 @@ BEGINParser(CharSeparated)
 ENDParser
 
 /**
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
+ */
+#define DEFAULT_REMAINING_FIELD_NAME "tail"
+
+struct recursive_parser_data_s {
+	ln_ctx ctx;
+	char* remaining_field;
+	int free_ctx;
+};
+
+BEGINParser(Recursive)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+
+	struct recursive_parser_data_s* pData = (struct recursive_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		json_object *unparsed = NULL;
+		CHKN(*value = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, value);
+
+		if (json_object_object_get_ex(*value, UNPARSED_DATA_KEY, &unparsed)) {
+			json_object_put(*value);
+			*value = NULL;
+			*parsed = 0;
+		} else if (pData->remaining_field != NULL && json_object_object_get_ex(*value, pData->remaining_field, &unparsed)) {
+			*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			json_object_object_del(*value, pData->remaining_field);
+		} else {
+			*parsed = strLen - *offs;
+		}
+	}
+ENDParser
+
+typedef ln_ctx (ctx_constructor)(ln_ctx, pcons_args_t*, const char*);
+
+static void* _recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx, int no_of_args, int remaining_field_arg_idx,
+												int free_ctx, ctx_constructor *fn) {
+	int r = LN_BADCONFIG;
+	char* name = NULL;
+	struct recursive_parser_data_s *pData = NULL;
+	pcons_args_t *args = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(pData = calloc(1, sizeof(struct recursive_parser_data_s)));
+	pData->free_ctx = free_ctx;
+	pData->remaining_field = NULL;
+	CHKN(args = pcons_args(node->raw_data, no_of_args));
+	CHKN(pData->ctx = fn(ctx, args, name));
+	CHKN(pData->remaining_field = pcons_arg_copy(args, remaining_field_arg_idx, DEFAULT_REMAINING_FIELD_NAME));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation failed for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
+															  "recursive/descent field: %s", name);
+
+		recursive_parser_data_destructor((void**) &pData);
+	}
+	free(name);
+	free_pcons_args(&args);
+	return pData;
+}
+
+static ln_ctx identity_recursive_parse_ctx_constructor(ln_ctx parent_ctx,
+													   __attribute__((unused)) pcons_args_t* args,
+													   __attribute__((unused)) const char* field_name) {
+	return parent_ctx;
+}
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 1, 0, 0, identity_recursive_parse_ctx_constructor);
+}
+
+static ln_ctx child_recursive_parse_ctx_constructor(ln_ctx parent_ctx, pcons_args_t* args, const char* field_name) {
+	int r = LN_BADCONFIG;
+	const char* rb = NULL;
+	ln_ctx ctx = NULL;
+	pcons_unescape_arg(args, 0);
+	CHKN(rb = pcons_arg(args, 0, NULL));
+	CHKN(ctx = ln_inherittedCtx(parent_ctx));
+	CHKR(ln_loadSamples(ctx, rb));
+done:
+	if (r != 0) {
+		if (rb == NULL) ln_dbgprintf(parent_ctx, "file-name for descent rulebase not provided for field: %s", field_name);
+		else if (ctx == NULL) ln_dbgprintf(parent_ctx, "couldn't allocate memory to create descent-field normalizer context "
+										   "for field: %s", field_name);
+		else ln_dbgprintf(parent_ctx, "couldn't load samples into descent context for field: %s", field_name);
+		if (ctx != NULL) ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
+void* descent_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 2, 1, 1, child_recursive_parse_ctx_constructor);
+}
+
+void recursive_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct recursive_parser_data_s *pData = (struct recursive_parser_data_s*) *dataPtr;
+		if (pData->free_ctx && pData->ctx != NULL) {
+			ln_exitCtx(pData->ctx);
+			pData->ctx = NULL;
+		}
+		if (pData->remaining_field != NULL) free(pData->remaining_field);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
+
+/**
  * Parse string tokenized by given char-sequence
  * The sequence may appear 0 or more times, but zero times means 1 token.
  * NOTE: its not 0 tokens, but 1 token.
@@ -626,112 +822,120 @@ ENDParser
  * The token found is parsed according to the field-type provided after
  *  tokenizer char-seq.
  */
+#define DEFAULT_MATCHED_FIELD_NAME "default"
+
 struct tokenized_parser_data_s {
 	es_str_t *tok_str;
 	ln_ctx ctx;
+	char *remaining_field;
+	int use_default_field;
+	int free_ctx;
 };
-typedef struct tokenized_parser_data_s tokenized_parser_data_t;
-static void load_tokenized_parser_samples(ln_ctx, const char* const, const int, const char* const, const int);
 
-BEGINParser(Tokenized)
+typedef struct tokenized_parser_data_s tokenized_parser_data_t;
+
+BEGINParser(Tokenized) {
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 
-	json_object *json_p = NULL;
-	CHKN(json_p = json_object_new_object());
-	json_object *matches = NULL;
-	CHKN(matches = json_object_new_array());
-
-
 	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
 
-	if (! pData) {
+	if (pData != NULL ) {
+		json_object *json_p = NULL;
+		if (pData->use_default_field) CHKN(json_p = json_object_new_object());
+		json_object *matches = NULL;
+		CHKN(matches = json_object_new_array());
+
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		json_object *remaining = NULL;
+		json_object *match = NULL;
+
+		while (remaining_len > 0) {
+			if (! pData->use_default_field) {
+				json_object_put(json_p);
+				json_p = json_object_new_object();
+			} //TODO: handle null condition gracefully
+
+			ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
+
+			if (remaining) json_object_put(remaining);
+
+			if (pData->use_default_field && json_object_object_get_ex(json_p, DEFAULT_MATCHED_FIELD_NAME, &match)) {
+				json_object_array_add(matches, json_object_get(match));
+			} else if (! (pData->use_default_field || json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
+				json_object_array_add(matches, json_object_get(json_p));
+			} else {
+				if (json_object_array_length(matches) > 0) {
+					remaining_len += es_strlen(pData->tok_str);
+					break;
+				} else {
+					json_object_put(json_p);
+					json_object_put(matches);
+					FAIL(LN_WRONGPARSER);
+				}
+			}
+
+			if (json_object_object_get_ex(json_p, pData->remaining_field, &remaining)) {
+				remaining_len = json_object_get_string_len(remaining);
+				if (remaining_len > 0) {
+					remaining_str = json_object_get_string(json_object_get(remaining));
+					json_object_object_del(json_p, pData->remaining_field);
+					if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
+						json_object_put(remaining);
+						break;
+					} else {
+						remaining_str += es_strlen(pData->tok_str);
+						remaining_len -= es_strlen(pData->tok_str);
+					}
+				}
+			} else {
+				remaining_len = 0;
+				break;
+			}
+
+			if (pData->use_default_field) json_object_object_del(json_p, DEFAULT_MATCHED_FIELD_NAME);
+		}
 		json_object_put(json_p);
-		json_object_put(matches);
+
+		/* success, persist */
+		*parsed = (strLen - *offs) - remaining_len;
+		*value =  matches;
+	} else {
 		FAIL(LN_BADPARSERSTATE);
 	}
 
-	int remaining_len = strLen - *offs;
-	const char *remaining_str = str + *offs;
-	json_object *remaining = NULL;
-	json_object *match = NULL;
-	
-	while (remaining_len > 0) {
-		ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
-
-		if (remaining) json_object_put(remaining);
-
-		if (json_object_object_get_ex(json_p, "default", &match)) {
-			json_object_array_add(matches, json_object_get(match));
-		} else {
-			if (json_object_array_length(matches) > 0) {
-				remaining_len += es_strlen(pData->tok_str);
-				break;
-			} else {
-				json_object_put(json_p);
-				json_object_put(matches);
-				FAIL(LN_WRONGPARSER);
-			}
-		}
-
-		if (json_object_object_get_ex(json_p, "tail", &remaining)) {
-			remaining_len = json_object_get_string_len(remaining);
-			if (remaining_len > 0) {
-				remaining_str = json_object_get_string(remaining);
-				if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
-					break;
-				} else {
-					json_object_get(remaining);
-					remaining_str += es_strlen(pData->tok_str);
-					remaining_len -= es_strlen(pData->tok_str);
-				}
-			}
-		} else {
-			remaining_len = 0;
-			break;
-		}
-
-		json_object_object_del(json_p, "default");
-		json_object_object_del(json_p, "tail");
-	}
-	json_object_put(json_p);
-
-	/* success, persist */
-	*parsed = (strLen - *offs) - remaining_len;
-	*value =  matches;
-
-ENDParser
+} ENDParser
 
 void tokenized_parser_data_destructor(void** dataPtr) {
 	tokenized_parser_data_t *data = (tokenized_parser_data_t*) *dataPtr;
-	if (data->tok_str) es_deleteStr(data->tok_str);
-	if (data->ctx) ln_exitCtx(data->ctx);
+	if (data->tok_str != NULL) es_deleteStr(data->tok_str);
+	if (data->free_ctx && (data->ctx != NULL)) ln_exitCtx(data->ctx);
+	if (data->remaining_field != NULL) free(data->remaining_field);
 	free(data);
 	*dataPtr = NULL;
 }
 
-static void load_tokenized_parser_samples(ln_ctx ctx,
-	const char* const field_type, const int field_type_len,
+static void load_generated_parser_samples(ln_ctx ctx,
+	const char* const field_descr, const int field_descr_len,
 	const char* const suffix, const int length) {
-
-	//TODO: extract nice constants
-	static const char* const RULE_PREFIX = "rule=:%default:";
+	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";//TODO: extract nice constants
 	static const int RULE_PREFIX_LEN = 15;
+
 	char *sample_str = NULL;
-	
 	es_str_t *field_decl = es_newStrFromCStr(RULE_PREFIX, RULE_PREFIX_LEN);
 	if (! field_decl) goto free;
 
-	if (es_addBuf(&field_decl, field_type, field_type_len) 
-		|| es_addBuf(&field_decl, "%", 1) 
+	if (es_addBuf(&field_decl, field_descr, field_descr_len)
+		|| es_addBuf(&field_decl, "%", 1)
 		|| es_addBuf(&field_decl, suffix, length)) {
-		ln_dbgprintf(ctx, "couldn't prepare field for tokenized field-picking: '%s'", field_type);
+		ln_dbgprintf(ctx, "couldn't prepare field for tokenized field-picking: '%s'", field_descr);
 		goto free;
 	}
 	sample_str = es_str2cstr(field_decl, NULL);
 	if (! sample_str) {
-		ln_dbgprintf(ctx, "couldn't prepare sample-string for: '%s'", field_type);
+		ln_dbgprintf(ctx, "couldn't prepare sample-string for: '%s'", field_descr);
 		goto free;
 	}
 	ln_loadSample(ctx, sample_str);
@@ -740,36 +944,97 @@ free:
 	if (field_decl) es_deleteStr(field_decl);
 }
 
+static ln_ctx generate_context_with_field_as_prefix(ln_ctx parent, const char* field_descr, int field_descr_len) {
+	int r = LN_BADCONFIG;
+	const char* remaining_field = "%"DEFAULT_REMAINING_FIELD_NAME":rest%";
+	ln_ctx ctx = NULL;
+	CHKN(ctx = ln_inherittedCtx(parent));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, remaining_field, strlen(remaining_field));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, "", 0);
+	r = 0;
+done:
+	if (r != 0) {
+		ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
+static ln_fieldList_t* parse_tokenized_content_field(ln_ctx ctx, const char* field_descr, size_t field_descr_len) {
+	es_str_t* tmp = NULL;
+	es_str_t* descr = NULL;
+	ln_fieldList_t *node = NULL;
+	int r = 0;
+	CHKN(tmp = es_newStr(80));
+	CHKN(descr = es_newStr(80));
+	const char* field_prefix = "%" DEFAULT_MATCHED_FIELD_NAME ":";
+	CHKR(es_addBuf(&descr, field_prefix, strlen(field_prefix)));
+	CHKR(es_addBuf(&descr, field_descr, field_descr_len));
+	CHKR(es_addChar(&descr, '%'));
+	es_size_t offset = 0;
+	CHKN(node = ln_parseFieldDescr(ctx, descr, &offset, &tmp, &r));
+	if (offset != es_strlen(descr)) FAIL(LN_BADPARSERSTATE);
+done:
+	if (r != 0) {
+		if (node != NULL) ln_deletePTreeNode(node);
+		node = NULL;
+	}
+	if (descr != NULL) es_deleteStr(descr);
+	if (tmp != NULL) es_deleteStr(tmp);
+	return node;
+}
+
 void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
-	es_str_t *raw_data = node->raw_data;
-	static const char* const ARG_SEP = ":";
-	static const char* const TAIL_FIELD = "%tail:rest%";
-	static const int TAIL_FIELD_LEN = 11;
+	int r = LN_BADCONFIG;
+	char* name = es_str2cstr(node->name, NULL);
+	pcons_args_t *args = NULL;
 	tokenized_parser_data_t *pData = NULL;
-	char *args = NULL;
-	char *field_type = NULL;
+	const char *field_descr = NULL;
+	ln_fieldList_t* field = NULL;
+	const char *tok = NULL;
 
-	if (raw_data == NULL) goto fail;
-	args = es_str2cstr(raw_data, NULL);
-	if (args == NULL) return NULL;
-	field_type = strstr(args, ARG_SEP);
-	if (field_type == NULL)  goto fail;
+	CHKN(args = pcons_args(node->raw_data, 2));
 
-	pData = malloc(sizeof(tokenized_parser_data_t));
-	if (! pData)  goto fail;
-	if (! (pData->tok_str = es_newStrFromCStr(args, field_type - args))) goto fail;
-	es_unescapeStr(pData->tok_str);
-	if (! (pData->ctx = ln_inherittedCtx(ctx))) goto fail;
-	field_type++;//skip :
-	const int field_type_len = strlen(field_type);
-	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, TAIL_FIELD, TAIL_FIELD_LEN);
-	load_tokenized_parser_samples(pData->ctx, field_type, field_type_len, "", 0);
-	goto free;
-fail:
-	if (pData) tokenized_parser_data_destructor((void**) &pData);
-	pData = NULL;
-free:
-	if (args) free(args);
+	CHKN(pData = calloc(1, sizeof(tokenized_parser_data_t)));
+	pcons_unescape_arg(args, 0);
+	CHKN(tok = pcons_arg(args, 0, NULL));
+	CHKN(pData->tok_str = es_newStrFromCStr(tok, strlen(tok)));
+	CHKN(field_descr = pcons_arg(args, 1, NULL));
+	const int field_descr_len = strlen(field_descr);
+	pData->free_ctx = 1;
+	CHKN(field = parse_tokenized_content_field(ctx, field_descr, field_descr_len));
+	if (field->parser == ln_parseRecursive) {
+		pData->use_default_field = 0;
+		struct recursive_parser_data_s *dat = (struct recursive_parser_data_s*) field->parser_data;
+		if (dat != NULL) {
+			CHKN(pData->remaining_field = strdup(dat->remaining_field));
+			pData->free_ctx = dat->free_ctx;
+			pData->ctx = dat->ctx;
+			dat->free_ctx = 0;
+		}
+	} else {
+		pData->use_default_field = 1;
+		CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_descr, field_descr_len));
+	}
+	if (pData->remaining_field == NULL) CHKN(pData->remaining_field = strdup(DEFAULT_REMAINING_FIELD_NAME));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for tokenized-field name");
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (tok == NULL) ln_dbgprintf(ctx, "token-separator not provided for field: %s", name);
+		else if (pData->tok_str == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for token-separator for field: %s", name);
+		else if (field_descr == NULL) ln_dbgprintf(ctx, "field-type not provided for field: %s", name);
+		else if (field == NULL) ln_dbgprintf(ctx, "couldn't resolve single-token field-type for tokenized field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't initialize normalizer-context for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for "
+															  "remaining-field-name for field: %s", name);
+		if (pData) tokenized_parser_data_destructor((void**) &pData);
+	}
+	if (name != NULL) free(name);
+	if (field != NULL) ln_deletePTreeNode(field);
+	if (args) free_pcons_args(&args);
 	return pData;
 }
 
@@ -798,7 +1063,7 @@ BEGINParser(Regex)
 	if (pData != NULL) {
 		ovector = calloc(pData->max_groups, sizeof(int) * 3);
 		if (ovector == NULL) FAIL(LN_NOMEM);
-		
+
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
@@ -822,110 +1087,76 @@ BEGINParser(Regex)
 	}
 ENDParser
 
-const char* regex_parser_configure_consume_and_return_group(const char* part,
-	struct regex_parser_data_s *pData, int args_len, const char* args,
-	const char* sep) {
-	char* next_part = NULL;
-	part++;
+static const char* regex_parser_configure_consume_and_return_group(pcons_args_t* args, struct regex_parser_data_s *pData) {
+	const char* consume_group_parse_error = "couldn't parse consume-group number";
+	const char* return_group_parse_error = "couldn't parse return-group number";
+
+	char* tmp = NULL;
+
+	const char* consume_grp_str = NULL;
+	const char* return_grp_str = NULL;
+
+	if ((consume_grp_str = pcons_arg(args, 1, "0")) == NULL ||
+		strlen(consume_grp_str) == 0) return consume_group_parse_error;
+	if ((return_grp_str = pcons_arg(args, 2, consume_grp_str)) == NULL ||
+		strlen(return_grp_str) == 0) return return_group_parse_error;
+
 	errno = 0;
-	pData->consume_group = strtol(part, &next_part, 10);
-	if (errno != 0 || strlen(part) == 0) {
-		return "couldn't parse consume-group number";
-	}
-	if (*next_part == *sep) {
-		part = next_part;
-		if ((args_len - (part - args)) > 0) {
-			part++;
-			errno = 0;
-			pData->return_group = strtol(part, &next_part, 10);
-			if (errno != 0 || strlen(part) == 0 || *next_part != '\0') {
-				return "couldn't parse return-group number";
-			}
-		} else {
-			return "couldn't parse return-group number";
-		}
-	} else if (*next_part == '\0') {
-		pData->return_group = pData->consume_group;
-	} else {
-		return "couldn't parse return-group number";
-	}
+	pData->consume_group = strtol(consume_grp_str, &tmp, 10);
+	if (errno != 0 || strlen(tmp) != 0) return consume_group_parse_error;
+
+	pData->return_group = strtol(return_grp_str, &tmp, 10);
+	if (errno != 0 || strlen(tmp) != 0) return return_group_parse_error;
+
 	return NULL;
 }
 
 void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
-	char* sep = ":";
+	int r = LN_BADCONFIG;
 	char* exp = NULL;
-	es_str_t *tmp = NULL;
-	char* args = NULL;
-	char* name = es_str2cstr(node->name, NULL);
-
+	const char* grp_parse_err = NULL;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
 	struct regex_parser_data_s *pData = NULL;
-	if (! ctx->allowRegex) {
-		ln_dbgprintf(ctx, "WARNING: regex support is not enabled for: '%s'"
-			" (please check lognorm context initialization)", name);
-		goto fail;
-	}
-	pData = malloc(sizeof(struct regex_parser_data_s));
-	if (pData == NULL) {
-		ln_dbgprintf(ctx, "couldn't allocate parser-data for field: '%s'", name);
-		goto fail;
-	}
+	const char *unescaped_exp = NULL;
+	const char *error = NULL;
+	int erroffset = 0;
+
+
+	CHKN(name = es_str2cstr(node->name, NULL));
+
+	if (! ctx->allowRegex) FAIL(LN_BADCONFIG);
+	CHKN(pData = malloc(sizeof(struct regex_parser_data_s)));
 	pData->re = NULL;
-	
-	args = es_str2cstr(node->raw_data, NULL);
-	int args_len = es_strlen(node->raw_data);
+
+	CHKN(args = pcons_args(node->raw_data, 3));
 	pData->consume_group = pData->return_group = 0;
+	CHKN(unescaped_exp = pcons_arg(args, 0, NULL));
+	pcons_unescape_arg(args, 0);
+	CHKN(exp = pcons_arg_copy(args, 0, NULL));
 
-	if (args == NULL) {
-		ln_dbgprintf(ctx, "couldn't generate regex-string for field: '%s'", name);
-		goto fail;
-	}
-	char* part = strstr(args, sep);
-	if (part == NULL) {
-		exp = es_str2cstr(node->data, NULL);
-	} else if ((args_len - (part - args)) > 0) {
-		tmp = es_newStrFromCStr(args, part - args);
-		if (tmp == NULL) {
-			ln_dbgprintf(ctx, "couldn't allocate regex string for: '%s'", name);
-			goto fail;
-		}
-		es_unescapeStr(tmp);
-		exp = es_str2cstr(tmp, NULL);
-		if (!exp) {
-			ln_dbgprintf(ctx, "couldn't allocate regex cstr for: '%s'", name);
-			goto fail;
-		}
-		if ((args_len - (part - args)) > 0) {
-			const char* err = regex_parser_configure_consume_and_return_group(part, pData, args_len, args, sep);
-			if (err != NULL) {
-				ln_dbgprintf(ctx, "%s for: '%s'", err, name);
-				goto fail;
-			}
-		} else if (*part != '\0') {
-			ln_dbgprintf(ctx, "couldn't parse consume-group number for: '%s'", name);
-			goto fail;
-		}
-	} else {
-		ln_dbgprintf(ctx, "found invalid options for: '%s'", name);
-		goto fail;
-	}
+	if ((grp_parse_err = regex_parser_configure_consume_and_return_group(args, pData)) != NULL) FAIL(LN_BADCONFIG);
 
-	const char *error;
-	int erroffset;
-	if ((pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL)) == NULL) {
-		ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
-					 "for regex-matched field: '%s'", error, erroffset, name);
-		goto fail;
-	}
-	
+	CHKN(pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL));
+
 	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group : pData->return_group) + 1;
-	goto free;
-fail:
-	regex_parser_data_destructor((void**)&pData);
-free:
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory regex-field name");
+		else if (! ctx->allowRegex) ln_dbgprintf(ctx, "regex support is not enabled for: '%s' "
+												 "(please check lognorm context initialization)", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (unescaped_exp == NULL) ln_dbgprintf(ctx, "regular-expression missing for field: '%s'", name);
+		else if (exp == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for regex-string for field: '%s'", name);
+		else if (grp_parse_err != NULL)  ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
+		else if (pData->re == NULL)	ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
+												 "for regex-matched field: '%s'", error, erroffset, name);
+		regex_parser_data_destructor((void**)&pData);
+	}
 	if (exp != NULL) free(exp);
-	if (tmp != NULL) es_deleteStr(tmp);
-	if (args != NULL) free(args);
+	if (args != NULL) free_pcons_args(&args);
 	if (name != NULL) free(name);
 	return pData;
 }
@@ -941,6 +1172,155 @@ void regex_parser_data_destructor(void** dataPtr) {
 
 #endif
 
+/**
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
+ */
+typedef enum interpret_type {
+	/* If you change this, be sure to update json_type_to_name() too */
+	it_b10int,
+	it_b16int,
+	it_floating_pt,
+	it_boolean
+} interpret_type;
+
+struct interpret_parser_data_s {
+	ln_ctx ctx;
+	enum interpret_type intrprt;
+};
+
+static json_object* interpret_as_int(json_object *value, int base) {
+	if (json_object_is_type(value, json_type_string)) {
+		return json_object_new_int64(strtol(json_object_get_string(value), NULL, base));
+	} else if (json_object_is_type(value, json_type_int)) {
+		return value;
+	} else {
+		return NULL;
+	}
+}
+
+static json_object* interpret_as_double(json_object *value) {
+	double val = json_object_get_double(value);
+	return json_object_new_double(val);
+}
+
+static json_object* interpret_as_boolean(json_object *value) {
+	json_bool val;
+	if (json_object_is_type(value, json_type_string)) {
+		const char* str = json_object_get_string(value);
+		val = (strcasecmp(str, "false") == 0 || strcasecmp(str, "no") == 0) ? 0 : 1;
+	} else {
+		val = json_object_get_boolean(value);
+	}
+	return json_object_new_boolean(val);
+}
+
+static int reinterpret_value(json_object **value, enum interpret_type to_type) {
+	switch(to_type) {
+	case it_b10int:
+		*value = interpret_as_int(*value, 10);
+		break;
+	case it_b16int:
+		*value = interpret_as_int(*value, 16);
+		break;
+	case it_floating_pt:
+		*value = interpret_as_double(*value);
+		break;
+	case it_boolean:
+		*value = interpret_as_boolean(*value);
+		break;
+	default:
+		return 0;
+	}
+	return 1;
+}
+
+BEGINParser(Interpret)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	json_object *unparsed = NULL;
+	json_object *parsed_raw = NULL;
+
+	struct interpret_parser_data_s* pData = (struct interpret_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+
+		CHKN(parsed_raw = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
+
+		if (json_object_object_get_ex(parsed_raw, UNPARSED_DATA_KEY, NULL)) {
+			*parsed = 0;
+		} else {
+			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, value);
+			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
+			if (reinterpret_value(value, pData->intrprt)) {
+				*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			}
+		}
+		json_object_put(parsed_raw);
+	}
+ENDParser
+
+void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	char* name = NULL;
+	struct interpret_parser_data_s *pData = NULL;
+	pcons_args_t *args = NULL;
+	int bad_interpret = 0;
+	const char* type_str = NULL;
+	const char *field_type = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(pData = calloc(1, sizeof(struct interpret_parser_data_s)));
+	CHKN(args = pcons_args(node->raw_data, 2));
+	CHKN(type_str = pcons_arg(args, 0, NULL));
+	if (strcmp(type_str, "int") == 0 || strcmp(type_str, "base10int") == 0) {
+		pData->intrprt = it_b10int;
+	} else if (strcmp(type_str, "base16int") == 0) {
+		pData->intrprt = it_b16int;
+	} else if (strcmp(type_str, "float") == 0) {
+		pData->intrprt = it_floating_pt;
+	} else if (strcmp(type_str, "bool") == 0) {
+		pData->intrprt = it_boolean;
+	} else {
+		bad_interpret = 1;
+		FAIL(LN_BADCONFIG);
+	}
+
+	CHKN(field_type = pcons_arg(args, 1, NULL));
+	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for interpret-field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (type_str == NULL) ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
+		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s",
+												  type_str, name);
+		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for "
+												  "field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching "
+												  "field: %s", name);
+
+		interpret_parser_data_destructor((void**) &pData);
+	}
+	free(name);
+	free_pcons_args(&args);
+	return pData;
+}
+
+void interpret_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct interpret_parser_data_s *pData = (struct interpret_parser_data_s*) *dataPtr;
+		if (pData->ctx != NULL) ln_exitCtx(pData->ctx);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
 
 /**
  * Just get everything till the end of string.

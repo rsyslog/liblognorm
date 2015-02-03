@@ -39,7 +39,7 @@ AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 #AC_CHECK_FUNCS([])
 
-LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/include"
+LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/src"
 LIBLOGNORM_LIBS="\$(top_builddir)/src/liblognorm.la"
 AC_SUBST(LIBLOGNORM_CFLAGS)
 AC_SUBST(LIBLOGNORM_LIBS)
@@ -54,6 +54,9 @@ CFLAGS="$CFLAGS $JSON_C_CFLAGS"
 LIBS="$LIBS $JSON_C_LIBS"
 AC_CHECK_FUNCS(json_object_object_get_ex,,)
 AC_CHECK_FUNCS(json_object_get_string_len,,)
+AC_CHECK_TYPE(json_bool,,,)
+AC_CHECK_FUNCS(json_object_get_int64,,)
+AC_CHECK_FUNCS(json_object_new_int64,,)
 LIBS="$LIBS_BEFORE"
 CFLAGS="$CFLAGS_BEFORE"
 

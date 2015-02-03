@@ -17,3 +17,16 @@ int json_object_get_string_len(struct json_object *obj) {
 	return strlen(str);
 }
 #endif
+
+#ifndef HAVE_JSON_OBJECT_GET_INT64
+int64_t json_object_get_int64(struct json_object *jso) {
+	int64_t val = json_object_get_int(jso);
+	return val;
+}
+#endif
+
+#ifndef HAVE_JSON_OBJECT_NEW_INT64
+struct json_object* json_object_new_int64(int64_t i) {
+	return json_object_new_int((int) i);
+}
+#endif

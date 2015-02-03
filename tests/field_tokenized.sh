@@ -5,11 +5,13 @@ add_rule 'rule=:%arr:tokenized: , :word% %more:rest%'
 execute '123 , abc , 456 , def ijk789'
 assert_output_contains '"arr": [ "123", "abc", "456", "def" ]'
 assert_output_contains '"more": "ijk789"'
+
 reset_rules
 add_rule 'rule=:%ips:tokenized:, :ipv4% %text:rest%'
 execute '10.20.30.40, 50.60.70.80, 90.100.110.120 are blocked'
 assert_output_contains '"text": "are blocked"'
 assert_output_contains '"ips": [ "10.20.30.40", "50.60.70.80", "90.100.110.120" ]'
+
 reset_rules
 add_rule 'rule=:comma separated list of colon separated list of # separated numbers: %some_nos:tokenized:, :tokenized: \x3a :tokenized:#:number%'
 execute 'comma separated list of colon separated list of # separated numbers: 10, 20 : 30#40#50 : 60#70#80, 90 : 100'

@@ -281,6 +281,106 @@ it would produce: { some_nos: [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ],
 Note how colon (:) is used unescaped when using as field-pattern, but is escaped when 
 used as tokenizer subsequence. The same would appply to use of % character.
 
+recursive
+#########
+
+Value that matches some other rule defined in the same rulebase. Its called
+recursive because it invokes the entire parser-tree again.
+
+The invocation below will call the entire ruleset again and put the parsed
+content under the key 'foo'.
+
+::
+
+    %foo:recursive%
+
+However, matching initial fragment of text requires the remaining 
+(suffix-fragment) portion of it to be matched and given back to 
+original field so it can be matched by remaining portion of rule
+which follows the matched fragmet(remember, it is being called to 
+match only a portion of text from another rule). 
+
+Additional argument can be passed to pick field-name to be used for 
+returning unmatched text. It is optional, and defaults to 'tail'. The
+example below uses 'remains' as the field name insteed of 'tail'.
+
+::
+
+    %foo:recursive:remains%
+
+Recursive fields are often useful in combination with tokenized field.
+This ruleset for instance, will match multiple IPv4 addresses or 
+Subnets in expected message.
+
+::
+
+    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%tail:rest%
+    rule=:%ip_addr:ipv4%%tail:rest%
+    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive% to %server_ip:ipv4%
+
+Given "blocked inbound via: 192.168.1.1 from: 1.2.3.4, 16.17.18.0/8, 12.13.14.15, 19.20.21.24/3 to 192.168.1.5"
+would produce: 
+
+.. code-block:: json
+
+  {
+  "addresses": [
+    {"ip_addr": "1.2.3.4"}, 
+    {"subnet_addr": "16.17.18.0", "subnet_mask": "8"}, 
+    {"ip_addr": "12.13.14.15"}, 
+    {"subnet_addr": "19.20.21.24", "subnet_mask": "3"}], 
+  "server_ip": "192.168.1.5",
+  "via_ip": "192.168.1.1"}
+
+Notice how 'tail' field is used in first two rules to capture unmatched 
+text, which is then matched against the remaining portion of rule.
+This example can be rewritten to use arbitrary field-name to capture 
+unmatched portion of text. The example below is rewritten to use field 
+'remains' to capture it insteed of 'tail'.
+
+::
+
+    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%remains:rest%
+    rule=:%ip_addr:ipv4%%remains:rest%
+    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive:remains% to %server_ip:ipv4%
+
+descent
+#######
+
+Value that matches some other rule defined in a different rulebase. Its called
+descent because it descends down to a child rulebase and invokes the entire 
+parser-tree again. Its like recursive, except it calls a different rulebase for
+recursive parsing(as opposed to recursive which calls itself). It takes two 
+arguments, first is the file name and second is optional argument explained 
+below.
+
+The invocation below will call the ruleset in /foo/bar.rulebase and put the 
+parsed content under the key 'foo'.
+
+::
+
+    %foo:descent:/foo/bar.rulebase%
+
+Like recursive, matching initial fragment of text requires the remaining 
+(suffix-fragment) portion of it to be matched and given back to 
+original field(this is explained in detail in documentation for recursive 
+field).
+
+Additional argument can be passed to pick field-name to be used for 
+returning unmatched text. It is optional, and defaults to 'tail'. The
+example below uses 'remains' as the field name insteed of 'tail'.
+
+::
+
+    %foo:descent:/foo/bar.rulebase:remains%
+
+Like recursive, descent field is often useful in combination with tokenized 
+field. The usage example for this would look very similar to that of recursive 
+(with field declaration changing to include rulebase path).
+
+This brings with it the overhead of having to maintain multiple rulebase files, 
+but also helps alleviate complexity when a single ruleset becomes too complex.
+
 regex
 #####
 
@@ -293,7 +393,8 @@ compared to other statically supported field-types. Because of potential
 performance penalty, support for regex is disabled by default. It can be enabled
 by providing appropriate options to tooling/library/scripting layer that interfaces with
 liblognorm (for instance, by using '-oallowRegex' as a commandline arg with lognormalizer
-or using 'allowRegex="on"' in rsyslog module load statement).
+or using 'allowRegex="on"' in rsyslog module load statement). In many cases use of regex
+can be avoided by use of 'recursive' field.
 
 Additional arguments are regular-expression (mandatory), followed by 2 optional arguments,
 namely consume-group and return-group. Consume-group identifies the matched-subsequence
@@ -331,6 +432,93 @@ consuming the comma as well. So the using regex here can be helpful.
 
 Note that consume-group must match content starting at the begining of string, else it wouldn't
 be considererd matching anything at all.
+
+interpret
+#########
+
+Meta field-type to re-interpret matched content as any supported type.
+
+This field doesn't match text on its own, it just re-interprets the matched content and
+passes it out as desired type. The matcher field-type is passed as one of the arguments to 
+it.
+
+It needs 2 additional options, the first is desired type that matched content should 
+be re-interpreted to, and second is actual field-declaration which is used to match the content.
+
+Special characters such as percent(%) and colon(:) occuring as a part of arguments to 
+field-declaration must be escaped similar to first-class usage of the field.
+
+Here is an example that shows how reinterpret field can be used to extract an integer from 
+matched content.
+
+::
+
+    %count:interpret:int:word%
+
+Here is a more elaborate example which extracts multiple integer and double values. 
+(Note how latency_percentile field uses escaping, its no different from directly calling char-to).
+
+::
+
+    record count for shard [%shard:interpret:base16int:char-to:]%] is %record_count:interpret:base10int:number% and %latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word% %latency_unit:word%
+
+Given text "record count for shard [3F] is 50000 and 99.99%ile latency is 2.1 seconds" the 
+above rule would produce the following:
+
+.. code-block:: json
+
+  {"shard": 63, 
+   "record_count": 50000, 
+   "latency_percentile": 99.99, 
+   "latency": 2.1, 
+   "latency_unit" : "seconds"}
+
+To contrast this with a interpret-free version, the rule(without interpret) would look like:
+
+::
+
+    record count for shard [%shard:char-to:]%] is %record_count:number% and %latency_percentile:char-to:\x25%\x25ile latency is %latency:word% %latency_unit:word%
+
+And would produce:
+
+.. code-block:: json
+
+  {"shard": "3F", 
+   "record_count": "50000", 
+   "latency_percentile": "99.99", 
+   "latency": "2.1", 
+   "latency_unit" : "seconds"}
+
+Interpret fields is generally useful when generated json needs to be consumed by an indexing-system
+of some kind (eg. database), because ordering and indexing mechanism of a string is very different from
+that of a number or a boolean, and keeping it in its native type allows for powerful aggregation and 
+querying.
+
+Here is a table of supported interpretation:
+
++-----------+----------------------+---------------+----------------+
+| type      | description          | matched value | returned value |
++-----------+----------------------+---------------+----------------+
+| int       | integer value        | "100"         | 100            |
++-----------+----------------------+---------------+----------------+
+| base10int | integer value        | "100"         | 100            |
++-----------+----------------------+---------------+----------------+
+| base16int | integer value        | "3F"          | 163            |
++-----------+----------------------+---------------+----------------+
+| float     | floating point value | "19.35"       | 19.35          |
++-----------+----------------------+---------------+----------------+
+| bool      | boolean value        | "true"        | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "false"       | false          |
++-----------+----------------------+---------------+----------------+
+|           |                      | "yes"         | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "no"          | false          |
++-----------+----------------------+---------------+----------------+
+|           |                      | "TRUE"        | true           |
++-----------+----------------------+---------------+----------------+
+|           |                      | "FALSE"       | false          |
++-----------+----------------------+---------------+----------------+
 
 
 iptables
