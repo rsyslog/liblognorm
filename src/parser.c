@@ -72,7 +72,8 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *            parsers, this sets variable "ed", which just is
  *            string data.
  * @param[out] parsed bytes
- * @param[out] json object containing parsed data (can be unused)
+ * @param[out] ptr to json object containing parsed data (can be unused)
+ *             if NULL on input, object is NOT persisted
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
@@ -510,7 +511,6 @@ BEGINParser(RFC3164Date)
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
-
 ENDParser
 
 

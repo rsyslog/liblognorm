@@ -36,9 +36,11 @@
  *            parsers, this sets variable "ed", which just is
  *            string data.
  * @param[out] parsed bytes
- * @param[out] json object containing parsed data (can be unused)
+ * @param[out] ptr to json object containing parsed data (can be unused)
+ *             if NULL on input, object is NOT persisted
  * @return 0 on success, something else otherwise
  */
+#warning check how to handle "value" - does it need to be set to NULL?
 
 /** 
  * Parser for RFC5424 date.

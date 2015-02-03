@@ -18,6 +18,9 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
+
+#include "liblognorm.h"
+#include "parser.h"
 #include "syntaxes.h"
 
 #define MAXLINE 32*1024
@@ -31,13 +34,16 @@ processLine(const char *const __restrict__ buf,
 	char *tocopy;
 	size_t tocopylen;
 	size_t iout;
+	size_t parsed_bytes;
 	char bufout[MAXLINE];
 
 	printf("line %d: %s\n", lnCnt, buf);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
 //printf("i %zd, iout %zd\n", i, iout);
-		if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
+		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%date-rfc3164%";
+		} else if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
 			tocopy = "%ipv4%";
 		} else if(syntax_posint(buf+i, buflen-i, NULL, &nproc)) {
 			tocopy = "%posint%";
