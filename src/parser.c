@@ -526,6 +526,40 @@ BEGINParser(Number)
 
 ENDParser
 
+/**
+ * Parse a Real-number in floating-pt form.
+ */
+BEGINParser(Float)
+const char *c;
+size_t i;
+
+assert(str != NULL);
+assert(offs != NULL);
+assert(parsed != NULL);
+c = str;
+
+int seen_point = 0;
+
+i = *offs;
+
+if (c[i] == '-') i++; 
+
+for (; i < strLen; i++) {
+	if (c[i] == '.') {
+		if (seen_point != 0) break;
+		seen_point = 1;
+	} else if (! isdigit(c[i])) {
+		break;
+	} 
+}
+if (i == *offs)
+	goto fail;
+	
+/* success, persist */
+*parsed = i - *offs;
+
+ENDParser
+
 
 /**
  * Parse a word.

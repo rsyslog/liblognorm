@@ -56,6 +56,10 @@ int ln_parseRFC3164Date(const char *str, size_t strlen, size_t *offs, const ln_f
  */
 int ln_parseNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
+/** 
+ * Parser for real-number in floating-pt representation
+ */
+int ln_parseFloat(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for Words (SP-terminated strings).

@@ -183,6 +183,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseRFC5424Date;
 	} else if(!es_strconstcmp(*str, "number")) {
 		node->parser = ln_parseNumber;
+	} else if(!es_strconstcmp(*str, "float")) {
+		node->parser = ln_parseFloat;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
 		node->parser = ln_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {

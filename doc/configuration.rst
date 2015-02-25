@@ -105,6 +105,15 @@ One or more decimal digits.
 
     %port:number%
 
+float
+#####
+
+A floating-pt number represented in non-scientific form.
+
+::
+
+    %pause_time:float%
+
 word
 ####    
 
