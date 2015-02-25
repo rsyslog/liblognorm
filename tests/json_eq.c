@@ -1,6 +1,7 @@
 #include "json_compatibility.h"
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
 
 typedef struct json_object obj;
@@ -53,7 +54,7 @@ static int eq(obj* expected, obj* actual) {
     case json_type_boolean:
         return json_object_get_boolean(expected) == json_object_get_boolean(actual);
     case json_type_double:
-        return json_object_get_double(expected) == json_object_get_double(actual);
+        return (fabs(json_object_get_double(expected) - json_object_get_double(actual)) < 0.001);
     case json_type_int:
         return json_object_get_int64(expected) == json_object_get_int64(actual);
     case json_type_object:
