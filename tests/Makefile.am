@@ -1,5 +1,6 @@
 check_PROGRAMS = json_eq user_test
-json_eq_SOURCES = json_eq.c $(top_srcdir)/src/json_compatibility.c
+json_eq_self_sources = json_eq.c
+json_eq_SOURCES = $(json_eq_self_sources) $(top_srcdir)/src/json_compatibility.c
 json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) -I$(top_srcdir)/src
 json_eq_LDADD = $(JSON_C_LIBS)
 json_eq_LDFLAGS = -no-install
@@ -19,10 +20,12 @@ TESTS = \
 	field_interpret_with_invalid_ruledef.sh \
 	field_descent.sh \
 	field_descent_with_invalid_ruledef.sh \
-        field_float.sh
+        field_float.sh \
+	field_float_with_invalid_ruledef.sh \
+	field_suffixed.sh \
+	field_suffixed_with_invalid_ruledef.sh
 
-if ENABLE_REGEXP
-TESTS +=  \
+REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
 	field_regex_invalid_args.sh \
 	field_regex_with_consume_group.sh \
@@ -30,19 +33,13 @@ TESTS +=  \
 	field_regex_with_negation.sh \
 	field_tokenized_with_regex.sh \
 	field_regex_while_regex_support_is_disabled.sh
+
+EXTRA_DIST = exec.sh \
+	$(TESTS) \
+	$(REGEXP_TESTS) \
+	$(json_eq_self_sources) \
+	$(user_test_SOURCES)
+
+if ENABLE_REGEXP
+TESTS += $(REGEXP_TESTS)
 endif
-
-EXTRA_DIST = exec.sh
-
-# tests
-EXTRA_DIST += \
-	field_tokenized.sh \
-	field_tokenized_with_invalid_ruledef.sh \
-	field_regex_default_group_parse_and_return.sh \
-	field_regex_invalid_args.sh \
-	field_regex_with_consume_group.sh \
-	field_regex_with_consume_group_and_return_group.sh \
-	field_regex_with_negation.sh \
-	field_tokenized_with_regex.sh \
-	field_regex_while_regex_support_is_disabled.sh \
-	field_float.sh

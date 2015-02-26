@@ -10,3 +10,9 @@ reset_rules
 add_rule 'rule=:here is a negative number %num:float% for you'
 execute 'here is a negative number -4.2 for you'
 assert_output_json_eq '{"num": "-4.2"}'
+
+reset_rules
+
+add_rule 'rule=:here is another real number %real_no:float%.'
+execute 'here is another real number 2.71.'
+assert_output_json_eq '{"real_no": "2.71"}'

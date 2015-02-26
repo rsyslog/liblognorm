@@ -161,4 +161,13 @@ int ln_parseInterpret(const char *str, size_t strlen, size_t *offs, const ln_fie
 void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void interpret_parser_data_destructor(void** dataPtr);
 
+/** 
+ * Parse a suffixed field
+ */
+int ln_parseSuffixed(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void suffixed_parser_data_destructor(void** dataPtr);
+
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
