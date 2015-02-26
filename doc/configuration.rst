@@ -529,6 +529,86 @@ Here is a table of supported interpretation:
 |           |                      | "FALSE"       | false          |
 +-----------+----------------------+---------------+----------------+
 
+suffixed
+########
+
+Value that can be matched by any available field-type but also has one
+of many suffixes which must be captured alongwith, for the captured data
+to be used sensibly.
+
+The invocation below will capture units alongwith quantity.
+
+::
+
+    %free_space:suffixed:,:b,kb,mb,gb:number%
+
+It takes 3 arguments. First is delimiter for possible-suffixes enumeration,
+second is the enumeration itself (separated by declared delimiter) and third
+captures type to be used to parse the value itself.
+
+It returns an object with key "value" which holds the parsed value and
+a key "suffix" which captures which one of the provided suffixes was found
+after it.
+
+Here is an example that parses suffixed values:
+
+::
+
+    rule=:reclaimed %eden_reclaimed:suffixed:,:b,kb,mb,gb:number% from eden
+
+Given text "reclaimed 115mb from eden" the 
+above rule would produce:
+
+.. code-block:: json
+
+  {
+    "eden_reclaimed":
+      {
+        "value": "115", 
+        "suffix": "mb"
+      }
+  }
+
+It can be used with interpret to actually get numeric values, and field-type
+named_suffix field can be used if the default keys used are not sensible.
+
+named_suffixed
+##############
+
+Works exactly like suffixed, but allows user to specify key-litterals for "value"
+and "suffix" fields.
+
+The invocation below will capture units alongwith quantity.
+
+::
+
+    %free_space:named_suffixed:mem:unit:,:b,kb,mb,gb:number%
+
+It takes 5 arguments. First is the litteral to be used as key for parsed-value,
+second is key-litteral for suffix, and list three which exactly match field-type
+suffixed. Third is delimiter for possible-suffixes enumeration,
+fourth is the enumeration itself (separated by declared delimiter)
+and fifth captures type to be used to parse the value itself.
+
+Here is an example that parses suffixed values:
+
+::
+
+    rule=:reclaimed %eden_reclaimed:named_suffixed:mem:unit:,:b,kb,mb,gb:number% from eden
+
+Given text "reclaimed 115mb from eden" the 
+above rule would produce:
+
+.. code-block:: json
+
+  {
+    "eden_reclaimed":
+      {
+        "mem": "115", 
+        "unit": "mb"
+      }
+  }
+
 
 iptables
 ########    
