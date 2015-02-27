@@ -1046,6 +1046,7 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	pcons_unescape_arg(args, 0);
 	CHKN(tok = pcons_arg(args, 0, NULL));
 	CHKN(pData->tok_str = es_newStrFromCStr(tok, strlen(tok)));
+	es_unescapeStr(pData->tok_str);
 	CHKN(field_descr = pcons_arg(args, 1, NULL));
 	const int field_descr_len = strlen(field_descr);
 	pData->free_ctx = 1;
@@ -1469,6 +1470,7 @@ static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_field
 	CHKN(tokenizer = pcons_arg(args, 0, NULL));
 
 	CHKN(uncopied_suffixes_str = pcons_arg(args, 1, NULL));
+	pcons_unescape_arg(args, 1);
 	CHKN(suffixes_str = pcons_arg_copy(args, 1, NULL));
 
 	tok_input = suffixes_str;
