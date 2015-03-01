@@ -114,6 +114,18 @@ A floating-pt number represented in non-scientific form.
 
     %pause_time:float%
 
+hexnumber
+#########
+
+A hexadecimal number as seen by this parser begins with the string
+"0x", is followed by 1 or more hex digits and is terminated by white
+space. Any interleaving non-hex digits will cause non-detection. The
+rules are string to avoid false positives.
+
+::
+
+    %session:hexnumber%
+
 word
 ####    
 

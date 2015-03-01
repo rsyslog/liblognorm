@@ -1,7 +1,6 @@
 /*
- *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -60,6 +59,12 @@ int ln_parseNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldL
  * Parser for real-number in floating-pt representation
  */
 int ln_parseFloat(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/** 
+ * Parser for hex numbers.
+ */
+int ln_parseHexNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
 
 /** 
  * Parser for Words (SP-terminated strings).
