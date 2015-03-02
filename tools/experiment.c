@@ -16,6 +16,7 @@
  */
 
 #include "config.h"
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -53,6 +54,13 @@ logrec_newNode(char *word)
 	node->child = NULL;
 	node->val.ltext = word;
 	return node;
+}
+
+void
+logrec_delNode(logrec_node_t *const node)
+{
+	free(node->val.ltext);
+	free(node);
 }
 
 #if 0
@@ -190,6 +198,38 @@ done:	return r;
 #undef CHECK_TEXTNODE
 #endif
 
+/* squash a tree, that is combine nodes that point to nodes
+ * without siblings to a single node.
+ */
+void
+treeSquash(logrec_node_t *node)
+{
+	if(node == NULL) return;
+	const int hasSibling = node->sibling == NULL ? 0 : 1;
+//printf("new iter, node %s\n", node->val.ltext);
+	while(node != NULL) {
+		if(!hasSibling && node->child != NULL 
+		   && node->child->sibling == NULL
+		   && node->val.ltext[0] != '%' /* do not combine syntaxes */
+		   && node->child->val.ltext[0] != '%') {
+			char *newword;
+			asprintf(&newword, "%s %s", node->val.ltext,
+				node->child->val.ltext);
+			printf("squshing: %s\n", newword);
+			free(node->val.ltext);
+			node->val.ltext = newword;
+			node->nterm = node->child->nterm; /* TODO: do not combine terminals! */
+			logrec_node_t *toDel = node->child;
+			node->child = node->child->child;
+			logrec_delNode(toDel);
+			continue; /* see if we can squash more */
+		}
+		treeSquash(node->child);
+//printf("moving to next node %p -> %p\n", node, node->sibling);
+		node = node->sibling;
+	}
+}
+
 void
 treePrint(logrec_node_t *node, const int level)
 {
@@ -293,7 +333,7 @@ preprocessLine(const char *const __restrict__ buf,
 	size_t tocopylen;
 	size_t iout;
 
-	printf("line %d: %s\n", lnCnt, buf);
+	//printf("line %d: %s\n", lnCnt, buf);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
 		if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
@@ -318,7 +358,7 @@ preprocessLine(const char *const __restrict__ buf,
 		i += nproc;
 	}
 	bufout[iout] = '\0';
-	printf("outline %d: %s\n", lnCnt, bufout);
+	//printf("outline %d: %s\n", lnCnt, bufout);
 	++lnCnt;
 }
 int
@@ -346,6 +386,8 @@ processFile(FILE *fp)
 	}
 
 	treePrint(root, 0);
+	treeSquash(root);
+	treePrint(root, 0);
 	return 0;
 }
 
@@ -354,7 +396,7 @@ int
 main(int __attribute((unused)) argc, char __attribute((unused)) *argv[])
 {
 	int r;
-	root = logrec_newNode("[ROOT]");
+	root = logrec_newNode(strdup("[ROOT]"));
 	r = processFile(stdin);
 	return r;
 }
