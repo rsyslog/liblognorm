@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-//#include "config.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -23,10 +23,10 @@
 #include <assert.h>
 #include <ctype.h>
 
-//#include "liblognorm.h"
-//#include "internal.h"
-//#include "parser.h"
-//#include "syntaxes.h"
+#include "liblognorm.h"
+#include "internal.h"
+#include "parser.h"
+#include "syntaxes.h"
 //#include "logrecord.h"
 
 #define MAXLINE 32*1024
@@ -282,11 +282,50 @@ treeAddLine(char *ln)
 	}
 }
 
+void
+preprocessLine(const char *const __restrict__ buf,
+	const size_t buflen,
+	char *const bufout)
+{
+	static int lnCnt = 1;
+	size_t nproc;
+	char *tocopy;
+	size_t tocopylen;
+	size_t iout;
 
+	printf("line %d: %s\n", lnCnt, buf);
+	iout = 0;
+	for(size_t i = 0 ; i < buflen ; ) {
+		if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
+			tocopy = "%ipv4%";
+		} else if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%date-rfc3164%";
+		} else if(syntax_posint(buf+i, buflen-i, NULL, &nproc)) {
+			tocopy = "%posint%";
+		} else {
+			tocopy = NULL;
+			nproc = 1;
+		}
+
+		/* copy to output buffer */
+		if(tocopy == NULL) {
+			bufout[iout++] = buf[i];
+		} else {
+			tocopylen = strlen(tocopy); // do this in lower lever
+			memcpy(bufout+iout, tocopy, tocopylen);
+			iout += tocopylen;
+		}
+		i += nproc;
+	}
+	bufout[iout] = '\0';
+	printf("outline %d: %s\n", lnCnt, bufout);
+	++lnCnt;
+}
 int
 processFile(FILE *fp)
 {
 	char lnbuf[MAXLINE];
+	char lnpreproc[MAXLINE];
 	//logrecord_t * logrec;
 
 	while(!feof(fp)) {
@@ -301,7 +340,8 @@ processFile(FILE *fp)
 		if(i > 0) {
 			//processLine(lnbuf, i, &logrec);
 			//logrecPrint(logrec);
-			treeAddLine(lnbuf);
+			preprocessLine(lnbuf, i, lnpreproc);
+			treeAddLine(lnpreproc);
 		}
 	}
 
