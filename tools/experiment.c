@@ -28,7 +28,6 @@
 #include "internal.h"
 #include "parser.h"
 #include "syntaxes.h"
-//#include "logrecord.h"
 
 #define MAXLINE 32*1024
 
@@ -41,6 +40,13 @@ struct logrec_node {
 		char *ltext; /* the literal text */
 		int64_t number; /* all integer types */
 	} val;
+	/* the addtl value structure is dumb, and needs to
+	 * be replaced with something much better when the initial
+	 * experiments work out. But good enough for now.
+	 * (bsearch table?)
+	 */
+	int nwords;	/* size of table */
+	char **words;
 };
 typedef struct logrec_node logrec_node_t;
 
@@ -59,144 +65,35 @@ logrec_newNode(char *word)
 void
 logrec_delNode(logrec_node_t *const node)
 {
+	for(int i = 0 ; i < node->nwords ; ++i)
+		free(node->words[i]);
+	free(node->words);
 	free(node->val.ltext);
 	free(node);
 }
 
-#if 0
+/* add an additional value to existing node */
 void
-logrec_newChild(logrec_node_t *const parent)
+treeAddVal(logrec_node_t *const __restrict__ node,
+	char *const __restrict__ word)
 {
-	assert(parent->child == NULL);
-	parent->child = logrec_newNode();
-}
-
-void
-logrec_newSibling(logrec_node_t *const curr_sibling)
-{
-	assert(curr_sibling->sibling == NULL);
-	curr_sibling->sibling = logrec_newNode();
-}
-#endif
-
-#if 0
-void
-logrecPrint(logrecord_t *__restrict__ logrec)
-{
-	while(logrec != NULL)  {
-		printf("logrec %p, type %d", logrec, logrec->ntype);
-		switch(logrec->ntype) {
-		case LRN_SYNTAX_LITERAL_TEXT:
-			printf(" [%s]", logrec->val.ltext);
+	int i;
+	int r = 1;
+	for(i = 0 ; i < node->nwords ; ++i) {
+		r = strcmp(word, node->words[i]);
+		if(r == 0)
 			break;
-		case LRN_SYNTAX_IPV4:
-			printf(" IPv4_Address");
-			break;
-		case LRN_SYNTAX_INT_POSITIVE:
-			printf(" positive_integer");
-			break;
-		case LRN_SYNTAX_DATE_RFC3164:
-			printf(" rfc3164_date");
-			break;
-		default:
-			break;
-		}
-		printf("\n");
-		logrec = logrec->next;
 	}
+	if(r == 0)
+		return; /* duplicate */
+	/* TODO: here we can insert at the right spot, which makes
+	 * bsearch() usable [in the caller, later...]
+	 */
+	int newnwords = node->nwords + 1;
+	node->words = realloc(node->words, sizeof(char*)*newnwords);
+	node->words[node->nwords] = word;
+	node->nwords = newnwords;
 }
-#endif
-
-#if 0
-static int
-addTextNode(logrecord_t *const __restrict__ node,
-	const char *const __restrict__ buf,
-	const size_t startText,
-	const size_t endText)
-{
-	int r = 0;
-	const size_t lenText = endText - startText + 1;
-	node->ntype = LRN_SYNTAX_LITERAL_TEXT;
-	CHKN(node->val.ltext = malloc(lenText + 1));
-	memcpy(node->val.ltext, buf+startText, lenText);
-	node->val.ltext[lenText] = '\0';
-done:	
-	return r;
-}
-
-/* the following macro is used to check if a literal text
- * part is terminated and needs to be added as record node.
- * This check occurs frequently and thus is done in a macro.
- */
-#define CHECK_TEXTNODE \
-printf("strtText %zu, i %zu, buf[%zu...]: %.40s\n", strtText, i, i, buf+i);\
-	if(i != 0 && strtText != i) { \
-		CHKN(logrec_newNode(logrec, &node)); \
-		CHKR(addTextNode(node, buf, strtText, i-1)); \
-	}
-
-int
-processLine(const char *const __restrict__ buf,
-	const size_t buflen,
-	logrecord_t **const __restrict__ logrec)
-{
-	int r = 0;
-	static int lnCnt = 1;
-	size_t nproc;
-	char *tocopy;
-	size_t tocopylen;
-	size_t iout;
-	size_t strtText;
-	size_t i;
-	char bufout[MAXLINE];
-	logrecord_t *node;
-
-	printf("line %d: %s\n", lnCnt, buf);
-	*logrec = NULL;
-	iout = 0;
-	strtText = 0;
-	for(i = 0 ; i < buflen ; ) {
-		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
-			CHECK_TEXTNODE
-			CHKN(logrec_newNode(logrec, &node));
-			node->ntype = LRN_SYNTAX_DATE_RFC3164;
-			tocopy = "%date-rfc3164%";
-		} else if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
-			CHECK_TEXTNODE
-			CHKN(logrec_newNode(logrec, &node));
-			node->ntype = LRN_SYNTAX_IPV4;
-			tocopy = "%ipv4%";
-		} else if(syntax_posint(buf+i, buflen-i, NULL, &nproc)) {
-			CHECK_TEXTNODE
-			CHKN(logrec_newNode(logrec, &node));
-			node->ntype = LRN_SYNTAX_INT_POSITIVE;
-			tocopy = "%posint%";
-		} else {
-			tocopy = NULL;
-			nproc = 1;
-		}
-
-		/* copy to output buffer */
-		if(tocopy == NULL) {
-			bufout[iout++] = buf[i];
-		} else {
-			tocopylen = strlen(tocopy); // do this in lower lever
-			memcpy(bufout+iout, tocopy, tocopylen);
-			iout += tocopylen;
-			strtText = i + nproc;
-		}
-		i += nproc;
-	}
-	if(logrec == NULL)
-		CHKN(logrec_newNode(logrec, &node));
-	CHECK_TEXTNODE
-	bufout[iout] = '\0';
-	printf("outline %d: %s\n", lnCnt, bufout);
-	++lnCnt;
-done:	return r;
-}
-#undef CHECK_TEXTNODE
-#endif
 
 /* squash a tree, that is combine nodes that point to nodes
  * without siblings to a single node.
@@ -208,8 +105,8 @@ treeSquash(logrec_node_t *node)
 	const int hasSibling = node->sibling == NULL ? 0 : 1;
 //printf("new iter, node %s\n", node->val.ltext);
 	while(node != NULL) {
-		if(!hasSibling && node->child != NULL 
-		   && node->child->sibling == NULL
+		if(!hasSibling && node->child != NULL && node->nwords == 0
+		   && node->child->sibling == NULL && node->child->nwords == 0
 		   && node->val.ltext[0] != '%' /* do not combine syntaxes */
 		   && node->child->val.ltext[0] != '%') {
 			char *newword;
@@ -230,17 +127,29 @@ treeSquash(logrec_node_t *node)
 	}
 }
 
+
+void
+treePrintIndent(const int level, const char indicator)
+{
+	printf("%2d%c:", level, indicator);
+	for(int i = 0 ; i < level ; ++i)
+		printf("   ");
+}
+
 void
 treePrint(logrec_node_t *node, const int level)
 {
 	while(node != NULL) {
-		printf("%2d:", level);
-		for(int i = 0 ; i < level ; ++i)
-			printf("    ");
+		treePrintIndent(level, 'l');
 		printf("%s", node->val.ltext);
 		if(node->nterm)
 			printf(" [nterm %d]", node->nterm);
 		printf("\n");
+		for(int i = 0 ; i < node->nwords ; ++i) {
+			treePrintIndent(level, 'v');
+			printf("%s", node->words[i]);
+			printf("\n");
+		}
 		treePrint(node->child, level + 1);
 		node = node->sibling;
 	}
@@ -279,8 +188,9 @@ treeAddChildToParent(logrec_node_t *parent,
 }
 
 logrec_node_t *
-treeAddToLevel(logrec_node_t *level,
-	char *word
+treeAddToLevel(logrec_node_t *const level,
+	char *const word,
+	char *const nextword
 	)
 {
 	logrec_node_t *existing, *prev = NULL;
@@ -290,6 +200,23 @@ treeAddToLevel(logrec_node_t *level,
 			break;
 		}
 		prev = existing;
+	}
+
+	if(existing == NULL && nextword != NULL) {
+		/* we check if the next word is the same, if so, we can
+		 * just add this as a different value.
+		 */
+		logrec_node_t *child;
+		for(child = level->child ; child != NULL ; child = child->sibling) {
+			if(child->child != NULL
+			   && !strcmp(child->child->val.ltext, nextword))
+			   	break;
+		}
+		if(child != NULL) {
+			treeAddVal(child, word);
+			printf("val %s combine with %s\n", child->val.ltext, word);
+			existing = child;
+		}
 	}
 
 	if(existing == NULL) {
@@ -311,14 +238,18 @@ void
 treeAddLine(char *ln)
 {
 	char *word;
+	char *nextword; /* we need one-word lookahead for structure tree */
 	logrec_node_t *level = root;
+	nextword = getWord(&ln);
 	while(1) {
-		if((word = getWord(&ln)) == NULL) {
+		word = nextword;
+		if(word == NULL) {
 			++level->nterm;
 			break;
 		}
+		nextword = getWord(&ln);
 		//printf("word: '%s'\n", word);
-		level = treeAddToLevel(level, word);
+		level = treeAddToLevel(level, word, nextword);
 	}
 }
 
