@@ -32,6 +32,7 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
+#include "config.h"
 #include <stdio.h>
 #include <string.h>
 #include <getopt.h>

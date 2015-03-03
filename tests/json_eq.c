@@ -1,3 +1,4 @@
+#include "config.h"
 #include "json_compatibility.h"
 #include <stdio.h>
 #include <string.h>
