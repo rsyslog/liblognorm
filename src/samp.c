@@ -183,6 +183,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseRFC5424Date;
 	} else if(!es_strconstcmp(*str, "number")) {
 		node->parser = ln_parseNumber;
+	} else if(!es_strconstcmp(*str, "float")) {
+		node->parser = ln_parseFloat;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
 		node->parser = ln_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
@@ -237,6 +239,14 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
         node->parser = ln_parseInterpret;
         constructor_fn = interpret_parser_data_constructor;
         node->parser_data_destructor = interpret_parser_data_destructor;
+    } else if (!es_strconstcmp(*str, "suffixed")) {
+        node->parser = ln_parseSuffixed;
+        constructor_fn = suffixed_parser_data_constructor;
+        node->parser_data_destructor = suffixed_parser_data_destructor;
+    } else if (!es_strconstcmp(*str, "named_suffixed")) {
+        node->parser = ln_parseSuffixed;
+        constructor_fn = named_suffixed_parser_data_constructor;
+        node->parser_data_destructor = suffixed_parser_data_destructor;
     } else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);

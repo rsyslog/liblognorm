@@ -56,6 +56,10 @@ int ln_parseRFC3164Date(const char *str, size_t strlen, size_t *offs, const ln_f
  */
 int ln_parseNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
+/** 
+ * Parser for real-number in floating-pt representation
+ */
+int ln_parseFloat(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for Words (SP-terminated strings).
@@ -156,5 +160,14 @@ int ln_parseInterpret(const char *str, size_t strlen, size_t *offs, const ln_fie
 
 void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void interpret_parser_data_destructor(void** dataPtr);
+
+/** 
+ * Parse a suffixed field
+ */
+int ln_parseSuffixed(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+void* suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
+void suffixed_parser_data_destructor(void** dataPtr);
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */

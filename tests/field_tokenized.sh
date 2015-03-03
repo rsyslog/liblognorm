@@ -1,6 +1,7 @@
 # added 2014-11-17 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
 source ./exec.sh $0 "tokenized field"
+
 add_rule 'rule=:%arr:tokenized: , :word% %more:rest%'
 execute '123 , abc , 456 , def ijk789'
 assert_output_contains '"arr": [ "123", "abc", "456", "def" ]'
@@ -16,3 +17,8 @@ reset_rules
 add_rule 'rule=:comma separated list of colon separated list of # separated numbers: %some_nos:tokenized:, :tokenized: \x3a :tokenized:#:number%'
 execute 'comma separated list of colon separated list of # separated numbers: 10, 20 : 30#40#50 : 60#70#80, 90 : 100'
 assert_output_contains '"some_nos": [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ], [ "60", "70", "80" ] ], [ [ "90" ], [ "100" ] ] ]'
+
+reset_rules
+add_rule 'rule=:%arr:tokenized:\x3a:number% %more:rest%'
+execute '123:456:789 ijk789'
+assert_output_json_eq '{"arr": [ "123", "456", "789" ], "more": "ijk789"}'

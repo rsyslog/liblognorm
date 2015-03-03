@@ -44,3 +44,7 @@ add_rule 'rule=:%latency_percentile:interpret:boolean:number%'
 execute 'foo'
 assert_output_json_eq '{ "originalmsg": "foo", "unparsed-data": "foo" }'
 
+reset_rules
+add_rule 'rule=:gc pause: %pause_time:interpret:float:float%ms'
+execute 'gc pause: 12.3ms'
+assert_output_json_eq '{"pause_time": 12.3}'

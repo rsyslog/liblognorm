@@ -91,6 +91,17 @@ int ln_parse##ParserName(const char *str, size_t strLen, size_t *offs,       \
 	__attribute__((unused)) es_str_t *ed = node->data;  \
 	*parsed = 0;
 
+#define FAILParser \
+	goto done; /* suppress warnings */ \
+done: \
+	r = 0; \
+	goto fail; /* suppress warnings */ \
+fail: 
+
+#define ENDFailParser \
+	return r; \
+}
+
 #define ENDParser \
 	goto done; /* suppress warnings */ \
 done: \
@@ -523,6 +534,40 @@ BEGINParser(Number)
 	
 	/* success, persist */
 	*parsed = i - *offs;
+
+ENDParser
+
+/**
+ * Parse a Real-number in floating-pt form.
+ */
+BEGINParser(Float)
+const char *c;
+size_t i;
+
+assert(str != NULL);
+assert(offs != NULL);
+assert(parsed != NULL);
+c = str;
+
+int seen_point = 0;
+
+i = *offs;
+
+if (c[i] == '-') i++; 
+
+for (; i < strLen; i++) {
+	if (c[i] == '.') {
+		if (seen_point != 0) break;
+		seen_point = 1;
+	} else if (! isdigit(c[i])) {
+		break;
+	} 
+}
+if (i == *offs)
+	goto fail;
+	
+/* success, persist */
+*parsed = i - *offs;
 
 ENDParser
 
@@ -1001,6 +1046,7 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	pcons_unescape_arg(args, 0);
 	CHKN(tok = pcons_arg(args, 0, NULL));
 	CHKN(pData->tok_str = es_newStrFromCStr(tok, strlen(tok)));
+	es_unescapeStr(pData->tok_str);
 	CHKN(field_descr = pcons_arg(args, 1, NULL));
 	const int field_descr_len = strlen(field_descr);
 	pData->free_ctx = 1;
@@ -1323,6 +1369,210 @@ void interpret_parser_data_destructor(void** dataPtr) {
 		*dataPtr = NULL;
 	}
 };
+
+/**
+ * Parse suffixed char-sequence, where suffix is one of many possible suffixes.
+ */
+struct suffixed_parser_data_s {
+	int nsuffix;
+	int *suffix_offsets;
+    int *suffix_lengths;
+	char* suffixes_str;
+	ln_ctx ctx;
+	char* value_field_name;
+	char* suffix_field_name;
+};
+
+BEGINParser(Suffixed) {
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	json_object *unparsed = NULL;
+	json_object *parsed_raw = NULL;
+	json_object *parsed_value = NULL;
+    json_object *result = NULL;
+    json_object *suffix = NULL;
+
+	struct suffixed_parser_data_s *pData = (struct suffixed_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		int i;
+
+		CHKN(parsed_raw = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
+
+		if (json_object_object_get_ex(parsed_raw, UNPARSED_DATA_KEY, NULL)) {
+			*parsed = 0;
+		} else {
+			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, &parsed_value);
+			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
+            const char* unparsed_frag = json_object_get_string(unparsed);
+			for(i = 0; i < pData->nsuffix; i++) {
+                const char* possible_suffix = pData->suffixes_str + pData->suffix_offsets[i];
+				int len = pData->suffix_lengths[i];
+				if (strncmp(possible_suffix, unparsed_frag, len) == 0) {
+                    CHKN(result = json_object_new_object());
+                    CHKN(suffix = json_object_new_string(possible_suffix));
+					json_object_get(parsed_value);
+                    json_object_object_add(result, pData->value_field_name, parsed_value);
+                    json_object_object_add(result, pData->suffix_field_name, suffix);
+					*parsed = strLen - *offs - json_object_get_string_len(unparsed) + len;
+                    break;
+                }
+			}
+            if (result != NULL) {
+                *value = result;
+            }
+		}
+	}
+FAILParser
+	if (r != 0) {
+		if (result != NULL) json_object_put(result);
+	}
+	if (parsed_raw != NULL) json_object_put(parsed_raw);
+} ENDFailParser
+
+static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_fieldList_t *node,
+																 ln_ctx ctx,
+																 es_str_t* raw_args,
+																 const char* value_field,
+																 const char* suffix_field) {
+	int r = LN_BADCONFIG;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
+	struct suffixed_parser_data_s *pData = NULL;
+	const char *escaped_tokenizer = NULL;
+	const char *uncopied_suffixes_str = NULL;
+	const char *tokenizer = NULL;
+	char *suffixes_str = NULL;
+	const char *field_type = NULL;
+
+	char *tok_saveptr = NULL;
+	char *tok_input = NULL;
+	int i = 0;
+	char *tok = NULL;
+
+	CHKN(name = es_str2cstr(node->name, NULL));
+
+	CHKN(pData = calloc(1, sizeof(struct suffixed_parser_data_s)));
+
+	if (value_field == NULL) value_field = "value";
+	if (suffix_field == NULL) suffix_field = "suffix";
+	pData->value_field_name = strdup(value_field);
+	pData->suffix_field_name = strdup(suffix_field);
+
+	CHKN(args = pcons_args(raw_args, 3));
+	CHKN(escaped_tokenizer = pcons_arg(args, 0, NULL));
+	pcons_unescape_arg(args, 0);
+	CHKN(tokenizer = pcons_arg(args, 0, NULL));
+
+	CHKN(uncopied_suffixes_str = pcons_arg(args, 1, NULL));
+	pcons_unescape_arg(args, 1);
+	CHKN(suffixes_str = pcons_arg_copy(args, 1, NULL));
+
+	tok_input = suffixes_str;
+	while (strtok_r(tok_input, tokenizer, &tok_saveptr) != NULL) {
+		tok_input = NULL;
+		pData->nsuffix++;
+	}
+
+	CHKN(pData->suffix_offsets = calloc(pData->nsuffix, sizeof(int)));
+    CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
+	CHKN(pData->suffixes_str = pcons_arg_copy(args, 1, NULL));
+
+	tok_input = pData->suffixes_str;
+	while ((tok = strtok_r(tok_input, tokenizer, &tok_saveptr)) != NULL) {
+		tok_input = NULL;
+		pData->suffix_offsets[i] = tok - pData->suffixes_str;
+        pData->suffix_lengths[i++] = strlen(tok);
+	}
+
+	CHKN(field_type = pcons_arg(args, 2, NULL));
+	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
+	
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory suffixed-field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (pData->value_field_name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for value-field's name for field: %s", name);
+		else if (pData->suffix_field_name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for suffix-field's name for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (escaped_tokenizer == NULL) ln_dbgprintf(ctx, "suffix token-string missing for field: '%s'", name);
+		else if (tokenizer == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'", name);
+		else if (uncopied_suffixes_str == NULL)  ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
+		else if (suffixes_str == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (pData->suffix_offsets == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: '%s'", name);
+		else if (pData->suffix_lengths == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element lengths for field: '%s'", name);
+		else if (pData->suffixes_str == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (field_type == NULL)  ln_dbgprintf(ctx, "field-type declaration missing for field: '%s'", name);
+		else if (pData->ctx == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for normalizer-context for field: '%s'", name);
+		suffixed_parser_data_destructor((void**)&pData);
+	}
+	free_pcons_args(&args);
+	if (suffixes_str != NULL) free(suffixes_str);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+void* suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _suffixed_parser_data_constructor(node, ctx, node->raw_data, NULL, NULL);
+}
+
+void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
+	const char* value_field_name = NULL;
+	const char* suffix_field_name = NULL;
+	const char* remaining_args = NULL;
+	es_str_t* unnamed_suffix_args = NULL;
+	struct suffixed_parser_data_s* pData = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(args = pcons_args(node->raw_data, 3));
+	CHKN(value_field_name = pcons_arg(args, 0, NULL));
+	CHKN(suffix_field_name = pcons_arg(args, 1, NULL));
+	CHKN(remaining_args = pcons_arg(args, 2, NULL));
+	CHKN(unnamed_suffix_args = es_newStrFromCStr(remaining_args, strlen(remaining_args)));
+	
+	CHKN(pData = _suffixed_parser_data_constructor(node, ctx, unnamed_suffix_args, value_field_name, suffix_field_name));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory named_suffixed-field name");
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (value_field_name == NULL) ln_dbgprintf(ctx, "key-name for value not provided for field: %s", name);
+		else if (suffix_field_name == NULL) ln_dbgprintf(ctx, "key-name for suffix not provided for field: %s", name);
+		else if (unnamed_suffix_args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unnamed-suffix-field args for field: %s", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't create parser-data for field: %s", name);
+		suffixed_parser_data_destructor((void**)&pData);
+	}
+	if (unnamed_suffix_args != NULL) free(unnamed_suffix_args);
+	if (args != NULL) free_pcons_args(&args);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+
+void suffixed_parser_data_destructor(void** dataPtr) {
+	if ((*dataPtr) != NULL) {
+		struct suffixed_parser_data_s *pData = (struct suffixed_parser_data_s*) *dataPtr;
+		if (pData->suffixes_str != NULL) free(pData->suffixes_str);
+		if (pData->suffix_offsets != NULL) free(pData->suffix_offsets);
+		if (pData->suffix_lengths != NULL) free(pData->suffix_lengths);
+		if (pData->value_field_name != NULL) free(pData->value_field_name);
+		if (pData->suffix_field_name != NULL) free(pData->suffix_field_name);
+		if (pData->ctx != NULL)	ln_exitCtx(pData->ctx);
+		free(pData);
+		*dataPtr = NULL;
+	}
+}
 
 /**
  * Just get everything till the end of string.
