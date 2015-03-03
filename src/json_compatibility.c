@@ -17,6 +17,7 @@ int json_object_object_get_ex(struct json_object* obj,
 
 #ifndef HAVE_JSON_OBJECT_GET_STRING_LEN
 int json_object_get_string_len(struct json_object *obj) {
+	if (obj == NULL) return 0;
 	const char* str = json_object_get_string(obj);
 	return strlen(str);
 }
