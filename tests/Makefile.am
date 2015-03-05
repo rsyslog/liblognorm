@@ -10,8 +10,7 @@ user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
 user_test_LDFLAGS = -no-install
 
-TESTS = \
-	user_test \
+TESTS_SHELLSCRIPTS = \
 	field_hexnumber.sh \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
@@ -26,6 +25,10 @@ TESTS = \
 	field_suffixed.sh \
 	field_suffixed_with_invalid_ruledef.sh
 
+TESTS = \
+	user_test \
+	$(TESTS_SHELLSCRIPTS)
+
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
 	field_regex_invalid_args.sh \
@@ -36,7 +39,7 @@ REGEXP_TESTS = \
 	field_regex_while_regex_support_is_disabled.sh
 
 EXTRA_DIST = exec.sh \
-	$(TESTS) \
+	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
 	$(json_eq_self_sources) \
 	$(user_test_SOURCES)
