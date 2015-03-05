@@ -32,8 +32,8 @@ assert_output_json_eq '{"shard": 63, "record_count": 50000, "latency_percentile"
 
 reset_rules
 add_rule 'rule=:%latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word%'
-execute '98%ile latency is 1.999123'
-assert_output_json_eq '{"latency_percentile": 98.0, "latency": 1.999123}'
+execute '98.1%ile latency is 1.999123'
+assert_output_json_eq '{"latency_percentile": 98.1, "latency": 1.999123}'
 
 reset_rules
 add_rule 'rule=:%latency_percentile:interpret:float:number%'
