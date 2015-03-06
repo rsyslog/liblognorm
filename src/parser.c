@@ -573,6 +573,34 @@ ENDParser
 
 
 /**
+ * Parse a hex Number.
+ * A hex number begins with 0x and contains only hex digits until the terminating
+ * whitespace. Note that if a non-hex character is deteced inside the number string,
+ * this is NOT considered to be a number.
+ */
+BEGINParser(HexNumber)
+	const char *c;
+	size_t i = *offs;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+
+	if(c[i] != '0' || c[i+1] != 'x')
+		goto fail;
+
+	for (i += 2 ; i < strLen && isxdigit(c[i]); i++);
+	if (i == *offs || !isspace(c[i]))
+		goto fail;
+	
+	/* success, persist */
+	*parsed = i - *offs;
+
+ENDParser
+
+
+/**
  * Parse a word.
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
