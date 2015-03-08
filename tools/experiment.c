@@ -31,6 +31,10 @@
 
 #define MAXLINE 32*1024
 
+struct wordinfo {
+	char *word;
+	int occurs;
+};
 struct logrec_node {
 	struct logrec_node *sibling;
 	struct logrec_node *child; /* NULL: end of record */
@@ -46,19 +50,51 @@ struct logrec_node {
 	 * (bsearch table?)
 	 */
 	int nwords;	/* size of table */
-	char **words;
+	struct wordinfo *words;
 };
 typedef struct logrec_node logrec_node_t;
 
 logrec_node_t *root = NULL;
 
+
+static int
+qs_compmi(const void *v1, const void *v2)
+{
+	const struct wordinfo *const w1 =  (struct wordinfo*) v1;
+	const struct wordinfo *const w2 =  (struct wordinfo*) v2;
+	return strcmp(w1->word, w2->word);
+}
+static int
+bs_compmi(const void *key, const void *mem)
+{
+	const struct wordinfo *const wi =  (struct wordinfo*) mem;
+	return strcmp((char*)key, wi->word);
+}
+/* add an additional word to existing node */
+void
+logrec_addWord(logrec_node_t *const __restrict__ node,
+	char *const __restrict__ word)
+{
+	/* TODO: here we can insert at the right spot, which makes
+	 * bsearch() usable [in the caller, later...]
+	 */
+	int newnwords = node->nwords + 1;
+	node->words = realloc(node->words, sizeof(struct wordinfo)*newnwords);
+	node->words[node->nwords].word = word;
+	node->words[node->nwords].occurs = 1;
+	node->nwords = newnwords;
+	if(node->nwords > 1) {
+		qsort(node->words, node->nwords, sizeof(struct wordinfo), qs_compmi); // TODO upgrade
+	}
+}
+
 logrec_node_t *
-logrec_newNode(char *word)
+logrec_newNode(char *const word)
 {
 	logrec_node_t *const node = calloc(1, sizeof(logrec_node_t));
 	node->child = NULL;
-	node->child = NULL;
-	node->val.ltext = word;
+	node->val.ltext = NULL;
+	logrec_addWord(node, word);
 	return node;
 }
 
@@ -66,33 +102,20 @@ void
 logrec_delNode(logrec_node_t *const node)
 {
 	for(int i = 0 ; i < node->nwords ; ++i)
-		free(node->words[i]);
+		free(node->words[i].word);
 	free(node->words);
 	free(node->val.ltext);
 	free(node);
 }
 
-/* add an additional value to existing node */
-void
-treeAddVal(logrec_node_t *const __restrict__ node,
+
+/* returns ptr to existing struct wordinfo or NULL, if not found.
+ */
+static struct wordinfo *
+logrec_hasWord(logrec_node_t *const __restrict__ node,
 	char *const __restrict__ word)
 {
-	int i;
-	int r = 1;
-	for(i = 0 ; i < node->nwords ; ++i) {
-		r = strcmp(word, node->words[i]);
-		if(r == 0)
-			break;
-	}
-	if(r == 0)
-		return; /* duplicate */
-	/* TODO: here we can insert at the right spot, which makes
-	 * bsearch() usable [in the caller, later...]
-	 */
-	int newnwords = node->nwords + 1;
-	node->words = realloc(node->words, sizeof(char*)*newnwords);
-	node->words[node->nwords] = word;
-	node->nwords = newnwords;
+	return (struct wordinfo*) bsearch(word, node->words, node->nwords, sizeof(struct wordinfo), bs_compmi);
 }
 
 /* squash a tree, that is combine nodes that point to nodes
@@ -107,14 +130,14 @@ treeSquash(logrec_node_t *node)
 	while(node != NULL) {
 		if(!hasSibling && node->child != NULL && node->nwords == 0
 		   && node->child->sibling == NULL && node->child->nwords == 0
-		   && node->val.ltext[0] != '%' /* do not combine syntaxes */
-		   && node->child->val.ltext[0] != '%') {
+		   && node->words[0].word[0] != '%' /* do not combine syntaxes */
+		   && node->child->words[0].word[0] != '%') {
 			char *newword;
-			asprintf(&newword, "%s %s", node->val.ltext,
-				node->child->val.ltext);
-			printf("squshing: %s\n", newword);
-			free(node->val.ltext);
-			node->val.ltext = newword;
+			if(asprintf(&newword, "%s %s", node->words[0].word,
+				node->child->words[0].word)) {}; /* silence cc warning */
+			printf("squashing: %s\n", newword);
+			free(node->words[0].word);
+			node->words[0].word = newword;
 			node->nterm = node->child->nterm; /* TODO: do not combine terminals! */
 			logrec_node_t *toDel = node->child;
 			node->child = node->child->child;
@@ -137,17 +160,25 @@ treePrintIndent(const int level, const char indicator)
 }
 
 void
+treePrintWordinfo(struct wordinfo *const __restrict__ wi)
+{
+	printf("%s", wi->word);
+	if(wi->occurs > 1)
+		printf(" {%d}", wi->occurs);
+}
+
+void
 treePrint(logrec_node_t *node, const int level)
 {
 	while(node != NULL) {
 		treePrintIndent(level, 'l');
-		printf("%s", node->val.ltext);
+		treePrintWordinfo(&(node->words[0]));
 		if(node->nterm)
 			printf(" [nterm %d]", node->nterm);
 		printf("\n");
-		for(int i = 0 ; i < node->nwords ; ++i) {
+		for(int i = 1 ; i < node->nwords ; ++i) {
 			treePrintIndent(level, 'v');
-			printf("%s", node->words[i]);
+			treePrintWordinfo(&(node->words[i]));
 			printf("\n");
 		}
 		treePrint(node->child, level + 1);
@@ -196,7 +227,9 @@ treeAddToLevel(logrec_node_t *const level,
 	logrec_node_t *existing, *prev = NULL;
 
 	for(existing = level->child ; existing != NULL ; existing = existing->sibling) {
-		if(!strcmp(existing->val.ltext, word)) {
+		struct wordinfo *wi;
+		if((wi = logrec_hasWord(existing, word)) != NULL) {
+			wi->occurs++;
 			break;
 		}
 		prev = existing;
@@ -209,12 +242,12 @@ treeAddToLevel(logrec_node_t *const level,
 		logrec_node_t *child;
 		for(child = level->child ; child != NULL ; child = child->sibling) {
 			if(child->child != NULL
-			   && !strcmp(child->child->val.ltext, nextword))
+			   && !strcmp(child->child->words[0].word, nextword))
 			   	break;
 		}
 		if(child != NULL) {
-			treeAddVal(child, word);
-			printf("val %s combine with %s\n", child->val.ltext, word);
+			logrec_addWord(child, word);
+			printf("val %s combine with %s\n", child->words[0].word, word);
 			existing = child;
 		}
 	}
@@ -248,7 +281,6 @@ treeAddLine(char *ln)
 			break;
 		}
 		nextword = getWord(&ln);
-		//printf("word: '%s'\n", word);
 		level = treeAddToLevel(level, word, nextword);
 	}
 }
