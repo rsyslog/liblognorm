@@ -1,7 +1,9 @@
 ----------------------------------------------------------------------
-Version 1.1.1, 2015-??-??
-- fixed library version numberbing
+Version 1.1.1, 2015-03-09
+- fixed library version numbering
   Thanks to Tomas Heinreich for reporting the problem.
+- added new parser syntaxes
+  Thanks to Janmejay Singh for implementing most of them.
 ----------------------------------------------------------------------
 Version 1.1.0, 2015-01-08
 - added regular expression support

@@ -3,7 +3,8 @@ if ENABLE_DOCS
     SUBDIRS += doc
 endif
 
-EXTRA_DIST = rulebases
+EXTRA_DIST = rulebases \
+	COPYING.ASL20
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = lognorm.pc
 
