@@ -118,6 +118,78 @@ logrec_hasWord(logrec_node_t *const __restrict__ node,
 	return (struct wordinfo*) bsearch(word, node->words, node->nwords, sizeof(struct wordinfo), bs_compmi);
 }
 
+
+void
+printPrefixes(logrec_node_t *const __restrict__ node,
+	const int lenPrefix, const int lenSuffix)
+{
+	int i;
+	const int maxwords = node->nwords > 5 ? 5 : node->nwords;
+	printf("prefix %d, suffix %d\n", lenPrefix, lenSuffix);
+	for(i = 0 ; i < maxwords ; ++i) {
+		const char *const word = node->words[i].word;
+		const int lenWord = strlen(word);
+		const int strtSuffix = lenWord - lenSuffix;
+		int j;
+		putchar('"');
+		for(j = 0 ; j < lenPrefix ; ++j)
+			putchar(word[j]);
+		printf("\" \"");
+		for( ; j < strtSuffix ; ++j)
+			putchar(word[j]);
+		printf("\" \"");
+		for( ; j < lenWord ; ++j)
+			putchar(word[j]);
+		printf("\"\n");
+	}
+}
+
+/* check if there are common prefixes and suffixes and, if so,
+ * exteract them.
+ */
+void
+checkPrefixes(logrec_node_t *const __restrict__ node)
+{
+	if(node->nwords == 1)
+		return;
+
+	int i;
+	const char *const baseword = node->words[0].word;
+	const int lenBaseword = strlen(baseword);
+	int lenPrefix = lenBaseword;
+	int lenSuffix = lenBaseword;
+	for(i = 1 ; i < node->nwords ; ++i) {
+		int j;
+		/* check prefix */
+		if(lenPrefix > 0) {
+			for(j = 0 ;
+			    j < lenPrefix && node->words[i].word[j] == baseword[j] ;
+			    ++j)
+				; /* EMPTY - just scan */
+			if(j < lenPrefix)
+				lenPrefix = j;
+		}
+		/* check suffix */
+		if(lenSuffix > 0) {
+			const int lenWord = strlen(node->words[i].word);
+			const int jmax = (lenWord < lenSuffix) ? lenWord : lenSuffix;
+			for(j = 0 ;
+			    j < jmax &&
+			      node->words[i].word[lenWord-j-1] == baseword[lenBaseword-j-1] ;
+			    ++j)
+				; /* EMPTY - just scan */
+			if(j < lenSuffix)
+				lenSuffix = j;
+		}
+	}
+	if(lenPrefix != 0 || lenSuffix != 0) {
+		/* TODO: not only print here, but let user override
+		 * (in upcoming "interactive" mode)
+		 */
+		printPrefixes(node, lenPrefix, lenSuffix);
+	}
+}
+
 /* squash a tree, that is combine nodes that point to nodes
  * without siblings to a single node.
  */
@@ -144,6 +216,7 @@ treeSquash(logrec_node_t *node)
 			logrec_delNode(toDel);
 			continue; /* see if we can squash more */
 		}
+		checkPrefixes(node);
 		treeSquash(node->child);
 //printf("moving to next node %p -> %p\n", node, node->sibling);
 		node = node->sibling;
@@ -299,12 +372,14 @@ preprocessLine(const char *const __restrict__ buf,
 	//printf("line %d: %s\n", lnCnt, buf);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
-		if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
-			tocopy = "%ipv4%";
-		} else if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-rfc3164%";
+#if 0
+		} else if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
+			tocopy = "%ipv4%";
 		} else if(syntax_posint(buf+i, buflen-i, NULL, &nproc)) {
 			tocopy = "%posint%";
+#endif
 		} else {
 			tocopy = NULL;
 			nproc = 1;
