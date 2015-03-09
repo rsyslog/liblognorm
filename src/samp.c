@@ -121,7 +121,7 @@ done:
 ln_fieldList_t*
 ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **str, int* ret)
 {
-	int r;
+	int r = 0;
 	ln_fieldList_t *node;
 	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
