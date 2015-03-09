@@ -1,4 +1,6 @@
-/* clustering log records
+/* simple log structure analyzer (slsa)
+ *
+ * This is a heuristic to mine log structure.
  *
  * Copyright 2015 Rainer Gerhards
  *
@@ -13,6 +15,15 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ */
+/* Learnings (mostly from things that failed)
+ * - if we detect IP (and similar things) too early in the process, we
+ *   get wrong detections (e.g. for reverse DNS entries)
+ * - if we detect IP adresses during value collapsing, we get unacceptable
+ *   runtime and memory requirements, as a huge number of different actual
+ *   values needs to be stored.
+ * ->current solution is to detect them after tokenization but before
+ *   adding the the structure tree.
  */
 
 #include "config.h"
@@ -274,9 +285,22 @@ getWord(char **const line)
 	if(begin_word == i) /* only trailing spaces? */
 		return NULL;
 	const size_t wordlen = i - begin_word;
-	char *const word = malloc(wordlen + 1);
+	char *word = malloc(wordlen + 1);
 	memcpy(word, ln+begin_word, wordlen);
 	word[wordlen] = '\0';
+	if(word[0] == '%') /* assume already token [TODO: improve] */
+		goto done;
+	size_t nproc;
+	if(syntax_posint(word, wordlen, NULL, &nproc) &&
+	   nproc == wordlen) {
+		free(word);
+		word = strdup("%posint%");
+	} else if(syntax_ipv4(word, wordlen, NULL, &nproc) &&
+	          nproc == wordlen) {
+		free(word);
+		word = strdup("%ipv4%");
+	}
+done:
 	*line = ln+i;
 	return word;
 }
@@ -320,7 +344,7 @@ treeAddToLevel(logrec_node_t *const level,
 		}
 		if(child != NULL) {
 			logrec_addWord(child, word);
-			printf("val %s combine with %s\n", child->words[0].word, word);
+			//printf("val %s combine with %s\n", child->words[0].word, word);
 			existing = child;
 		}
 	}
