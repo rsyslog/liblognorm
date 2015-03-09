@@ -4,6 +4,9 @@ Version 1.1.1, 2015-03-09
   Thanks to Tomas Heinreich for reporting the problem.
 - added new parser syntaxes
   Thanks to Janmejay Singh for implementing most of them.
+- bugfix: function ln_parseFieldDescr() returns state value
+  due to unitialized variable. This can also lead to invalid
+  returning no sample node where one would have to be created.
 ----------------------------------------------------------------------
 Version 1.1.0, 2015-01-08
 - added regular expression support
