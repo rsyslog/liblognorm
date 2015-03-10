@@ -61,21 +61,21 @@ syntax_ipv4(const char *const __restrict__ buf,
 	if(buf[i] != '.') goto done;
 	i++;
 	val = getPosInt(buf+i, buflen-i, &nproc);
-	if(val < 1 || val > 255)
+	if(val < 0 || val > 255)
 		goto done;
 	i += nproc;
 
 	if(buf[i] != '.') goto done;
 	i++;
 	val = getPosInt(buf+i, buflen-i, &nproc);
-	if(val < 1 || val > 255)
+	if(val < 0 || val > 255)
 		goto done;
 	i += nproc;
 
 	if(buf[i] != '.') goto done;
 	i++;
 	val = getPosInt(buf+i, buflen-i, &nproc);
-	if(val < 1 || val > 255)
+	if(val < 0 || val > 255)
 		goto done;
 	i += nproc;
 
