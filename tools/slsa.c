@@ -295,10 +295,23 @@ getWord(char **const line)
 	   nproc == wordlen) {
 		free(word);
 		word = strdup("%posint%");
-	} else if(syntax_ipv4(word, wordlen, NULL, &nproc) &&
-	          nproc == wordlen) {
-		free(word);
-		word = strdup("%ipv4%");
+		goto done;
+	}
+	if(syntax_ipv4(word, wordlen, NULL, &nproc)) {
+		if(nproc == wordlen) {
+			free(word);
+			word = strdup("%ipv4%");
+			goto done;
+		}
+		if(word[nproc] == '/') {
+			size_t strtnxt = nproc + 1;
+			if(syntax_posint(word+strtnxt, wordlen-strtnxt, NULL, &nproc))
+				if(strtnxt+nproc == wordlen) {
+					free(word);
+					word = strdup("%ipv4-/-port%");
+					goto done;
+				}
+		}
 	}
 done:
 	*line = ln+i;
