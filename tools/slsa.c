@@ -34,6 +34,7 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #include "liblognorm.h"
 #include "internal.h"
@@ -67,6 +68,29 @@ typedef struct logrec_node logrec_node_t;
 
 logrec_node_t *root = NULL;
 
+/* command line options */
+static int displayProgress = 0; /* display progress indicators */
+
+
+static void
+reportProgress(const char *const label)
+{
+	static unsigned cnt = 0;
+	static const char *lastlabel = NULL;
+	if(!displayProgress)
+		return;
+	if(lastlabel == NULL)
+		lastlabel = strdup(label);
+	if(label == NULL || strcmp(label, lastlabel)) {
+		fprintf(stderr, "\r%s: %u - done\n", lastlabel, cnt);
+		cnt = 0;
+		free((void*)lastlabel);
+		lastlabel = (label == NULL) ? NULL : strdup(label);
+	} else {
+		if(++cnt % 100 == 0)
+			fprintf(stderr, "\r%s: %u", label, cnt);
+	}
+}
 
 static int
 qs_compmi(const void *v1, const void *v2)
@@ -208,6 +232,7 @@ void
 treeSquash(logrec_node_t *node)
 {
 	if(node == NULL) return;
+	reportProgress("squashing");
 	const int hasSibling = node->sibling == NULL ? 0 : 1;
 //printf("new iter, node %s\n", node->val.ltext);
 	while(node != NULL) {
@@ -254,6 +279,7 @@ treePrintWordinfo(struct wordinfo *const __restrict__ wi)
 void
 treePrint(logrec_node_t *node, const int level)
 {
+	reportProgress("print");
 	while(node != NULL) {
 		treePrintIndent(level, 'l');
 		treePrintWordinfo(&(node->words[0]));
@@ -444,6 +470,7 @@ processFile(FILE *fp)
 	//logrecord_t * logrec;
 
 	while(!feof(fp)) {
+		reportProgress("reading");
 		size_t i;
 		for(i = 0 ; i < sizeof(lnbuf)-1 ; ++i) {
 			const int c = fgetc(fp);
@@ -463,6 +490,7 @@ processFile(FILE *fp)
 	treePrint(root, 0);
 	treeSquash(root);
 	treePrint(root, 0);
+	reportProgress(NULL);
 	return 0;
 }
 
@@ -471,6 +499,25 @@ int
 main(int __attribute((unused)) argc, char __attribute((unused)) *argv[])
 {
 	int r;
+	int ch;
+	static const struct option longopts[] = {
+		{ "report-progress",	no_argument,	  0, 'p' },
+		{ NULL,		0, 0, 0 }
+	};
+
+	while ((ch = getopt_long(argc, argv, "p", longopts, NULL)) != -1) {
+		switch (ch) {
+		case 'p':		/* file to log */
+			displayProgress = 1;
+			break;
+		case '?':
+		default:
+		//	usage(stderr);
+			fprintf(stderr, "invalid option");
+			break;
+		}
+	}
+
 	root = logrec_newNode(strdup("[ROOT]"));
 	r = processFile(stdin);
 	return r;
