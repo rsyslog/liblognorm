@@ -187,6 +187,10 @@ rest
 Zero or more characters till end of line. Should be always at end of the 
 rule.
 
+Note that the *rest* syntax should be avoided because it generates
+a very broad match. If used, it is impossible to match on a specific 
+character that is on the same position where *rest* is used.
+
 ::
 
     %field_name:rest%
