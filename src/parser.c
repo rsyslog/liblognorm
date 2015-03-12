@@ -1790,6 +1790,47 @@ BEGINParser(ISODate)
 ENDParser
 
 /**
+ * Parse a duration. A duration is similar to a timestamp, except that
+ * it tells about time elapsed. As such, hours can be larger than 23
+ * and hours may also be specified by a single digit (this, for example,
+ * is commonly done in Cisco software).
+ * Note: we do manual loop unrolling -- this is fast AND efficient.
+ */
+BEGINParser(Duration)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* hour is a bit tricky */
+	if(!isdigit(c[i])) goto fail;
+	++i;
+	if(isdigit(c[i]))
+		++i;
+	if(c[i] == ':')
+		++i;
+	else
+		goto fail;
+
+	if(i+5 > strLen)
+		goto fail;/* if it is not 5 chars from here, it can't be us */
+
+	if(c[i] < '0' || c[i] > '5') goto fail;
+	if(!isdigit(c[i+1])) goto fail;
+	if(c[i+2] != ':') goto fail;
+	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
+	if(!isdigit(c[i+4])) goto fail;
+
+	/* success, persist */
+	*parsed = (i + 5) - *offs;
+
+ENDParser
+
+/**
  * Parse a timestamp in 24hr format (exactly HH:MM:SS).
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14

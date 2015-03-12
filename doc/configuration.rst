@@ -261,6 +261,22 @@ Time of format 'HH:MM:SS', where HH is 00..12.
 
     %time:time-12hr%
 
+duration
+########   
+
+A duration is similar to a timestamp, except that
+it tells about time elapsed. As such, hours can be larger than 23
+and hours may also be specified by a single digit (this, for example,
+is commonly done in Cisco software).
+
+Examples for durations are "12:05:01", "0:00:01" and "37:59:59" but not
+"00:60:00" (HH and MM must still be within the usual range for
+minutes and seconds).
+
+::
+
+    %session_lasted:duration%
+
 date-rfc3164
 ############
 
