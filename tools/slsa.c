@@ -43,9 +43,16 @@
 
 #define MAXLINE 32*1024
 
+struct wordflags {
+	unsigned
+		isSubword : 1,
+		isSpecial : 1;	/* indicates this is a special parser */
+};
+
 struct wordinfo {
 	char *word;
 	int occurs;
+	struct wordflags flags;
 };
 struct logrec_node {
 	struct logrec_node *sibling;
@@ -71,6 +78,30 @@ logrec_node_t *root = NULL;
 /* command line options */
 static int displayProgress = 0; /* display progress indicators */
 
+/* a stack to keep track of detected (sub)words that
+ * need to be processed in the future.
+ */
+#define SIZE_WORDSTACK 8
+static struct wordinfo* wordStack[SIZE_WORDSTACK];
+static int wordstackPtr = -1; /* empty */
+
+static void
+wordstackPush(struct wordinfo *const wi)
+{
+	++wordstackPtr;
+	if(wordstackPtr >= SIZE_WORDSTACK) {
+		fprintf(stderr, "slsa: wordstack too small\n");
+		exit(1);
+	}
+	wordStack[wordstackPtr] = wi;
+}
+
+/* returns wordinfo or NULL, if stack is empty */
+static struct wordinfo *
+wordstackPop(void)
+{
+	return (wordstackPtr < 0) ? NULL : wordStack[wordstackPtr--];
+}
 
 static void
 reportProgress(const char *const label)
@@ -92,6 +123,9 @@ reportProgress(const char *const label)
 	}
 }
 
+#if 0 /* we don't need this at the moment, but want to preserve it
+       * in case we can need it again.
+       */
 static int
 qs_compmi(const void *v1, const void *v2)
 {
@@ -105,6 +139,8 @@ bs_compmi(const void *key, const void *mem)
 	const struct wordinfo *const wi =  (struct wordinfo*) mem;
 	return strcmp((char*)key, wi->word);
 }
+#endif
+
 /* add an additional word to existing node */
 void
 logrec_addWord(logrec_node_t *const __restrict__ node,
@@ -118,9 +154,11 @@ logrec_addWord(logrec_node_t *const __restrict__ node,
 	node->words[node->nwords].word = word;
 	node->words[node->nwords].occurs = 1;
 	node->nwords = newnwords;
+#if 0
 	if(node->nwords > 1) {
 		qsort(node->words, node->nwords, sizeof(struct wordinfo), qs_compmi); // TODO upgrade
 	}
+#endif
 }
 
 logrec_node_t *
@@ -150,7 +188,14 @@ static struct wordinfo *
 logrec_hasWord(logrec_node_t *const __restrict__ node,
 	char *const __restrict__ word)
 {
-	return (struct wordinfo*) bsearch(word, node->words, node->nwords, sizeof(struct wordinfo), bs_compmi);
+//	return (struct wordinfo*) bsearch(word, node->words, node->nwords, sizeof(struct wordinfo), bs_compmi);
+	/* alternative without need to have a binary array -- may make sense... */
+	int i;
+	for(i = 0 ; i < node->nwords ; ++i) {
+		if(!strcmp(node->words[i].word, word))
+			break;
+	}
+	return (i < node->nwords) ? node->words+i : NULL;
 }
 
 
@@ -296,9 +341,63 @@ treePrint(logrec_node_t *node, const int level)
 	}
 }
 
-char *
+/* TODO: move wordlen to struct wordinfo? */
+void
+wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
+{
+	size_t nproc;
+	if(syntax_posint(wi->word, wordlen, NULL, &nproc) &&
+	   nproc == wordlen) {
+		free(wi->word);
+		wi->word = strdup("%posint%");
+		wi->flags.isSpecial = 1;
+		goto done;
+	}
+	if(syntax_ipv4(wi->word, wordlen, NULL, &nproc)) {
+		if(nproc == wordlen) {
+			free(wi->word);
+			wi->word = strdup("%ipv4%");
+			wi->flags.isSpecial = 1;
+			goto done;
+		}
+		if(wi->word[nproc] == '/') {
+			size_t strtnxt = nproc + 1;
+			if(syntax_posint(wi->word+strtnxt, wordlen-strtnxt,
+				NULL, &nproc))
+				if(strtnxt+nproc == wordlen) {
+					free(wi->word);
+					wi->word = strdup("%ipv4%");
+					wi->flags.isSubword = 1;
+					wi->flags.isSpecial = 1;
+
+					struct wordinfo *wit;
+
+					wit = calloc(1, sizeof(struct wordinfo));
+					wit->word = strdup("%posint%");
+					wit->flags.isSubword = 1;
+					wit->flags.isSpecial = 1;
+					wordstackPush(wit);
+
+					wit = calloc(1, sizeof(struct wordinfo));
+					wit->word = strdup("/");
+					wit->flags.isSubword = 1;
+					wit->flags.isSpecial = 0;
+					wordstackPush(wit);
+					goto done;
+				}
+		}
+	}
+done:
+	return;
+}
+
+struct wordinfo *
 getWord(char **const line)
 {
+
+	struct wordinfo *wi = wordstackPop();
+	if(wi != NULL)
+		return wi;
 	char *ln = *line;
 	if(*ln == '\0')
 		return NULL;
@@ -311,37 +410,16 @@ getWord(char **const line)
 	if(begin_word == i) /* only trailing spaces? */
 		return NULL;
 	const size_t wordlen = i - begin_word;
-	char *word = malloc(wordlen + 1);
-	memcpy(word, ln+begin_word, wordlen);
-	word[wordlen] = '\0';
-	if(word[0] == '%') /* assume already token [TODO: improve] */
+	wi = calloc(1, sizeof(struct wordinfo));
+	wi->word = malloc(wordlen + 1);
+	memcpy(wi->word, ln+begin_word, wordlen);
+	wi->word[wordlen] = '\0';
+	if(wi->word[0] == '%') /* assume already token [TODO: improve] */
 		goto done;
-	size_t nproc;
-	if(syntax_posint(word, wordlen, NULL, &nproc) &&
-	   nproc == wordlen) {
-		free(word);
-		word = strdup("%posint%");
-		goto done;
-	}
-	if(syntax_ipv4(word, wordlen, NULL, &nproc)) {
-		if(nproc == wordlen) {
-			free(word);
-			word = strdup("%ipv4%");
-			goto done;
-		}
-		if(word[nproc] == '/') {
-			size_t strtnxt = nproc + 1;
-			if(syntax_posint(word+strtnxt, wordlen-strtnxt, NULL, &nproc))
-				if(strtnxt+nproc == wordlen) {
-					free(word);
-					word = strdup("%ipv4-/-port%");
-					goto done;
-				}
-		}
-	}
+	wordDetectSyntax(wi, wordlen);
 done:
 	*line = ln+i;
-	return word;
+	return wi;
 }
 
 void
@@ -356,40 +434,39 @@ treeAddChildToParent(logrec_node_t *parent,
 
 logrec_node_t *
 treeAddToLevel(logrec_node_t *const level,
-	char *const word,
-	char *const nextword
+	struct wordinfo *const wi,
+	struct wordinfo *const nextwi
 	)
 {
 	logrec_node_t *existing, *prev = NULL;
 
 	for(existing = level->child ; existing != NULL ; existing = existing->sibling) {
-		struct wordinfo *wi;
-		if((wi = logrec_hasWord(existing, word)) != NULL) {
-			wi->occurs++;
+		struct wordinfo *wi_val;
+		if((wi_val = logrec_hasWord(existing, wi->word)) != NULL) {
+			wi_val->occurs++;
 			break;
 		}
 		prev = existing;
 	}
 
-	if(existing == NULL && nextword != NULL) {
+	if(existing == NULL && nextwi != NULL) {
 		/* we check if the next word is the same, if so, we can
 		 * just add this as a different value.
 		 */
 		logrec_node_t *child;
 		for(child = level->child ; child != NULL ; child = child->sibling) {
 			if(child->child != NULL
-			   && !strcmp(child->child->words[0].word, nextword))
+			   && !strcmp(child->child->words[0].word, nextwi->word))
 			   	break;
 		}
 		if(child != NULL) {
-			logrec_addWord(child, word);
-			//printf("val %s combine with %s\n", child->words[0].word, word);
+			logrec_addWord(child, wi->word);
 			existing = child;
 		}
 	}
 
 	if(existing == NULL) {
-		existing = logrec_newNode(word);
+		existing = logrec_newNode(wi->word);
 		if(prev == NULL) {
 			/* first child of parent node */
 			//treeAddChildToParent(level, existing);
@@ -406,18 +483,18 @@ treeAddToLevel(logrec_node_t *const level,
 void
 treeAddLine(char *ln)
 {
-	char *word;
-	char *nextword; /* we need one-word lookahead for structure tree */
+	struct wordinfo *wi;
+	struct wordinfo *nextwi; /* we need one-word lookahead for structure tree */
 	logrec_node_t *level = root;
-	nextword = getWord(&ln);
+	nextwi = getWord(&ln);
 	while(1) {
-		word = nextword;
-		if(word == NULL) {
+		wi = nextwi;
+		if(wi == NULL) {
 			++level->nterm;
 			break;
 		}
-		nextword = getWord(&ln);
-		level = treeAddToLevel(level, word, nextword);
+		nextwi = getWord(&ln);
+		level = treeAddToLevel(level, wi, nextwi);
 	}
 }
 
@@ -432,17 +509,15 @@ preprocessLine(const char *const __restrict__ buf,
 	size_t tocopylen;
 	size_t iout;
 
-	//printf("line %d: %s\n", lnCnt, buf);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
+		/* in this stage, we must only detect syntaxes that we are
+		 * very sure to correctly detect AND that *spawn multiple
+		 * words*. Otherwise, it is safer to detect them on a
+		 * word basis.
+		 */
 		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-rfc3164%";
-#if 0
-		} else if(syntax_ipv4(buf+i, buflen-i, NULL, &nproc)) {
-			tocopy = "%ipv4%";
-		} else if(syntax_posint(buf+i, buflen-i, NULL, &nproc)) {
-			tocopy = "%posint%";
-#endif
 		} else {
 			tocopy = NULL;
 			nproc = 1;
@@ -459,7 +534,6 @@ preprocessLine(const char *const __restrict__ buf,
 		i += nproc;
 	}
 	bufout[iout] = '\0';
-	//printf("outline %d: %s\n", lnCnt, bufout);
 	++lnCnt;
 }
 int
@@ -467,7 +541,6 @@ processFile(FILE *fp)
 {
 	char lnbuf[MAXLINE];
 	char lnpreproc[MAXLINE];
-	//logrecord_t * logrec;
 
 	while(!feof(fp)) {
 		reportProgress("reading");
@@ -496,7 +569,7 @@ processFile(FILE *fp)
 
 
 int
-main(int __attribute((unused)) argc, char __attribute((unused)) *argv[])
+main(int argc, char *argv[])
 {
 	int r;
 	int ch;
