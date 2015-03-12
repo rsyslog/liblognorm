@@ -284,7 +284,6 @@ disjoinCommon(logrec_node_t *node,
 	struct wordinfo *newwi;
 	char *newword;
 	char *word = node->words[0]->word;
-logrec_node_t *tmp = node->parent;
 printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
 	if(lenPrefix > 0) {
 		/* we need to update our node in-place, because otherwise
@@ -479,6 +478,14 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 	   nproc == wordlen) {
 		free(wi->word);
 		wi->word = strdup("%posint%");
+		wi->flags.isSpecial = 1;
+		goto done;
+	}
+	size_t i = 0;
+	if(ln_parseTime24hr(wi->word, wordlen, &i, NULL, &nproc, NULL) == 0 &&
+	   nproc == wordlen) {
+		free(wi->word);
+		wi->word = strdup("%time-24hr%");
 		wi->flags.isSpecial = 1;
 		goto done;
 	}
