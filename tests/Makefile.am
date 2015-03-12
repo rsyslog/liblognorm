@@ -12,6 +12,7 @@ user_test_LDFLAGS = -no-install
 
 TESTS_SHELLSCRIPTS = \
 	field_hexnumber.sh \
+	field_whitespace.sh \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
 	field_recursive.sh \

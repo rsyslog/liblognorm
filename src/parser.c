@@ -601,6 +601,34 @@ ENDParser
 
 
 /**
+ * Parse whitespace.
+ * This parses all whitespace until the first non-whitespace character
+ * is found. This is primarily a tool to skip to the next "word" if
+ * the exact number of whitspace characters (and type of whitespace)
+ * is not known. The current parsing position MUST be on a whitspace,
+ * else the parser does not match.
+ * This parser is also a forward-compatibility tool for the upcoming
+ * slsa (simple log structure analyser) tool.
+ */
+BEGINParser(Whitespace)
+	const char *c;
+	size_t i = *offs;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+
+	if(!isspace(c[i]))
+		goto fail;
+
+	for (i++ ; i < strLen && isspace(c[i]); i++);
+	/* success, persist */
+	*parsed = i - *offs;
+ENDParser
+
+
+/**
  * Parse a word.
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
