@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 /* Learnings (mostly from things that failed)
+ * ------------------------------------------
  * - if we detect IP (and similar things) too early in the process, we
  *   get wrong detections (e.g. for reverse DNS entries)
  * - if we detect IP adresses during value collapsing, we get unacceptable
@@ -24,6 +25,25 @@
  *   values needs to be stored.
  * ->current solution is to detect them after tokenization but before
  *   adding the the structure tree.
+ *
+ * - if we split some known syntaxes (like cisco ip/port) into it's parts,
+ *   they may get improperly detected in regard to subwords. This especially
+ *   happens if there are few servers (or few destination ports), where parts
+ *   of the IP (or the port) is considered to be a common prefix, which then
+ *   may no longer be properly detected. As it looks, it pays to really have a
+ *   much richer set of special parsers, and let the common pre/suffix
+ *   detection only be used in rare cases where we do not have a parser.
+ *   Invocation may even be treated as the need to check for a new parser.
+ *
+ *   Along the same lines, common "command words" (like "udp", "tcp") may
+ *   also be detected by a specific parser, because otherwise they tend to have
+ *   common pre/suffixes (e.g. {"ud","tc"},"p"). This could be done via a
+ *   dictionary lookup (bsearch, later to become a single state machine?).
+ *
+ *   Along these lines, we probably need parses who return *multiple* values,
+ *   e.g. the IP address and port. This requires that the field name has a
+ *   common prefix. A solution is to return JSON where the node element is
+ *   named like the field name, and the members have parser-specific names.
  */
 
 #include "config.h"
@@ -55,6 +75,7 @@ struct wordinfo {
 	struct wordflags flags;
 };
 struct logrec_node {
+	struct logrec_node *parent;
 	struct logrec_node *sibling;
 	struct logrec_node *child; /* NULL: end of record */
 	int nterm; /* number of times this was the terminal node */
@@ -74,6 +95,10 @@ struct logrec_node {
 typedef struct logrec_node logrec_node_t;
 
 logrec_node_t *root = NULL;
+
+/* forward definitions */
+void wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen);
+void treePrint(logrec_node_t *node, const int level);
 
 /* param word may be NULL, if word is not yet known */
 static struct wordinfo *
@@ -184,9 +209,10 @@ logrec_addWord(logrec_node_t *const __restrict__ node,
 }
 
 logrec_node_t *
-logrec_newNode(struct wordinfo *const wi)
+logrec_newNode(struct wordinfo *const wi, struct logrec_node *const parent)
 {
 	logrec_node_t *const node = calloc(1, sizeof(logrec_node_t));
+	node->parent = parent;
 	node->child = NULL;
 	node->val.ltext = NULL;
 	logrec_addWord(node, wi);
@@ -246,8 +272,86 @@ printPrefixes(logrec_node_t *const __restrict__ node,
 	}
 }
 
+/* Disjoin common prefixes and suffixes. This also triggers a
+ * new syntax detection on the remaining variable part.
+ */
+static void
+disjoinCommon(logrec_node_t *node,
+	const size_t lenPrefix,
+	const size_t lenSuffix)
+{
+	logrec_node_t *newnode;
+	struct wordinfo *newwi;
+	char *newword;
+	char *word = node->words[0]->word;
+logrec_node_t *tmp = node->parent;
+printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
+	if(lenPrefix > 0) {
+		/* we need to update our node in-place, because otherwise
+		 * we change the structure of the tree with a couple of
+		 * side effects. As we do not want this, the prefix must
+		 * be placed into the current node, and new nodes be
+		 * created for the other words.
+		 */
+		newword = malloc(lenPrefix+1);
+		memcpy(newword, word, lenPrefix);
+		newword[lenPrefix] = '\0';
+		newwi = wordinfoNew(newword);
+		newwi->flags.isSubword = 1;
+//printf("word: '%s', new word: '%s'\n", word, newword);
+
+		newnode = logrec_newNode(newwi, node);
+		newnode->words = node->words;
+		newnode->nwords = node->nwords;
+		node->nwords = 0;
+		node->words = NULL;
+		logrec_addWord(node, newwi);
+		newnode->child = node->child;
+		node->child = newnode;
+		node->parent = newnode;
+
+		/* switch node */
+		node = newnode;
+
+		for(int i = 0 ; i < node->nwords ; ++i)
+{printf("moving '%s' ->\n", node->words[i]->word); fflush(stdout);
+			memmove(node->words[i]->word, /* move includes \0 */
+				node->words[i]->word+lenPrefix,
+				strlen(node->words[i]->word)-lenPrefix+1);
+printf("'%s'\n", node->words[i]->word); fflush(stdout); }
+	}
+	if(lenSuffix > 0) {
+		const size_t lenword = strlen(word);
+		size_t iSuffix = lenword-lenSuffix;
+		newword = malloc(lenSuffix+1);
+		memcpy(newword, word+iSuffix, lenSuffix+1); /* includes \0 */
+		//newword[lenSuffix] = '\0';
+		newwi = wordinfoNew(newword);
+		newwi->flags.isSubword = 1;
+
+		newnode = logrec_newNode(newwi, node);
+		newnode->child = node->child;
+		newnode->child->parent = newnode;
+		node->child = newnode;
+
+		for(int i = 0 ; i < node->nwords ; ++i) {
+			iSuffix = strlen(node->words[i]->word)-lenSuffix;
+printf("pre-del lenSuffix %zd, iSuffix %zd, word: '%s', result ", lenSuffix, iSuffix, node->words[i]->word);fflush(stdout);
+			node->words[i]->word[iSuffix] = '\0';
+printf("'%s'\n", node->words[i]->word);fflush(stdout);
+		}
+	}
+
+	for(int i = 0 ; i < node->nwords ; ++i)
+		node->words[i]->flags.isSubword = 1;
+		//wordDetectSyntax(node->words[i], strlen(node->words[i]->word));
+}
+
 /* check if there are common prefixes and suffixes and, if so,
- * exteract them.
+ * extract them.
+ * TODO: fix cases like {"end","eend"} which will lead to prefix=1, suffix=3
+ * and which are obviously wrong. This happens with the current algo whenever
+ * we have common chars at the edge of prefix and suffix.
  */
 void
 checkPrefixes(logrec_node_t *const __restrict__ node)
@@ -289,6 +393,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		 * (in upcoming "interactive" mode)
 		 */
 		printPrefixes(node, lenPrefix, lenSuffix);
+		disjoinCommon(node, lenPrefix, lenSuffix);
 	}
 }
 
@@ -339,6 +444,8 @@ void
 treePrintWordinfo(struct wordinfo *const __restrict__ wi)
 {
 	printf("%s", wi->word);
+	if(wi->flags.isSubword)
+		printf(" {subword}");
 	if(wi->occurs > 1)
 		printf(" {%d}", wi->occurs);
 }
@@ -394,7 +501,7 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 
 					struct wordinfo *wit;
 
-					wit = wordinfoNew("%postint%");
+					wit = wordinfoNew("%posint%");
 					wit->flags.isSubword = 1;
 					wit->flags.isSpecial = 1;
 					wordstackPush(wit);
@@ -441,18 +548,8 @@ done:
 	return wi;
 }
 
-void
-treeAddChildToParent(logrec_node_t *parent,
-	logrec_node_t *child)
-{
-	if(parent == NULL)
-		root = child;
-	else
-		parent->child = child;
-}
-
 logrec_node_t *
-treeAddToLevel(logrec_node_t *const level,
+treeAddToLevel(logrec_node_t *const level, /* current node */
 	struct wordinfo *const wi,
 	struct wordinfo *const nextwi
 	)
@@ -485,10 +582,9 @@ treeAddToLevel(logrec_node_t *const level,
 	}
 
 	if(existing == NULL) {
-		existing = logrec_newNode(wi);
+		existing = logrec_newNode(wi, level);
 		if(prev == NULL) {
 			/* first child of parent node */
-			//treeAddChildToParent(level, existing);
 			level->child = existing;
 		} else {
 			/* new sibling */
@@ -610,7 +706,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	root = logrec_newNode(wordinfoNew(strdup("[ROOT]")));
+	root = logrec_newNode(wordinfoNew(strdup("[ROOT]")), NULL);
 	r = processFile(stdin);
 	return r;
 }

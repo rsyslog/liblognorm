@@ -40,7 +40,7 @@
  *             if NULL on input, object is NOT persisted
  * @return 0 on success, something else otherwise
  */
-#warning check how to handle "value" - does it need to be set to NULL?
+// TODO #warning check how to handle "value" - does it need to be set to NULL?
 
 /** 
  * Parser for RFC5424 date.
