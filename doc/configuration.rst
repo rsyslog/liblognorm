@@ -120,11 +120,28 @@ hexnumber
 A hexadecimal number as seen by this parser begins with the string
 "0x", is followed by 1 or more hex digits and is terminated by white
 space. Any interleaving non-hex digits will cause non-detection. The
-rules are string to avoid false positives.
+rules are strict to avoid false positives.
 
 ::
 
     %session:hexnumber%
+
+whitespace
+##########
+
+This parses all whitespace until the first non-whitespace character
+is found. This is primarily a tool to skip to the next "word" if
+the exact number of whitspace characters (and type of whitespace)
+is not known. The current parsing position MUST be on a whitspace,
+else the parser does not match.
+
+Remeber that to just parse but not preserve the field contents, the
+dash ("-") is used as field name. This is almost always expected
+with the *whitespace* syntax.
+
+::
+
+    %-:whitespace%
 
 word
 ####    
