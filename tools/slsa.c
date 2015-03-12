@@ -69,11 +69,32 @@ struct logrec_node {
 	 * (bsearch table?)
 	 */
 	int nwords;	/* size of table */
-	struct wordinfo *words;
+	struct wordinfo **words;
 };
 typedef struct logrec_node logrec_node_t;
 
 logrec_node_t *root = NULL;
+
+/* param word may be NULL, if word is not yet known */
+static struct wordinfo *
+wordinfoNew(char *const word)
+{
+	struct wordinfo *const wi = calloc(1, sizeof(struct wordinfo));
+	if(wi == NULL) {
+		perror("slsa: malloc error struct wordinfo");
+		exit(1);
+	}
+	wi->word = word;
+	wi->occurs = 1;
+	return wi;
+}
+
+static void
+wordinfoDelete(struct wordinfo *const wi)
+{
+	free(wi->word);
+	free(wi);
+}
 
 /* command line options */
 static int displayProgress = 0; /* display progress indicators */
@@ -144,15 +165,16 @@ bs_compmi(const void *key, const void *mem)
 /* add an additional word to existing node */
 void
 logrec_addWord(logrec_node_t *const __restrict__ node,
-	char *const __restrict__ word)
+	struct wordinfo *const __restrict__ wi)
 {
 	/* TODO: here we can insert at the right spot, which makes
 	 * bsearch() usable [in the caller, later...]
 	 */
+	/* TODO: alloc in larger increments */
 	int newnwords = node->nwords + 1;
-	node->words = realloc(node->words, sizeof(struct wordinfo)*newnwords);
-	node->words[node->nwords].word = word;
-	node->words[node->nwords].occurs = 1;
+	node->words = realloc(node->words, sizeof(struct wordinfo *)*newnwords);
+	wi->occurs = 1; /* TODO: layer violation, do in other function */
+	node->words[node->nwords] = wi;
 	node->nwords = newnwords;
 #if 0
 	if(node->nwords > 1) {
@@ -162,12 +184,12 @@ logrec_addWord(logrec_node_t *const __restrict__ node,
 }
 
 logrec_node_t *
-logrec_newNode(char *const word)
+logrec_newNode(struct wordinfo *const wi)
 {
 	logrec_node_t *const node = calloc(1, sizeof(logrec_node_t));
 	node->child = NULL;
 	node->val.ltext = NULL;
-	logrec_addWord(node, word);
+	logrec_addWord(node, wi);
 	return node;
 }
 
@@ -175,7 +197,7 @@ void
 logrec_delNode(logrec_node_t *const node)
 {
 	for(int i = 0 ; i < node->nwords ; ++i)
-		free(node->words[i].word);
+		wordinfoDelete(node->words[i]);
 	free(node->words);
 	free(node->val.ltext);
 	free(node);
@@ -192,10 +214,10 @@ logrec_hasWord(logrec_node_t *const __restrict__ node,
 	/* alternative without need to have a binary array -- may make sense... */
 	int i;
 	for(i = 0 ; i < node->nwords ; ++i) {
-		if(!strcmp(node->words[i].word, word))
+		if(!strcmp(node->words[i]->word, word))
 			break;
 	}
-	return (i < node->nwords) ? node->words+i : NULL;
+	return (i < node->nwords) ? node->words[i] : NULL;
 }
 
 
@@ -207,7 +229,7 @@ printPrefixes(logrec_node_t *const __restrict__ node,
 	const int maxwords = node->nwords > 5 ? 5 : node->nwords;
 	printf("prefix %d, suffix %d\n", lenPrefix, lenSuffix);
 	for(i = 0 ; i < maxwords ; ++i) {
-		const char *const word = node->words[i].word;
+		const char *const word = node->words[i]->word;
 		const int lenWord = strlen(word);
 		const int strtSuffix = lenWord - lenSuffix;
 		int j;
@@ -234,7 +256,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		return;
 
 	int i;
-	const char *const baseword = node->words[0].word;
+	const char *const baseword = node->words[0]->word;
 	const int lenBaseword = strlen(baseword);
 	int lenPrefix = lenBaseword;
 	int lenSuffix = lenBaseword;
@@ -243,7 +265,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		/* check prefix */
 		if(lenPrefix > 0) {
 			for(j = 0 ;
-			    j < lenPrefix && node->words[i].word[j] == baseword[j] ;
+			    j < lenPrefix && node->words[i]->word[j] == baseword[j] ;
 			    ++j)
 				; /* EMPTY - just scan */
 			if(j < lenPrefix)
@@ -251,11 +273,11 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		}
 		/* check suffix */
 		if(lenSuffix > 0) {
-			const int lenWord = strlen(node->words[i].word);
+			const int lenWord = strlen(node->words[i]->word);
 			const int jmax = (lenWord < lenSuffix) ? lenWord : lenSuffix;
 			for(j = 0 ;
 			    j < jmax &&
-			      node->words[i].word[lenWord-j-1] == baseword[lenBaseword-j-1] ;
+			      node->words[i]->word[lenWord-j-1] == baseword[lenBaseword-j-1] ;
 			    ++j)
 				; /* EMPTY - just scan */
 			if(j < lenSuffix)
@@ -283,14 +305,14 @@ treeSquash(logrec_node_t *node)
 	while(node != NULL) {
 		if(!hasSibling && node->child != NULL && node->nwords == 0
 		   && node->child->sibling == NULL && node->child->nwords == 0
-		   && node->words[0].word[0] != '%' /* do not combine syntaxes */
-		   && node->child->words[0].word[0] != '%') {
+		   && node->words[0]->word[0] != '%' /* do not combine syntaxes */
+		   && node->child->words[0]->word[0] != '%') {
 			char *newword;
-			if(asprintf(&newword, "%s %s", node->words[0].word,
-				node->child->words[0].word)) {}; /* silence cc warning */
+			if(asprintf(&newword, "%s %s", node->words[0]->word,
+				node->child->words[0]->word)) {}; /* silence cc warning */
 			printf("squashing: %s\n", newword);
-			free(node->words[0].word);
-			node->words[0].word = newword;
+			free(node->words[0]->word);
+			node->words[0]->word = newword;
 			node->nterm = node->child->nterm; /* TODO: do not combine terminals! */
 			logrec_node_t *toDel = node->child;
 			node->child = node->child->child;
@@ -327,13 +349,13 @@ treePrint(logrec_node_t *node, const int level)
 	reportProgress("print");
 	while(node != NULL) {
 		treePrintIndent(level, 'l');
-		treePrintWordinfo(&(node->words[0]));
+		treePrintWordinfo(node->words[0]);
 		if(node->nterm)
 			printf(" [nterm %d]", node->nterm);
 		printf("\n");
 		for(int i = 1 ; i < node->nwords ; ++i) {
 			treePrintIndent(level, 'v');
-			treePrintWordinfo(&(node->words[i]));
+			treePrintWordinfo(node->words[i]);
 			printf("\n");
 		}
 		treePrint(node->child, level + 1);
@@ -372,16 +394,13 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 
 					struct wordinfo *wit;
 
-					wit = calloc(1, sizeof(struct wordinfo));
-					wit->word = strdup("%posint%");
+					wit = wordinfoNew("%postint%");
 					wit->flags.isSubword = 1;
 					wit->flags.isSpecial = 1;
 					wordstackPush(wit);
 
-					wit = calloc(1, sizeof(struct wordinfo));
-					wit->word = strdup("/");
+					wit = wordinfoNew("/");
 					wit->flags.isSubword = 1;
-					wit->flags.isSpecial = 0;
 					wordstackPush(wit);
 					goto done;
 				}
@@ -410,7 +429,7 @@ getWord(char **const line)
 	if(begin_word == i) /* only trailing spaces? */
 		return NULL;
 	const size_t wordlen = i - begin_word;
-	wi = calloc(1, sizeof(struct wordinfo));
+	wi = wordinfoNew(NULL);
 	wi->word = malloc(wordlen + 1);
 	memcpy(wi->word, ln+begin_word, wordlen);
 	wi->word[wordlen] = '\0';
@@ -456,17 +475,17 @@ treeAddToLevel(logrec_node_t *const level,
 		logrec_node_t *child;
 		for(child = level->child ; child != NULL ; child = child->sibling) {
 			if(child->child != NULL
-			   && !strcmp(child->child->words[0].word, nextwi->word))
+			   && !strcmp(child->child->words[0]->word, nextwi->word))
 			   	break;
 		}
 		if(child != NULL) {
-			logrec_addWord(child, wi->word);
+			logrec_addWord(child, wi);
 			existing = child;
 		}
 	}
 
 	if(existing == NULL) {
-		existing = logrec_newNode(wi->word);
+		existing = logrec_newNode(wi);
 		if(prev == NULL) {
 			/* first child of parent node */
 			//treeAddChildToParent(level, existing);
@@ -591,7 +610,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	root = logrec_newNode(strdup("[ROOT]"));
+	root = logrec_newNode(wordinfoNew(strdup("[ROOT]")));
 	r = processFile(stdin);
 	return r;
 }
