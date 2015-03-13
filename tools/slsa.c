@@ -313,11 +313,9 @@ printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
 		node = newnode;
 
 		for(int i = 0 ; i < node->nwords ; ++i)
-{printf("moving '%s' ->\n", node->words[i]->word); fflush(stdout);
 			memmove(node->words[i]->word, /* move includes \0 */
 				node->words[i]->word+lenPrefix,
 				strlen(node->words[i]->word)-lenPrefix+1);
-printf("'%s'\n", node->words[i]->word); fflush(stdout); }
 	}
 	if(lenSuffix > 0) {
 		const size_t lenword = strlen(word);
@@ -346,6 +344,33 @@ printf("'%s'\n", node->words[i]->word);fflush(stdout);
 		//wordDetectSyntax(node->words[i], strlen(node->words[i]->word));
 }
 
+/* find a matching terminator inside a suffix, searchs only
+ * within the suffix area. If found, lenPrefix and lenSuffix
+ * are update and 1 is returned. Returns 0 if not found.
+ * Helper to checkPrefixes.
+ */
+static int
+findMatchingTerm(const char *const __restrict__ word,
+	const size_t lenWord,
+	size_t potentialNewPrefix,
+	int *const __restrict lenPrefix,
+	int *const __restrict lenSuffix,
+	const char term)
+{
+	int newSuffix = -1;
+	for(int i = 0 ; i < *lenSuffix ; ++i)
+		if(word[lenWord-i-1] == term) {
+			newSuffix = i+1;
+			break;
+		}
+	if(newSuffix >= 0) {
+		*lenSuffix = newSuffix;
+		*lenPrefix = potentialNewPrefix;
+		return 1;
+	}
+	return 0;
+}
+
 /* check if there are common prefixes and suffixes and, if so,
  * extract them.
  * TODO: fix cases like {"end","eend"} which will lead to prefix=1, suffix=3
@@ -360,7 +385,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 
 	int i;
 	const char *const baseword = node->words[0]->word;
-	const int lenBaseword = strlen(baseword);
+	const size_t lenBaseword = strlen(baseword);
 	int lenPrefix = lenBaseword;
 	int lenSuffix = lenBaseword;
 	for(i = 1 ; i < node->nwords ; ++i) {
@@ -390,13 +415,42 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 	/* to avoid false positives, we check for some common
 	 * field="xxx" syntaxes here.
 	 */
-	for(int j = lenPrefix-1 ; j >= 0 ; --j)
-		if(baseword[j] == '"' || baseword[j] == '\'' ||
-		   baseword[j] == '=' || baseword[j] == ':'  ||
-		   baseword[j] == '[') {
-			lenPrefix = j + 1;
+	for(int j = lenPrefix-1 ; j >= 0 ; --j) {
+		switch(baseword[j]) {
+		case '"':
+			if(findMatchingTerm(baseword, lenBaseword, j+1,
+						&lenPrefix, &lenSuffix,'"'))
+				goto done_prefixes;
 			break;
+		case '\'':
+			if(findMatchingTerm(baseword, lenBaseword, j+1,
+						&lenPrefix, &lenSuffix,'\''))
+				goto done_prefixes;
+			break;
+		case '[':
+			if(findMatchingTerm(baseword, lenBaseword, j+1,
+						&lenPrefix, &lenSuffix,']'))
+				goto done_prefixes;
+			break;
+		case '(':
+			if(findMatchingTerm(baseword, lenBaseword, j+1,
+						&lenPrefix, &lenSuffix,')'))
+				goto done_prefixes;
+			break;
+		case '<':
+			if(findMatchingTerm(baseword, lenBaseword, j+1,
+						&lenPrefix, &lenSuffix,'>'))
+				goto done_prefixes;
+			break;
+		case '=':
+		case ':':
+			lenPrefix = j+1;
+			break;
+		default:
+			break;
+		}
 	}
+done_prefixes:
 	if(lenPrefix != 0 || lenSuffix != 0) {
 		/* TODO: not only print here, but let user override
 		 * (in upcoming "interactive" mode)
