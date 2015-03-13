@@ -502,10 +502,9 @@ treeSquash(logrec_node_t *node)
 	if(node == NULL) return;
 	reportProgress("squashing");
 	const int hasSibling = node->sibling == NULL ? 0 : 1;
-//printf("new iter, node %s\n", node->val.ltext);
 	while(node != NULL) {
-		if(!hasSibling && node->child != NULL && node->nwords == 0
-		   && node->child->sibling == NULL && node->child->nwords == 0
+		if(!hasSibling && node->child != NULL && node->nwords == 1
+		   && node->child->sibling == NULL && node->child->nwords == 1
 		   && node->words[0]->word[0] != '%' /* do not combine syntaxes */
 		   && node->child->words[0]->word[0] != '%') {
 			char *newword;
@@ -522,7 +521,6 @@ treeSquash(logrec_node_t *node)
 		}
 		checkPrefixes(node);
 		treeSquash(node->child);
-//printf("moving to next node %p -> %p\n", node, node->sibling);
 		node = node->sibling;
 	}
 }
