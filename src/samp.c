@@ -187,6 +187,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseFloat;
 	} else if(!es_strconstcmp(*str, "hexnumber")) {
 		node->parser = ln_parseHexNumber;
+	} else if(!es_strconstcmp(*str, "whitespace")) {
+		node->parser = ln_parseWhitespace;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
 		node->parser = ln_parseIPv4;
 	} else if(!es_strconstcmp(*str, "word")) {
@@ -205,6 +207,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseTime24hr;
 	} else if(!es_strconstcmp(*str, "time-12hr")) {
 		node->parser = ln_parseTime12hr;
+	} else if(!es_strconstcmp(*str, "duration")) {
+		node->parser = ln_parseDuration;
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;

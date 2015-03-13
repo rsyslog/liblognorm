@@ -601,6 +601,34 @@ ENDParser
 
 
 /**
+ * Parse whitespace.
+ * This parses all whitespace until the first non-whitespace character
+ * is found. This is primarily a tool to skip to the next "word" if
+ * the exact number of whitspace characters (and type of whitespace)
+ * is not known. The current parsing position MUST be on a whitspace,
+ * else the parser does not match.
+ * This parser is also a forward-compatibility tool for the upcoming
+ * slsa (simple log structure analyser) tool.
+ */
+BEGINParser(Whitespace)
+	const char *c;
+	size_t i = *offs;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+
+	if(!isspace(c[i]))
+		goto fail;
+
+	for (i++ ; i < strLen && isspace(c[i]); i++);
+	/* success, persist */
+	*parsed = i - *offs;
+ENDParser
+
+
+/**
  * Parse a word.
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
@@ -1758,6 +1786,47 @@ BEGINParser(ISODate)
 
 	/* success, persist */
 	*parsed = 10;
+
+ENDParser
+
+/**
+ * Parse a duration. A duration is similar to a timestamp, except that
+ * it tells about time elapsed. As such, hours can be larger than 23
+ * and hours may also be specified by a single digit (this, for example,
+ * is commonly done in Cisco software).
+ * Note: we do manual loop unrolling -- this is fast AND efficient.
+ */
+BEGINParser(Duration)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* hour is a bit tricky */
+	if(!isdigit(c[i])) goto fail;
+	++i;
+	if(isdigit(c[i]))
+		++i;
+	if(c[i] == ':')
+		++i;
+	else
+		goto fail;
+
+	if(i+5 > strLen)
+		goto fail;/* if it is not 5 chars from here, it can't be us */
+
+	if(c[i] < '0' || c[i] > '5') goto fail;
+	if(!isdigit(c[i+1])) goto fail;
+	if(c[i+2] != ':') goto fail;
+	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
+	if(!isdigit(c[i+4])) goto fail;
+
+	/* success, persist */
+	*parsed = (i + 5) - *offs;
 
 ENDParser
 

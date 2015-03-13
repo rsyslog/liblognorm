@@ -120,11 +120,28 @@ hexnumber
 A hexadecimal number as seen by this parser begins with the string
 "0x", is followed by 1 or more hex digits and is terminated by white
 space. Any interleaving non-hex digits will cause non-detection. The
-rules are string to avoid false positives.
+rules are strict to avoid false positives.
 
 ::
 
     %session:hexnumber%
+
+whitespace
+##########
+
+This parses all whitespace until the first non-whitespace character
+is found. This is primarily a tool to skip to the next "word" if
+the exact number of whitspace characters (and type of whitespace)
+is not known. The current parsing position MUST be on a whitspace,
+else the parser does not match.
+
+Remeber that to just parse but not preserve the field contents, the
+dash ("-") is used as field name. This is almost always expected
+with the *whitespace* syntax.
+
+::
+
+    %-:whitespace%
 
 word
 ####    
@@ -187,6 +204,10 @@ rest
 Zero or more characters till end of line. Should be always at end of the 
 rule.
 
+Note that the *rest* syntax should be avoided because it generates
+a very broad match. If used, it is impossible to match on a specific 
+character that is on the same position where *rest* is used.
+
 ::
 
     %field_name:rest%
@@ -239,6 +260,22 @@ Time of format 'HH:MM:SS', where HH is 00..12.
 ::
 
     %time:time-12hr%
+
+duration
+########   
+
+A duration is similar to a timestamp, except that
+it tells about time elapsed. As such, hours can be larger than 23
+and hours may also be specified by a single digit (this, for example,
+is commonly done in Cisco software).
+
+Examples for durations are "12:05:01", "0:00:01" and "37:59:59" but not
+"00:60:00" (HH and MM must still be within the usual range for
+minutes and seconds).
+
+::
+
+    %session_lasted:duration%
 
 date-rfc3164
 ############

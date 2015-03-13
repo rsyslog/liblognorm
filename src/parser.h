@@ -65,6 +65,11 @@ int ln_parseFloat(const char *str, size_t strlen, size_t *offs, const ln_fieldLi
  */
 int ln_parseHexNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
+/** 
+ * Parser for whitespace
+ */
+int ln_parseWhitespace(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
 
 /** 
  * Parser for Words (SP-terminated strings).
@@ -120,11 +125,15 @@ int ln_parseISODate(const char *str, size_t strlen, size_t *offs, const ln_field
  */
 int ln_parseTime12hr(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-
 /** 
  * Parse a timestamp in 24hr format.
  */
 int ln_parseTime24hr(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/** 
+ * Parse a duration.
+ */
+int ln_parseDuration(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
  * Parser for IPv4 addresses.
