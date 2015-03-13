@@ -97,7 +97,7 @@ typedef struct logrec_node logrec_node_t;
 logrec_node_t *root = NULL;
 
 /* forward definitions */
-void wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen);
+void wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen, const int);
 void treePrint(logrec_node_t *node, const int level);
 
 /* param word may be NULL, if word is not yet known */
@@ -169,20 +169,20 @@ reportProgress(const char *const label)
 	}
 }
 
+static int
+qs_compmi(const void *v1, const void *v2)
+{
+	const struct wordinfo *const w1 =  *((struct wordinfo**) v1);
+	const struct wordinfo *const w2 =  *((struct wordinfo**) v2);
+	return strcmp(w1->word, w2->word);
+}
 #if 0 /* we don't need this at the moment, but want to preserve it
        * in case we can need it again.
        */
 static int
-qs_compmi(const void *v1, const void *v2)
-{
-	const struct wordinfo *const w1 =  (struct wordinfo*) v1;
-	const struct wordinfo *const w2 =  (struct wordinfo*) v2;
-	return strcmp(w1->word, w2->word);
-}
-static int
 bs_compmi(const void *key, const void *mem)
 {
-	const struct wordinfo *const wi =  (struct wordinfo*) mem;
+	const struct wordinfo *const wi =  *((struct wordinfo**) mem);
 	return strcmp((char*)key, wi->word);
 }
 #endif
@@ -272,6 +272,40 @@ printPrefixes(logrec_node_t *const __restrict__ node,
 	}
 }
 
+/* Squash duplicate values inside a tree node. This must only be run
+ * after tree node values have been modified.
+ */
+static void
+squashDuplicateValues(logrec_node_t *node)
+{
+	if(node->nwords == 1)
+		return;
+
+	/* sort and the remove the easy to find dupes */
+	qsort(node->words, node->nwords, sizeof(struct wordinfo*), qs_compmi);
+	int iPrev = 0;
+	int nsquashed = 0;
+	for(int iNext = 1 ; iNext < node->nwords ; ++iNext) {
+		if(!strcmp(node->words[iPrev]->word, node->words[iNext]->word)) {
+			wordinfoDelete(node->words[iNext]);
+			++nsquashed;
+		} else { /* OK, new word */
+			if(iPrev+1 == iNext)
+				iPrev = iNext;
+			else {
+				node->words[iPrev]->occurs += iNext - iPrev - 1;
+				++iPrev;
+				node->words[iPrev] = node->words[iNext];
+			}
+		}
+	}
+	if(nsquashed) {
+		node->nwords -= nsquashed;
+		node->words = realloc(node->words,
+				sizeof(struct wordinfo *)*node->nwords);
+	}
+}
+
 /* Disjoin common prefixes and suffixes. This also triggers a
  * new syntax detection on the remaining variable part.
  */
@@ -284,7 +318,6 @@ disjoinCommon(logrec_node_t *node,
 	struct wordinfo *newwi;
 	char *newword;
 	char *word = node->words[0]->word;
-printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
 	if(lenPrefix > 0) {
 		/* we need to update our node in-place, because otherwise
 		 * we change the structure of the tree with a couple of
@@ -297,7 +330,6 @@ printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
 		newword[lenPrefix] = '\0';
 		newwi = wordinfoNew(newword);
 		newwi->flags.isSubword = 1;
-//printf("word: '%s', new word: '%s'\n", word, newword);
 
 		newnode = logrec_newNode(newwi, node);
 		newnode->words = node->words;
@@ -333,15 +365,16 @@ printf("disjoin '%s' prefix %zd, suffix %zd\n", word, lenPrefix, lenSuffix);
 
 		for(int i = 0 ; i < node->nwords ; ++i) {
 			iSuffix = strlen(node->words[i]->word)-lenSuffix;
-printf("pre-del lenSuffix %zd, iSuffix %zd, word: '%s', result ", lenSuffix, iSuffix, node->words[i]->word);fflush(stdout);
 			node->words[i]->word[iSuffix] = '\0';
-printf("'%s'\n", node->words[i]->word);fflush(stdout);
 		}
 	}
 
-	for(int i = 0 ; i < node->nwords ; ++i)
+	for(int i = 0 ; i < node->nwords ; ++i) {
 		node->words[i]->flags.isSubword = 1;
-		//wordDetectSyntax(node->words[i], strlen(node->words[i]->word));
+		wordDetectSyntax(node->words[i], strlen(node->words[i]->word), 0);
+	}
+	// TODO: squash duplicates only if syntaxes were detected!
+	squashDuplicateValues(node);
 }
 
 /* find a matching terminator inside a suffix, searchs only
@@ -535,7 +568,13 @@ treePrint(logrec_node_t *node, const int level)
 
 /* TODO: move wordlen to struct wordinfo? */
 void
-wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
+/* NOTE: bDetectStacked is just a development aid, it permits us to write
+ * a first version which does not detect multi-node items that would
+ * go to the stack and require more elaborate handling. TODO: remove that
+ * restriction.
+ */
+wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen,
+	const int bDetectStacked)
 {
 	size_t nproc;
 	size_t constzero = 0; /* the default lognorm parsers need this */
@@ -572,7 +611,7 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 			wi->flags.isSpecial = 1;
 			goto done;
 		}
-		if(wi->word[nproc] == '/') {
+		if(bDetectStacked && wi->word[nproc] == '/') {
 			size_t strtnxt = nproc + 1;
 			if(syntax_posint(wi->word+strtnxt, wordlen-strtnxt,
 				NULL, &nproc))
@@ -625,7 +664,7 @@ getWord(char **const line)
 	wi->word[wordlen] = '\0';
 	if(wi->word[0] == '%') /* assume already token [TODO: improve] */
 		goto done;
-	wordDetectSyntax(wi, wordlen);
+	wordDetectSyntax(wi, wordlen, 1);
 done:
 	*line = ln+i;
 	return wi;
