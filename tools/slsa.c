@@ -355,7 +355,7 @@ printf("'%s'\n", node->words[i]->word);fflush(stdout);
 void
 checkPrefixes(logrec_node_t *const __restrict__ node)
 {
-	if(node->nwords == 1)
+	if(node->nwords == 1 || node->words[0]->flags.isSubword)
 		return;
 
 	int i;
@@ -386,6 +386,16 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 			if(j < lenSuffix)
 				lenSuffix = j;
 		}
+	}
+	/* to avoid false positives, we check for some common
+	 * field="xxx" syntaxes here.
+	 */
+	for(int j = lenPrefix-1 ; j >= 0 ; --j)
+		if(baseword[j] == '"' || baseword[j] == '\'' ||
+		   baseword[j] == '=' || baseword[j] == ':'  ||
+		   baseword[j] == '[') {
+			lenPrefix = j + 1;
+			break;
 	}
 	if(lenPrefix != 0 || lenSuffix != 0) {
 		/* TODO: not only print here, but let user override
@@ -474,6 +484,7 @@ void
 wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 {
 	size_t nproc;
+	size_t constzero = 0; /* the default lognorm parsers need this */
 	if(syntax_posint(wi->word, wordlen, NULL, &nproc) &&
 	   nproc == wordlen) {
 		free(wi->word);
@@ -481,11 +492,22 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen)
 		wi->flags.isSpecial = 1;
 		goto done;
 	}
-	size_t i = 0;
-	if(ln_parseTime24hr(wi->word, wordlen, &i, NULL, &nproc, NULL) == 0 &&
+	if(ln_parseTime24hr(wi->word, wordlen, &constzero, NULL, &nproc, NULL) == 0 &&
 	   nproc == wordlen) {
 		free(wi->word);
 		wi->word = strdup("%time-24hr%");
+		wi->flags.isSpecial = 1;
+		goto done;
+	}
+	/* duration needs to go after Time24hr, as duration would accept
+	 * Time24hr format, whereas duration usually starts with a single
+	 * digit and so Tim24hr will not pick it. Still we may get false
+	 * detection for durations > 10hrs, but so is it...
+	 */
+	if(ln_parseDuration(wi->word, wordlen, &constzero, NULL, &nproc, NULL) == 0 &&
+	   nproc == wordlen) {
+		free(wi->word);
+		wi->word = strdup("%duration%");
 		wi->flags.isSpecial = 1;
 		goto done;
 	}
@@ -640,6 +662,12 @@ preprocessLine(const char *const __restrict__ buf,
 		 */
 		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-rfc3164%";
+		} else {
+			tocopy = NULL;
+			nproc = 1;
+		}
+		if(ln_parseRFC5424Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%date-rfc5424%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;

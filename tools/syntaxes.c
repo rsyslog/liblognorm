@@ -95,7 +95,6 @@ syntax_posint(const char *const __restrict__ buf,
 	size_t *const __restrict__ nprocessed)
 {
 	int64_t val;
-	size_t nproc;
 	size_t i;
 	int r = 0;
 
