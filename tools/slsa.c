@@ -55,6 +55,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <getopt.h>
+#include <limits.h>
 
 #include "liblognorm.h"
 #include "internal.h"
@@ -354,13 +355,13 @@ disjoinCommon(logrec_node_t *node,
 		size_t iSuffix = lenword-lenSuffix;
 		newword = malloc(lenSuffix+1);
 		memcpy(newword, word+iSuffix, lenSuffix+1); /* includes \0 */
-		//newword[lenSuffix] = '\0';
 		newwi = wordinfoNew(newword);
 		newwi->flags.isSubword = 1;
 
 		newnode = logrec_newNode(newwi, node);
 		newnode->child = node->child;
-		newnode->child->parent = newnode;
+		if(newnode->child != NULL)
+			newnode->child->parent = newnode;
 		node->child = newnode;
 
 		for(int i = 0 ; i < node->nwords ; ++i) {
@@ -421,6 +422,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 	const size_t lenBaseword = strlen(baseword);
 	int lenPrefix = lenBaseword;
 	int lenSuffix = lenBaseword;
+	int shortestWord = INT_MAX;
 	for(i = 1 ; i < node->nwords ; ++i) {
 		int j;
 		/* check prefix */
@@ -435,6 +437,8 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		/* check suffix */
 		if(lenSuffix > 0) {
 			const int lenWord = strlen(node->words[i]->word);
+			if(lenWord < shortestWord)
+				shortestWord = lenWord;
 			const int jmax = (lenWord < lenSuffix) ? lenWord : lenSuffix;
 			for(j = 0 ;
 			    j < jmax &&
@@ -445,6 +449,10 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 				lenSuffix = j;
 		}
 	}
+	if(lenPrefix+lenSuffix > shortestWord) /* can happen, e.g. if {"aaa","aaa"} */
+{printf("suffix adjust, was pre %d, suf %d, baseword %zd, shortest %d, now suf %d\n", lenPrefix, lenSuffix, lenBaseword, shortestWord, (int)shortestWord - lenPrefix);fflush(stdout);
+		lenSuffix = shortestWord - lenPrefix;
+}
 	/* to avoid false positives, we check for some common
 	 * field="xxx" syntaxes here.
 	 */
@@ -493,6 +501,32 @@ done_prefixes:
 	}
 }
 
+/* if all terminals, squash siblings. It is too dangerous to
+ * do this while creating the tree, but after it has been created
+ * such siblings are really just different values.
+ */
+void
+squashTerminalSiblings(logrec_node_t *const __restrict__ node)
+{
+	if(!node->sibling)
+		return;
+	int nSiblings = 0;
+	for(logrec_node_t *n = node ; n ; n = n->sibling) {
+		if(n->child || n->nwords > 1)
+			return;
+		nSiblings++;
+	}
+	
+	node->words = realloc(node->words, sizeof(struct wordinfo *)
+				* (node->nwords + nSiblings));
+	for(logrec_node_t *n = node->sibling ; n ; n = n->sibling) {
+printf("add to idx %d: '%s'\n", node->nwords, n->words[0]->word);fflush(stdout);
+		node->words[node->nwords++] = n->words[0];
+		n->words[0] = NULL;
+	}
+	node->sibling = NULL; // TODO: fix memory leak
+}
+
 /* squash a tree, that is combine nodes that point to nodes
  * without siblings to a single node.
  */
@@ -501,6 +535,7 @@ treeSquash(logrec_node_t *node)
 {
 	if(node == NULL) return;
 	reportProgress("squashing");
+	squashTerminalSiblings(node);
 	const int hasSibling = node->sibling == NULL ? 0 : 1;
 	while(node != NULL) {
 		if(!hasSibling && node->child != NULL && node->nwords == 1
@@ -707,7 +742,7 @@ treeAddToLevel(logrec_node_t *const level, /* current node */
 			/* first child of parent node */
 			level->child = existing;
 		} else {
-			/* new sibling */
+			/* potential new sibling */
 			prev->sibling = existing;
 		}
 	}
@@ -818,6 +853,8 @@ main(int argc, char *argv[])
 		{ "report-progress",	no_argument,	  0, 'p' },
 		{ NULL,		0, 0, 0 }
 	};
+
+	setvbuf(stdout, NULL, _IONBF, 0);
 
 	while ((ch = getopt_long(argc, argv, "p", longopts, NULL)) != -1) {
 		switch (ch) {
