@@ -455,9 +455,7 @@ checkPrefixes(logrec_node_t *const __restrict__ node)
 		}
 	}
 	if(lenPrefix+lenSuffix > shortestWord) /* can happen, e.g. if {"aaa","aaa"} */
-{printf("suffix adjust, was pre %d, suf %d, baseword %zd, shortest %d, now suf %d\n", lenPrefix, lenSuffix, lenBaseword, shortestWord, (int)shortestWord - lenPrefix);fflush(stdout);
 		lenSuffix = shortestWord - lenPrefix;
-}
 	/* to avoid false positives, we check for some common
 	 * field="xxx" syntaxes here.
 	 */
@@ -655,7 +653,9 @@ treePrintTerminalsNonRoot(logrec_node_t *__restrict__ node,
 				tail = node->words[0]->word;
 			}
 			free((void*)msg);
-			asprintf((char**)&msg, "%s %s", beginOfMsg, tail);
+			asprintf((char**)&msg, "%s%s%s", beginOfMsg,
+				tail,
+				(node->words[0]->flags.isSubword) ? "" : " ");
 			if(node->nterm)
 				printf("%6d times:%s\n", node->nterm, msg);
 		}
@@ -864,12 +864,10 @@ preprocessLine(const char *const __restrict__ buf,
 		 */
 		if(ln_parseRFC3164Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-rfc3164%";
-		} else {
-			tocopy = NULL;
-			nproc = 1;
-		}
-		if(ln_parseRFC5424Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+		} else if(ln_parseRFC5424Date(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-rfc5424%";
+		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%date-iso%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;
