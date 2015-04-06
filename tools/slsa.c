@@ -125,6 +125,8 @@ wordinfoDelete(struct wordinfo *const wi)
 
 /* command line options */
 static int displayProgress = 0; /* display progress indicators */
+static int optPrintTree = 0; /* disply internal tree for debugging purposes */
+static int optPrintDebugOutput = 0;
 
 /* a stack to keep track of detected (sub)words that
  * need to be processed in the future.
@@ -253,6 +255,8 @@ void
 printPrefixes(logrec_node_t *const __restrict__ node,
 	const int lenPrefix, const int lenSuffix)
 {
+	if(!optPrintDebugOutput)
+		return;
 	int i;
 	const int maxwords = node->nwords > 5 ? 5 : node->nwords;
 	printf("prefix %d, suffix %d\n", lenPrefix, lenSuffix);
@@ -521,7 +525,7 @@ squashTerminalSiblings(logrec_node_t *const __restrict__ node)
 	node->words = realloc(node->words, sizeof(struct wordinfo *)
 				* (node->nwords + nSiblings));
 	for(logrec_node_t *n = node->sibling ; n ; n = n->sibling) {
-printf("add to idx %d: '%s'\n", node->nwords, n->words[0]->word);fflush(stdout);
+if(optPrintDebugOutput) printf("add to idx %d: '%s'\n", node->nwords, n->words[0]->word);fflush(stdout);
 		node->words[node->nwords++] = n->words[0];
 		n->words[0] = NULL;
 	}
@@ -546,7 +550,8 @@ treeSquash(logrec_node_t *node)
 			char *newword;
 			if(asprintf(&newword, "%s %s", node->words[0]->word,
 				node->child->words[0]->word)) {}; /* silence cc warning */
-			printf("squashing: %s\n", newword);
+			if(optPrintDebugOutput)
+				printf("squashing: %s\n", newword);
 			free(node->words[0]->word);
 			node->words[0]->word = newword;
 			node->nterm = node->child->nterm; /* TODO: do not combine terminals! */
@@ -583,6 +588,8 @@ treePrintWordinfo(struct wordinfo *const __restrict__ wi)
 void
 treePrint(logrec_node_t *node, const int level)
 {
+	if(!optPrintTree)
+		return;
 	reportProgress("print");
 	while(node != NULL) {
 		treePrintIndent(level, 'l');
@@ -650,7 +657,7 @@ treePrintTerminalsNonRoot(logrec_node_t *__restrict__ node,
 			free((void*)msg);
 			asprintf((char**)&msg, "%s %s", beginOfMsg, tail);
 			if(node->nterm)
-				printf("[%6d times]:%s\n", node->nterm, msg);
+				printf("%6d times:%s\n", node->nterm, msg);
 		}
 		treePrintTerminalsNonRoot(node->child, msg);
 		node = node->sibling;
@@ -914,6 +921,8 @@ processFile(FILE *fp)
 }
 
 
+#define OPT_PRINT_TREE 1000
+#define OPT_PRINT_DEBUG_OUTPUT 1001
 int
 main(int argc, char *argv[])
 {
@@ -921,6 +930,8 @@ main(int argc, char *argv[])
 	int ch;
 	static const struct option longopts[] = {
 		{ "report-progress",	no_argument,	  0, 'p' },
+		{ "print-tree", 	no_argument,	  0, OPT_PRINT_TREE },
+		{ "print-debug-output",	no_argument,	  0, OPT_PRINT_DEBUG_OUTPUT },
 		{ NULL,		0, 0, 0 }
 	};
 
@@ -930,6 +941,12 @@ main(int argc, char *argv[])
 		switch (ch) {
 		case 'p':		/* file to log */
 			displayProgress = 1;
+			break;
+		case OPT_PRINT_TREE:
+			optPrintTree = 1;
+			break;
+		case OPT_PRINT_DEBUG_OUTPUT:
+			optPrintDebugOutput = 1;
 			break;
 		case '?':
 		default:
