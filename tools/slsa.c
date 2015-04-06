@@ -57,6 +57,7 @@
 #include <getopt.h>
 #include <limits.h>
 
+#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "internal.h"
 #include "parser.h"
@@ -599,6 +600,74 @@ treePrint(logrec_node_t *node, const int level)
 	}
 }
 
+#if 0
+void
+treeToJSON(logrec_node_t *node, json_object *json)
+{
+	json_object *newobj;
+	int isArray;
+	reportProgress("convert tree to json");
+	if(node == NULL)
+		return;
+	if(node->sibling == NULL) {
+		isArray = 0;
+		newobj = json_object_new_object();
+	} else {
+		isArray = 1;
+		newobj = json_object_new_array();
+	}
+	while(node != NULL) {
+		treePrintWordinfo(node->words[0]);
+		if(node->nterm)
+			printf(" [nterm %d]", node->nterm);
+		printf("\n");
+		for(int i = 1 ; i < node->nwords ; ++i) {
+			treePrintIndent(level, 'v');
+			treePrintWordinfo(node->words[i]);
+			printf("\n");
+		}
+		treePrint(node->child, level + 1);
+		node = node->sibling;
+	}
+}
+#endif
+
+void
+treePrintTerminalsNonRoot(logrec_node_t *__restrict__ node,
+	const char *const __restrict__ beginOfMsg)
+{
+	const char *msg = NULL;
+	while(node != NULL) {
+		const char *tail;
+		if(node == root) {
+			msg = "";
+		} else {
+			if(node->nwords > 1) {
+				tail = "%word%";
+			} else {
+				tail = node->words[0]->word;
+			}
+			free((void*)msg);
+			asprintf((char**)&msg, "%s %s", beginOfMsg, tail);
+			if(node->nterm)
+				printf("[%6d times]:%s\n", node->nterm, msg);
+		}
+		treePrintTerminalsNonRoot(node->child, msg);
+		node = node->sibling;
+	}
+
+}
+
+void
+treePrintTerminals(logrec_node_t *__restrict__ node)
+{
+	while(node != NULL) {
+		treePrintTerminalsNonRoot(node->child, "");
+		node = node->sibling;
+	}
+
+}
+
 /* TODO: move wordlen to struct wordinfo? */
 void
 /* NOTE: bDetectStacked is just a development aid, it permits us to write
@@ -839,6 +908,7 @@ processFile(FILE *fp)
 	treePrint(root, 0);
 	treeSquash(root);
 	treePrint(root, 0);
+	treePrintTerminals(root);
 	reportProgress(NULL);
 	return 0;
 }
