@@ -1790,6 +1790,56 @@ BEGINParser(ISODate)
 ENDParser
 
 /**
+ * Parse a Cisco interface spec. A sample for such a spec is:
+ *   outside:176.97.252.102/50349
+ * right now, we interpret this as
+ * - non-whitespace
+ * - colon
+ * - IP Address
+ * - Slash
+ * - port
+ * Note that this parser does not yet extract the individual parts
+ * due to the restrictions in current liblognorm. This is planned for
+ * after a general algorithm overhaul.
+ * In order to match, this syntax must start on a non-whitespace char
+ * other than colon.
+ */
+BEGINParser(CiscoInterfaceSpec)
+	const char *c;
+	size_t i;
+	size_t localParsed;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	if(c[i] == ':' || isspace(c[i])) goto fail;
+
+	while(i < strLen) {
+		if(isspace(c[i])) goto fail;
+		if(c[i] == ':')
+			break;
+		++i;
+	}
+	if(i == strLen) goto fail;
+	++i; /* skip over colon */
+
+	/* we now utilize our other parser helpers */
+	if(ln_parseIPv4(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
+	i += localParsed;
+	if(i == strLen || c[i] != '/') goto fail;
+	++i; /* skip slash */
+	if(ln_parseNumber(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
+	i += localParsed;
+	if(i < strLen && !isspace(c[i])) goto fail;
+
+	/* success, persist */
+	*parsed = i - *offs;
+ENDParser
+
+/**
  * Parse a duration. A duration is similar to a timestamp, except that
  * it tells about time elapsed. As such, hours can be larger than 23
  * and hours may also be specified by a single digit (this, for example,
