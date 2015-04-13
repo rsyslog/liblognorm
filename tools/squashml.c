@@ -34,6 +34,10 @@ getmsg(regex_t *const preg, char *const buf, size_t len)
 		if(is_match) {
 			break; /* previous message complete */
 		} else {
+			if(iDst != 0) {
+				buf[iDst++] = '\\';
+				buf[iDst++] = 'n';
+			}
 			memcpy(buf+iDst, lnbuf, lenln);
 			iDst += lenln;
 			++nlines;

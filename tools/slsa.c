@@ -98,9 +98,30 @@ typedef struct logrec_node logrec_node_t;
 
 logrec_node_t *root = NULL;
 
+typedef struct rule_table_etry rule_table_etry_t;
+typedef struct rule_table rule_table_t;
+struct rule_table {
+	int maxEtry; /* max # entries that fit into table */
+	int nxtEtry; /* next free entry */
+	rule_table_etry_t **entries;
+};
+
+struct rule_table_etry {
+	int ntimes;
+	char *rule;
+};
+#define RULE_TABLE_GROWTH 512 /* number of entries rule table grows when too small */
+
+/* command line options */
+static int displayProgress = 0; /* display progress indicators */
+static int optPrintTree = 0; /* disply internal tree for debugging purposes */
+static int optPrintDebugOutput = 0;
+
+
 /* forward definitions */
 void wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen, const int);
 void treePrint(logrec_node_t *node, const int level);
+static void reportProgress(const char *const label);
 
 /* param word may be NULL, if word is not yet known */
 static struct wordinfo *
@@ -123,10 +144,70 @@ wordinfoDelete(struct wordinfo *const wi)
 	free(wi);
 }
 
-/* command line options */
-static int displayProgress = 0; /* display progress indicators */
-static int optPrintTree = 0; /* disply internal tree for debugging purposes */
-static int optPrintDebugOutput = 0;
+static rule_table_t *
+ruleTableCreate(void)
+{
+	rule_table_t *const rt = calloc(1, sizeof(rule_table_t));
+	if(rt == NULL) {
+		perror("slsa: malloc error ruletable_create");
+		exit(1);
+	}
+	rt->nxtEtry = 0;
+	rt->maxEtry = 0;
+	return rt;
+}
+
+static rule_table_etry_t *
+ruleTableEtryCreate(rule_table_t *const __restrict__ rt)
+{
+	if(rt->nxtEtry == rt->maxEtry) {
+		const int newMax = rt->maxEtry + RULE_TABLE_GROWTH;
+		rt->entries = realloc(rt->entries, newMax * sizeof(rule_table_t));
+		if(rt->entries == NULL) {
+			perror("slsa: malloc error ruletable_create");
+			exit(1);
+		}
+		rt->maxEtry = newMax;
+	}
+	const int etry = rt->nxtEtry;
+	rt->nxtEtry++;
+	rt->entries[etry] = calloc(1, sizeof(rule_table_etry_t));
+	if(rt->entries[etry] == NULL) {
+		perror("slsa: malloc error entry ruletable_create");
+		exit(1);
+	}
+	return rt->entries[etry];
+}
+
+static void
+ruleTablePrint(rule_table_t *const __restrict__ rt)
+{
+	for(int i = 0 ; i < rt->nxtEtry ; ++i) {
+		reportProgress("rule table print");
+		printf("%6d times: %s\n", rt->entries[i]->ntimes,
+			rt->entries[i]->rule);
+	}
+}
+
+static void
+ruleTableDestroy(rule_table_t *const __restrict__ rt)
+{
+	for(int i = 0 ; i < rt->nxtEtry ; ++i) {
+		free((void*)rt->entries[i]->rule);
+		free((void*)rt->entries[i]);
+	}
+	free((void*) rt->entries);
+	free((void*) rt);
+}
+
+/* function to quicksort rule table */
+static int
+qs_comp_rt_etry(const void *v1, const void *v2)
+{
+	const rule_table_etry_t *const e1 =  *((rule_table_etry_t **) v1);
+	const rule_table_etry_t *const e2 =  *((rule_table_etry_t **) v2);
+	return -(e1->ntimes - e2->ntimes); /* sort descending! */
+}
 
 /* a stack to keep track of detected (sub)words that
  * need to be processed in the future.
@@ -637,6 +718,7 @@ treeToJSON(logrec_node_t *node, json_object *json)
 }
 #endif
 
+#if 0
 void
 treePrintTerminalsNonRoot(logrec_node_t *__restrict__ node,
 	const char *const __restrict__ beginOfMsg)
@@ -668,13 +750,61 @@ treePrintTerminalsNonRoot(logrec_node_t *__restrict__ node,
 void
 treePrintTerminals(logrec_node_t *__restrict__ node)
 {
+	/* we need to strip "[ROOT]" from the node value. Note that it may
+	 * have been combined with some other value during tree squash.
+	 */
+	const char *beginOfMsg = node->words[0]->word + 6 /* "[ROOT]"! */;
 	while(node != NULL) {
 		treePrintTerminalsNonRoot(node->child, "");
 		node = node->sibling;
 	}
 
 }
+#endif
 
+void
+treeCreateRuleTableNonRoot(logrec_node_t *__restrict__ node,
+	rule_table_t *const __restrict__ rt,
+	const char *const __restrict__ beginOfMsg)
+{
+	const char *msg = NULL;
+	while(node != NULL) {
+		const char *tail;
+		if(node->nwords > 1) {
+			tail = "%MULTIVALUE%";
+		} else {
+			tail = node->words[0]->word;
+		}
+		free((void*)msg);
+		asprintf((char**)&msg, "%s%s%s", beginOfMsg,
+			tail,
+			(node->words[0]->flags.isSubword) ? "" : " ");
+		if(node->nterm) {
+			reportProgress("rule table create");
+			rule_table_etry_t *const rt_etry = ruleTableEtryCreate(rt);
+			rt_etry->ntimes = node->nterm;
+			rt_etry->rule = strdup(msg);
+		}
+		treeCreateRuleTableNonRoot(node->child, rt, msg);
+		node = node->sibling;
+	}
+
+}
+
+rule_table_t *
+treeCreateRuleTable(logrec_node_t *__restrict__ node)
+{
+	/* we need to strip "[ROOT]" from the node value. Note that it may
+	 * have been combined with some other value during tree squash.
+	 */
+	const char *beginOfMsg = node->words[0]->word + 6 /* "[ROOT]"! */;
+	rule_table_t *const __restrict__ rt = ruleTableCreate();
+	while(node != NULL) {
+		treeCreateRuleTableNonRoot(node->child, rt, beginOfMsg);
+		node = node->sibling;
+	}
+	return rt;
+}
 /* TODO: move wordlen to struct wordinfo? */
 void
 /* NOTE: bDetectStacked is just a development aid, it permits us to write
@@ -913,7 +1043,12 @@ processFile(FILE *fp)
 	treePrint(root, 0);
 	treeSquash(root);
 	treePrint(root, 0);
-	treePrintTerminals(root);
+	rule_table_t *const rt = treeCreateRuleTable(root);
+	reportProgress("sorting rule table");
+	qsort(rt->entries, (size_t) rt->nxtEtry, sizeof(rule_table_etry_t*), qs_comp_rt_etry);
+	ruleTablePrint(rt);
+	ruleTableDestroy(rt);
+	//treePrintTerminals(root);
 	reportProgress(NULL);
 	return 0;
 }
