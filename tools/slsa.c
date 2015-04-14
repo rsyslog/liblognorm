@@ -998,6 +998,8 @@ preprocessLine(const char *const __restrict__ buf,
 			tocopy = "%date-rfc5424%";
 		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-iso%";
+		} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%cisco-interface-spec%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;
