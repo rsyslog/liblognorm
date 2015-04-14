@@ -204,9 +204,9 @@ rest
 Zero or more characters till end of line. Should be always at end of the 
 rule.
 
-Note that the *rest* syntax should be avoided because it generates
+**Note that the *rest* syntax should be avoided because it generates
 a very broad match. If used, it is impossible to match on a specific 
-character that is on the same position where *rest* is used.
+character that is on the same position where *rest* is used.**
 
 ::
 
@@ -670,6 +670,23 @@ end of the line. Cannot match zero characters.
 ::
 
     %-:iptables%
+
+cisco-interface-spec
+####################
+
+This is an experimental parser. It is used to detect Cisco Interface
+Specifications. A sample of them is:
+
+::
+
+   outside:176.97.252.102/50349
+
+Note that this parser does not yet extract the individual parts
+due to the restrictions in current liblognorm. This is planned for
+after a general algorithm overhaul.
+
+In order to match, this syntax must start on a non-whitespace char
+other than colon.
 
 Prefixes
 --------

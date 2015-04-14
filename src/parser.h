@@ -141,6 +141,11 @@ int ln_parseDuration(const char *str, size_t strlen, size_t *offs, const ln_fiel
 int ln_parseIPv4(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
+ * Parser Cisco interface specifiers
+ */
+int ln_parseCiscoInterfaceSpec(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/** 
  * Get all tokens separated by tokenizer-string as array.
  */
 int ln_parseTokenized(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
