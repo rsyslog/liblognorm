@@ -116,6 +116,7 @@ struct rule_table_etry {
 static int displayProgress = 0; /* display progress indicators */
 static int optPrintTree = 0; /* disply internal tree for debugging purposes */
 static int optPrintDebugOutput = 0;
+static int optSortMultivalues = 1;
 
 
 /* forward definitions */
@@ -676,6 +677,8 @@ treePrint(logrec_node_t *node, const int level)
 		if(node->nterm)
 			printf(" [nterm %d]", node->nterm);
 		printf("\n");
+		if(optSortMultivalues)
+			qsort(node->words, node->nwords, sizeof(struct wordinfo*), qs_compmi);
 		for(int i = 1 ; i < node->nwords ; ++i) {
 			treePrintIndent(level, 'v');
 			treePrintWordinfo(node->words[i]);
@@ -1058,6 +1061,7 @@ processFile(FILE *fp)
 
 #define OPT_PRINT_TREE 1000
 #define OPT_PRINT_DEBUG_OUTPUT 1001
+#define OPT_SORT_MULTIVALUES 1002
 int
 main(int argc, char *argv[])
 {
@@ -1067,6 +1071,7 @@ main(int argc, char *argv[])
 		{ "report-progress",	no_argument,	  0, 'p' },
 		{ "print-tree", 	no_argument,	  0, OPT_PRINT_TREE },
 		{ "print-debug-output",	no_argument,	  0, OPT_PRINT_DEBUG_OUTPUT },
+		{ "sort-multivalues",	required_argument,0, OPT_SORT_MULTIVALUES },
 		{ NULL,		0, 0, 0 }
 	};
 
@@ -1082,6 +1087,17 @@ main(int argc, char *argv[])
 			break;
 		case OPT_PRINT_DEBUG_OUTPUT:
 			optPrintDebugOutput = 1;
+			break;
+		case OPT_SORT_MULTIVALUES:
+			if(!strcmp(optarg, "enabled"))
+				optSortMultivalues = 1;
+			else if(!strcmp(optarg, "disabled"))
+				optSortMultivalues = 0;
+			else {
+				fprintf(stderr, "invalid value '%s' for --sort-multivalues."
+					"Valid: \"enabled\", \"disabled\"\n", optarg);
+				exit(1);
+			}
 			break;
 		case '?':
 		default:
