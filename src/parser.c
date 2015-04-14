@@ -1798,6 +1798,8 @@ ENDParser
  * - IP Address
  * - Slash
  * - port
+ * We also optionally support a user name, enclosed in parenthesis,
+ * immediately after the port.
  * Note that this parser does not yet extract the individual parts
  * due to the restrictions in current liblognorm. This is planned for
  * after a general algorithm overhaul.
@@ -1833,9 +1835,18 @@ BEGINParser(CiscoInterfaceSpec)
 	++i; /* skip slash */
 	if(ln_parseNumber(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
 	i += localParsed;
-	if(i < strLen && !isspace(c[i])) goto fail;
+	if(i == strLen) goto success;
 
-	/* success, persist */
+	/* check optional part */
+	if(c[i] != '(' && !isspace(c[i])) goto fail;
+	size_t iTmp = i + 1;
+	while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
+		++iTmp; /* just scan */
+
+	if(iTmp < strLen && c[iTmp] == ')')
+		i = iTmp + 1; /* we have a match, so use new index */
+
+success: /* success, persist */
 	*parsed = i - *offs;
 ENDParser
 
