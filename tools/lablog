@@ -1,0 +1,67 @@
+This is a log of findings during development of the slsa heuristic
+
+Terms
+-----
+log message
+	a string of printable characters, delimited by the operating system
+	line terminator.
+word	a substring inside a log message that is delimited by specific 
+	delimiters, usually whitespace [this definition may need to be
+	changed]
+subword	a sequence inside a word that is not delimited by the usual word
+	delimiters
+MSA     multiple sequence alignment (like used in bioinformatics)
+motif   a substring inside a log message that is frequently being
+	used and has a specific syntax and semantic (e.g. an IPv4 address).
+	The term is based on the idea of "sequence motif" in bioinformatics.
+parser	(also "motif parser") extracts actual data matching a given motif
+	from a log message.
+
+Open Problems
+-------------
+[P00001] syslog TAG does not work well with common prefix/suffix
+detection. The problem is that e.g. PIX tags have integers, which
+are detected and Linux logs have process IDs. The PIX integers
+are actually part of the constant text, whereas in Linux it is fine
+to detect them as variable part.
+
+Open TODO Items
+---------------
+[T00001] - Dictionary motif
+We need to add dictionary motifs, where one can e.g. query users or common words.
+It may make sense to ship some "common-word dictionaries". Common word (sets)
+are like ("TCP", "UDP", "ICMP", ...) which are often found in firewall messages.
+With such words, subword detection does not prove to be helpful, because it
+detects a common suffix like [["TC", "UD"] "P"].
+
+[T00002] - URL motif
+Logs often contain URLs (and file pathes), just like this:
+    193.45.10.119:/techsupp/css/default.css 
+We need to find a proper way to identify them. This motif is probably very
+broad and hard to specify, especially when thinking about multiple platforms.
+
+Indicators in first column of actual log
+----------------------------------------
+- lesson learned, general info
+! idea
++ result of idea
+Ideas are referenced by [Innnnn] at start of log entry
+
+Actual Log
+----------
+2015-04-14
+- Cisco ASA has ample slighly different formats for specifying interface
+  addresses (the faddr, gaddr, laddr parts of message). It looks like the
+  log strings are written directly in code, at least we have a lot of
+  small inconsistencies which suggest so. This seems to makes it impractical
+  to generate a single motif for this type.
+- Based on visual review, it looks like pattern detection on a subword-level
+  may make sense (e.g. detect IP address, then you'll find a common slash,
+  then a port number). This boils down to doing a full MSA on the word level,
+  which I tried to avoid for performance reasons.
+! [I00001] We may do an subword alignment on some common delimiters like slash,
+  comma, colon etc. This can probably be done much faster than a full MSA.
+! [I00002] We may also experiment with additional "word-delimiters", optionally
+  enable those from the same set as [I00001]. When this is done, we need to make
+  sure the delimiter can be stored inside the rulebase (an additional step to be
+  taken only of this idea proves to be useful).
