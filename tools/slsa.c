@@ -141,6 +141,7 @@ wordinfoNew(char *const word)
 static void
 wordinfoDelete(struct wordinfo *const wi)
 {
+//printf("free %p: %s\n", wi->word, wi->word);
 	free(wi->word);
 	free(wi);
 }
@@ -301,7 +302,8 @@ logrec_newNode(struct wordinfo *const wi, struct logrec_node *const parent)
 	node->parent = parent;
 	node->child = NULL;
 	node->val.ltext = NULL;
-	logrec_addWord(node, wi);
+	if(wi != NULL)
+		logrec_addWord(node, wi);
 	return node;
 }
 
@@ -393,6 +395,68 @@ squashDuplicateValues(logrec_node_t *node)
 				sizeof(struct wordinfo *)*node->nwords);
 	}
 }
+
+/* Disjoin subwords based on a Delimiter.
+ * When calling this function, it must be known that the Delimiter
+ * is present in *all* words.
+ * TODO: think about empty initial subwords (Delimiter in start position!).
+ */
+static void
+disjoinDelimiter(logrec_node_t *node,
+	const char Delimiter)
+{
+	/* first, create node pointers:
+	 * we need to update our original node in-place, because otherwise
+	 * we change the structure of the tree with a couple of
+	 * side effects. As we do not want this, the first subword must
+	 * be placed into the current node, and new nodes be
+	 * created for the other subwords.
+	 */
+	char delimword[2];
+	delimword[0] = Delimiter;
+	delimword[1] = '\0';
+	struct wordinfo *const delim_wi = wordinfoNew(strdup(delimword));
+	delim_wi->flags.isSubword = 1;
+	logrec_node_t *const delim_node = logrec_newNode(delim_wi, node);
+	logrec_node_t *const tail_node = logrec_newNode(NULL, delim_node);
+	delim_node->child = tail_node;
+	tail_node->child = node->child;
+	node->child = delim_node;
+	delim_node->parent = node;
+	if(tail_node->child != NULL)
+		tail_node->child->parent = tail_node;
+
+	/* now, do the actual split */
+//printf("nodes setup, now doing actual split\n");fflush(stdout);
+	for(int i = 0 ; i < node->nwords ; ++i) {
+		struct wordinfo *wi;
+		char *const delimptr = strchr(node->words[i]->word, Delimiter);
+//printf("splitting off tail %d of %d [%p]:'%s' [full: '%s']\n", i, node->nwords, delimptr+1, delimptr+1, node->words[i]->word);fflush(stdout);
+		wi = wordinfoNew(strdup(delimptr+1));
+		wi->flags.isSubword = 1;
+		logrec_addWord(tail_node, wi);
+		wordDetectSyntax(tail_node->words[i], strlen(tail_node->words[i]->word), 0);
+		/* we can now do an in-place update of the old word ;) */
+		*delimptr = '\0';
+		node->words[i]->flags.isSubword = 1;
+		wordDetectSyntax(node->words[i], strlen(node->words[i]->word), 0);
+#if 0
+		/* but we trim the memory */
+		const char *delword = node->words[i]->word;
+		node->words[i]->word = strdup(delword);
+		free((void*)delword);
+#endif
+	}
+
+	if(node->nwords > 1) {
+//printf("squashing node\n");fflush(stdout);
+		squashDuplicateValues(node);
+//printf("squashing tail_node\n");fflush(stdout);
+		squashDuplicateValues(tail_node);
+	}
+//printf("done disjonDelimiter\n");fflush(stdout);
+}
+
 
 /* Disjoin common prefixes and suffixes. This also triggers a
  * new syntax detection on the remaining variable part.
@@ -492,11 +556,35 @@ findMatchingTerm(const char *const __restrict__ word,
 	return 0;
 }
 
+/* returns 1 if Delimiter is found in all words, 0 otherwise */
+int
+checkCommonDelimiter(logrec_node_t *const __restrict__ node,
+	const char Delimiter)
+{
+	for(int i = 0 ; i < node->nwords ; ++i) {
+		if(strlen(node->words[i]->word) < 2 || strchr(node->words[i]->word+1, Delimiter) == NULL)
+			return 0;
+	}
+	return 1;
+}
+
+/* check if there are common subword delimiters inside the values. If so,
+ * use them to create subwords. Revalute the syntax if done so.
+ */
+void
+checkSubwords(logrec_node_t *const __restrict__ node)
+{
+//printf("checkSubwords checking node %p: %s\n", node, node->words[0]->word);
+	if(checkCommonDelimiter(node, '/')) {
+		disjoinDelimiter(node, '/');
+	}
+	if(checkCommonDelimiter(node, ':')) {
+		disjoinDelimiter(node, ':');
+	}
+}
+
 /* check if there are common prefixes and suffixes and, if so,
  * extract them.
- * TODO: fix cases like {"end","eend"} which will lead to prefix=1, suffix=3
- * and which are obviously wrong. This happens with the current algo whenever
- * we have common chars at the edge of prefix and suffix.
  */
 void
 checkPrefixes(logrec_node_t *const __restrict__ node)
@@ -612,6 +700,21 @@ if(optPrintDebugOutput) printf("add to idx %d: '%s'\n", node->nwords, n->words[0
 	node->sibling = NULL; // TODO: fix memory leak
 }
 
+/* reprocess tree to check subword creation */
+void
+treeDetectSubwords(logrec_node_t *node)
+{
+	if(node == NULL) return;
+	reportProgress("subword detection");
+	squashTerminalSiblings(node);
+	while(node != NULL) {
+		checkSubwords(node);
+		//checkPrefixes(node);
+		treeDetectSubwords(node->child);
+		node = node->sibling;
+	}
+}
+
 /* squash a tree, that is combine nodes that point to nodes
  * without siblings to a single node.
  */
@@ -640,7 +743,7 @@ treeSquash(logrec_node_t *node)
 			logrec_delNode(toDel);
 			continue; /* see if we can squash more */
 		}
-		checkPrefixes(node);
+		//checkPrefixes(node);
 		treeSquash(node->child);
 		node = node->sibling;
 	}
@@ -896,6 +999,7 @@ getWord(char **const line)
 		/* EMPTY - skip spaces */;
 	const size_t begin_word = i;
 	for( ; ln[i] && !isspace(ln[i]) ; ++i) {
+#if 0 /* turn on for subword detection experiment */
 		if(ln[i] == ':' || ln[i] == '=' || ln[i] == '/'
 		   || ln[i] == '[' || ln[i] == ']'
 		   || ln[i] == '(' || ln[i] == ')') {
@@ -910,6 +1014,7 @@ getWord(char **const line)
 			ln[i] = ' ';
 			break;
 		}
+#endif
 	}
 	if(begin_word == i) /* only trailing spaces? */
 		return NULL;
@@ -1060,6 +1165,7 @@ processFile(FILE *fp)
 	}
 
 	treePrint(root, 0);
+	treeDetectSubwords(root);
 	treeSquash(root);
 	treePrint(root, 0);
 	rule_table_t *const rt = treeCreateRuleTable(root);

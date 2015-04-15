@@ -51,7 +51,7 @@ Indicators in first column of actual log
 + result of idea
 Ideas are referenced by [Innnnn] at start of log entry
 
-Actual Log
+Actual Log 09:55:01
 ----------
 2015-04-14
 - Cisco ASA has ample slighly different formats for specifying interface
@@ -88,3 +88,9 @@ Actual Log
   is actually related to the TAG.
   Looks like [P00001] must be looked at with priority in order to continue with
   useful analysis.
+  Another problem that manual review brings up is that colon is often used e.g.
+  in time formats ("12:04:11"). If we use colon as word delimiter, we are no
+  longer able to detect such time formats. This suggest that more agressive
+  word delimition is probably not a good thing to have. However, it looks like
+  we could do the same during subword detection stage without big problems.
+  Ideally, this would be a kind of alignment like proposed in [I00001].
