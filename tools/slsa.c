@@ -895,8 +895,22 @@ getWord(char **const line)
 	for(i = 0 ; ln[i] && isspace(ln[i]) ; ++i)
 		/* EMPTY - skip spaces */;
 	const size_t begin_word = i;
-	for( ; ln[i] && !isspace(ln[i]) ; ++i)
-		/* EMPTY - just count */;
+	for( ; ln[i] && !isspace(ln[i]) ; ++i) {
+		if(ln[i] == ':' || ln[i] == '=' || ln[i] == '/'
+		   || ln[i] == '[' || ln[i] == ']'
+		   || ln[i] == '(' || ln[i] == ')') {
+			wi = wordinfoNew(NULL);
+			wi->word = malloc(2);
+			wi->word[0] = ln[i];
+			wi->word[1] = '\0';
+			wordstackPush(wi);
+			// TODO: if we continue with this approach, we must indicate that
+			// this is a subword.
+			/* mimic word delimiter, will be skipped over in next run: */
+			ln[i] = ' ';
+			break;
+		}
+	}
 	if(begin_word == i) /* only trailing spaces? */
 		return NULL;
 	const size_t wordlen = i - begin_word;
@@ -1001,8 +1015,8 @@ preprocessLine(const char *const __restrict__ buf,
 			tocopy = "%date-rfc5424%";
 		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-iso%";
-		} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
-			tocopy = "%cisco-interface-spec%";
+		//} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			//tocopy = "%cisco-interface-spec%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;

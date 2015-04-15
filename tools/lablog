@@ -19,11 +19,15 @@ parser	(also "motif parser") extracts actual data matching a given motif
 
 Open Problems
 -------------
-[P00001] syslog TAG does not work well with common prefix/suffix
+[P00001] How to detect TAG?
+syslog TAG does not work well with common prefix/suffix
 detection. The problem is that e.g. PIX tags have integers, which
 are detected and Linux logs have process IDs. The PIX integers
 are actually part of the constant text, whereas in Linux it is fine
 to detect them as variable part.
+
+This problem becomes even more problematic with more agressive word
+delimition (see [I00002]).
 
 Open TODO Items
 ---------------
@@ -65,3 +69,22 @@ Actual Log
   enable those from the same set as [I00001]. When this is done, we need to make
   sure the delimiter can be stored inside the rulebase (an additional step to be
   taken only of this idea proves to be useful).
+
+2015-04-15
++ [I0002] First rought tests indicate that additional word delimiters seem to
+  work well, at least on Cisco messages.
+  A problem is that TAG values are now intermangled, as a TAG typically is
+  "name:" and the colon is now a word delimiter. This leads to all TAGs becoming
+  one big group, and only after the colon differentiation occurs. That, however,
+  is too late, especially for things like fixed-width structured formats
+  (e.g. squid). This handling of the TAG is a big problem, because the TAG is
+  usually the primary identifier for a message class. So it should be preserved
+  as unique.
+  The same problem shows up when processing Linux logs. The TAG becomes
+  effectively unusable as a way to identify the message. I also have problems
+  interpreting postfix logs correctly, if "[]" is part of the delimiter set.
+  I have not tried yet to trace the root cause down, as the approach in general
+  seems to be problematic in regard to TAG. I suspect that this "postfix problem"
+  is actually related to the TAG.
+  Looks like [P00001] must be looked at with priority in order to continue with
+  useful analysis.
