@@ -187,6 +187,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseFloat;
 	} else if(!es_strconstcmp(*str, "hexnumber")) {
 		node->parser = ln_parseHexNumber;
+	} else if(!es_strconstcmp(*str, "kernel-timestamp")) {
+		node->parser = ln_parseKernelTimestamp;
 	} else if(!es_strconstcmp(*str, "whitespace")) {
 		node->parser = ln_parseWhitespace;
 	} else if(!es_strconstcmp(*str, "ipv4")) {

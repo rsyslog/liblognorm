@@ -126,6 +126,21 @@ rules are strict to avoid false positives.
 
     %session:hexnumber%
 
+kernel-timestamp
+################
+
+Parses a linux kernel timestamp, which has the format
+
+::
+
+    [ddddd.dddddd]
+
+where "d" is a decimal digit.
+
+::
+
+    %session:hexnumber%
+
 whitespace
 ##########
 
