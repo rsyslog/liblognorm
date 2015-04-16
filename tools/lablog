@@ -94,3 +94,55 @@ Actual Log 09:55:01
   word delimition is probably not a good thing to have. However, it looks like
   we could do the same during subword detection stage without big problems.
   Ideally, this would be a kind of alignment like proposed in [I00001].
+
+2015-04-16
++ [I00001][I00002] Tried subword detection with colon and slash as delimiters.
+  Works fine on Cisco logs and does not have any of the problem we had with
+  [I0002] (as described yesterday).
+  One problem is if we have something like this:
+   7l:                     connection {5}
+   8l:                        %posint% {5}
+   9l:                           for {5}
+  10l:                              outside:192.168.66.144/80 {3}
+  11l:                                 (192.168.66.144/80) {3}
+  12l:                                    to {3}
+  13l:                                       inside:192.168.12.154/56839
+  14l:                                          (217.17.249.222/56839) [nterm 1]
+  13l:                                       inside:192.168.12.154/56842
+  14l:                                          (217.17.249.222/56842) [nterm 1]
+  13l:                                       inside:192.168.12.154/56845
+  14l:                                          (217.17.249.222/31575) [nterm 1]
+  The algo will explode the lower "inside:" parts individually because each
+  node is of course processed individually. So the result will be:
+   7l:                     connection {5}
+   8l:                        %posint% {5}
+   9l:                           for {5}
+  10l:                              outside {subword} {3}
+  11l:                                 : {subword}
+  12l:                                    %ipv4% {subword}
+  13l:                                       / {subword}
+  14l:                                          %posint% {subword}
+  15l:                                             (192.168.66.144 / 80) to {subword} {3}
+  16l:                                                inside {subword}
+  17l:                                                   : {subword}
+  18l:                                                      %ipv4% {subword}
+  19l:                                                         / {subword}
+  20l:                                                            %posint% {subword}
+  21l:                                                               (217.17.249.222 / 56839) {subword}
+  16l:                                                inside {subword}
+  17l:                                                   : {subword}
+  18l:                                                      %ipv4% {subword}
+  19l:                                                         / {subword}
+  20l:                                                            %posint% {subword}
+  21l:                                                               (6.79.249.222 / 56842) {subword}
+  16l:                                                inside {subword}
+  17l:                                                   : {subword}
+  18l:                                                      %ipv4% {subword}
+  19l:                                                         / {subword}
+  20l:                                                            %posint% {subword}
+  21l:                                                               (217.17.249.222 / 31575) {subword}
+  However, we expect that this will not affect the final rule generation. But
+  needs to be proven. [I00003] Once we have split subwords, we may do another
+  "alignment run" on the tree and check if we now can find additional things
+  to combine. Needs to be seen. In any case, we need to split braces, which
+  requires slight changes to the split algo.

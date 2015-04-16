@@ -428,14 +428,21 @@ disjoinDelimiter(logrec_node_t *node,
 
 	/* now, do the actual split */
 //printf("nodes setup, now doing actual split\n");fflush(stdout);
+	char *prevword = NULL;
 	for(int i = 0 ; i < node->nwords ; ++i) {
 		struct wordinfo *wi;
 		char *const delimptr = strchr(node->words[i]->word, Delimiter);
 //printf("splitting off tail %d of %d [%p]:'%s' [full: '%s']\n", i, node->nwords, delimptr+1, delimptr+1, node->words[i]->word);fflush(stdout);
 		wi = wordinfoNew(strdup(delimptr+1));
 		wi->flags.isSubword = 1;
-		logrec_addWord(tail_node, wi);
-		wordDetectSyntax(tail_node->words[i], strlen(tail_node->words[i]->word), 0);
+		wordDetectSyntax(wi, strlen(wi->word), 0);
+		/* add new word only if not duplicate of previous (reduces dupes) */
+		if(prevword == NULL || strcmp(prevword, wi->word)) {
+			logrec_addWord(tail_node, wi);
+			prevword = wi->word;
+		} else {
+			wordinfoDelete(wi);
+		}
 		/* we can now do an in-place update of the old word ;) */
 		*delimptr = '\0';
 		node->words[i]->flags.isSubword = 1;
@@ -449,9 +456,7 @@ disjoinDelimiter(logrec_node_t *node,
 	}
 
 	if(node->nwords > 1) {
-//printf("squashing node\n");fflush(stdout);
 		squashDuplicateValues(node);
-//printf("squashing tail_node\n");fflush(stdout);
 		squashDuplicateValues(tail_node);
 	}
 //printf("done disjonDelimiter\n");fflush(stdout);
@@ -917,6 +922,7 @@ void
  * a first version which does not detect multi-node items that would
  * go to the stack and require more elaborate handling. TODO: remove that
  * restriction.
+ * TODO: check: we may remove stacked mode due to new subword algo (if it stays!)
  */
 wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen,
 	const int bDetectStacked)
