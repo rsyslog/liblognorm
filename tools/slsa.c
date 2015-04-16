@@ -780,13 +780,13 @@ treePrint(logrec_node_t *node, const int level)
 		return;
 	reportProgress("print");
 	while(node != NULL) {
+		if(optSortMultivalues)
+			qsort(node->words, node->nwords, sizeof(struct wordinfo*), qs_compmi);
 		treePrintIndent(level, 'l');
 		treePrintWordinfo(node->words[0]);
 		if(node->nterm)
 			printf(" [nterm %d]", node->nterm);
 		printf("\n");
-		if(optSortMultivalues)
-			qsort(node->words, node->nwords, sizeof(struct wordinfo*), qs_compmi);
 		for(int i = 1 ; i < node->nwords ; ++i) {
 			treePrintIndent(level, 'v');
 			treePrintWordinfo(node->words[i]);
