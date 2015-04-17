@@ -29,6 +29,11 @@ to detect them as variable part.
 This problem becomes even more problematic with more agressive word
 delimition (see [I00002]).
 
+[P00002] subword detection with optional parts
+Sometimes, subwords may contain optional parts, so not all words may
+contain the common delimiter (e.g. Cisco PIX). In this case, subword
+detection is not triggered.
+
 Open TODO Items
 ---------------
 [T00001] - Dictionary motif
@@ -146,3 +151,15 @@ Actual Log 09:55:01
   "alignment run" on the tree and check if we now can find additional things
   to combine. Needs to be seen. In any case, we need to split braces, which
   requires slight changes to the split algo.
+  We also see that the subword split algo does not work properly if we have
+  words of different formats. Cisco PIX, for example, has interface specifiers
+  which may either be "IP" or "IP/PORT" (among others). In that case, the
+  delimiter "/" is not detected as common delimiter and so subword detection
+  is not triggered. Now tracked as [P00002].
+
+- I had a frist try at using "=" as a subword delimiter. This works for
+  name=value fields, but only if they are all in the same sequence. It
+  looks like it is a much better idea, for real N=V type of log messages
+  to generate an parser that works on the complete line (things like
+  iptables). It may still make sense to have individual N=V parsers if these
+  constructs are seen within otherwise non-structured messages.

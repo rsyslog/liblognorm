@@ -573,6 +573,24 @@ checkCommonDelimiter(logrec_node_t *const __restrict__ node,
 	return 1;
 }
 
+/* returns 1 if braces are found in all words, 0 otherwise */
+int
+checkCommonBraces(logrec_node_t *const __restrict__ node,
+	const char braceOpen,
+	const char braceClose)
+{
+	char *op;
+	for(int i = 0 ; i < node->nwords ; ++i) {
+		if(strlen(node->words[i]->word) < 2)
+			return 0;
+		if((op = strchr(node->words[i]->word+1, braceOpen)) == NULL)
+			return 0;
+		else if(strchr(op+1, braceClose) == NULL)
+			return 0;
+	}
+	return 1;
+}
+
 /* check if there are common subword delimiters inside the values. If so,
  * use them to create subwords. Revalute the syntax if done so.
  */
@@ -586,6 +604,15 @@ checkSubwords(logrec_node_t *const __restrict__ node)
 	if(checkCommonDelimiter(node, ':')) {
 		disjoinDelimiter(node, ':');
 	}
+	if(checkCommonDelimiter(node, '=')) {
+		disjoinDelimiter(node, '=');
+	}
+#if 0 // this does not work, requies a seperate disjoin operation (4-parts) 
+	if(checkCommonBraces(node, '[', ']')) {
+		disjoinDelimiter(node, '(');
+		disjoinDelimiter(node->child->child, ')');
+	}
+#endif
 }
 
 /* check if there are common prefixes and suffixes and, if so,
@@ -985,6 +1012,13 @@ wordDetectSyntax(struct wordinfo *const __restrict__ wi, const size_t wordlen,
 					goto done;
 				}
 		}
+	}
+	if(ln_parseKernelTimestamp(wi->word, wordlen, &constzero, NULL, &nproc, NULL) == 0 &&
+	   nproc == wordlen) {
+		free(wi->word);
+		wi->word = strdup("%kernel-timestamp%");
+		wi->flags.isSpecial = 1;
+		goto done;
 	}
 done:
 	return;
