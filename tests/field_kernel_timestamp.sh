@@ -16,3 +16,28 @@ reset_rules
 add_rule 'rule=:%timestamp:kernel-timestamp%'
 execute '[12345.123456]'
 assert_output_json_eq '{ "timestamp": "[12345.123456]"}'
+
+execute '[154469.133028]'
+assert_output_json_eq '{ "timestamp": "[154469.133028]"}'
+
+execute '[123456789012.123456]'
+assert_output_json_eq '{ "timestamp": "[123456789012.123456]"}'
+
+#check cases where parsing failure must occur
+execute '[1234.123456]'
+assert_output_json_eq '{"originalmsg": "[1234.123456]", "unparsed-data": "[1234.123456]" }'
+
+execute '[1234567890123.123456]'
+assert_output_json_eq '{"originalmsg": "[1234567890123.123456]", "unparsed-data": "[1234567890123.123456]" }'
+
+execute '[123456789012.12345]'
+assert_output_json_eq '{ "originalmsg": "[123456789012.12345]", "unparsed-data": "[123456789012.12345]" }'
+
+execute '[123456789012.1234567]'
+assert_output_json_eq '{ "originalmsg": "[123456789012.1234567]", "unparsed-data": "[123456789012.1234567]" }'
+
+execute '(123456789012.123456]'
+assert_output_json_eq '{ "originalmsg": "(123456789012.123456]", "unparsed-data": "(123456789012.123456]" }'
+
+execute '[123456789012.123456'
+assert_output_json_eq '{ "originalmsg": "[123456789012.123456", "unparsed-data": "[123456789012.123456" }'

@@ -606,6 +606,8 @@ ENDParser
  * https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/tree/kernel/printk/printk.c?id=refs/tags/v4.0#n1011
  * This is the code that generates it:
  * sprintf(buf, "[%5lu.%06lu] ",  (unsigned long)ts, rem_nsec / 1000);
+ * We accept up to 12 digits for ts, everything above that for sure is
+ * no timestamp.
  */
 #define LEN_KERNEL_TIMESTAMP 14
 BEGINParser(KernelTimestamp)
@@ -624,19 +626,31 @@ BEGINParser(KernelTimestamp)
 	   || !isdigit(c[i+3])
 	   || !isdigit(c[i+4])
 	   || !isdigit(c[i+5])
-	   || c[i+6] != '.'
-	   || !isdigit(c[i+7])
-	   || !isdigit(c[i+8])
-	   || !isdigit(c[i+9])
-	   || !isdigit(c[i+10])
-	   || !isdigit(c[i+11])
-	   || !isdigit(c[i+12])
-	   || c[i+13] != ']'
 	   )
 		goto fail;
+	i += 6;
+	for(int j = 0 ; j < 7 && i < strLen && isdigit(c[i]) ; )
+		++i, ++j;	/* just scan */
+
+	if(i >= strLen || c[i] != '.')
+		goto fail;
+
+	++i; /* skip over '.' */
+
+	if( i+7 > strLen
+	   || !isdigit(c[i+0])
+	   || !isdigit(c[i+1])
+	   || !isdigit(c[i+2])
+	   || !isdigit(c[i+3])
+	   || !isdigit(c[i+4])
+	   || !isdigit(c[i+5])
+	   || c[i+6] != ']'
+	   )
+		goto fail;
+	i += 7;
 
 	/* success, persist */
-	*parsed = LEN_KERNEL_TIMESTAMP;
+	*parsed = i - *offs;
 ENDParser
 
 /**
