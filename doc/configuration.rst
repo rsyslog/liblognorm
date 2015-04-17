@@ -126,6 +126,26 @@ rules are strict to avoid false positives.
 
     %session:hexnumber%
 
+kernel-timestamp
+################
+
+Parses a linux kernel timestamp, which has the format
+
+::
+
+    [ddddd.dddddd]
+
+where "d" is a decimal digit. The part before the period has to
+have at least 5 digits as per kernel code. There is no upper
+limit per se inside the kernel, but liblognorm does not accept
+more than 12 digits, which seems more than sufficient (we may reduce
+the max count if misdetections occur). The part after the period
+has to have exactly 6 digits.
+
+::
+
+    %session:hexnumber%
+
 whitespace
 ##########
 
