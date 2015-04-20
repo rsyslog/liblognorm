@@ -299,7 +299,9 @@ PARSER(RFC3164Date)
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int month;
 	int day;
-	//int year = 0; /* 0 means no year provided */
+#if 0 /* TODO: why does this still exist? */
+	int year = 0; /* 0 means no year provided */
+#endif
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
@@ -1109,7 +1111,7 @@ void tokenized_parser_data_destructor(void** dataPtr) {
 static void load_generated_parser_samples(ln_ctx ctx,
 	const char* const field_descr, const int field_descr_len,
 	const char* const suffix, const int length) {
-	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";//TODO: extract nice constants
+	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";/*TODO: extract nice constants*/
 	static const int RULE_PREFIX_LEN = 15;
 
 	char *sample_str = NULL;
@@ -1257,7 +1259,7 @@ PARSER(Regex)
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
-			//please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic
+			/*please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic*/
 			if (ovector[2 * pData->consume_group] == *offs) {
 				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
 				if (pData->consume_group != pData->return_group) {
