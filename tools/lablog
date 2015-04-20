@@ -36,6 +36,8 @@ detection is not triggered.
 
 Open TODO Items
 ---------------
+Note: TODO items regarding motif parsers can also be found at
+https://github.com/rsyslog/liblognorm/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22motif+parser%22
 [T00001] - Dictionary motif
 We need to add dictionary motifs, where one can e.g. query users or common words.
 It may make sense to ship some "common-word dictionaries". Common word (sets)
@@ -163,3 +165,7 @@ Actual Log 09:55:01
   to generate an parser that works on the complete line (things like
   iptables). It may still make sense to have individual N=V parsers if these
   constructs are seen within otherwise non-structured messages.
+
+2015-04-17
+- as expected, the Linux kernel timestamp motif parser proved to be
+  useful.
