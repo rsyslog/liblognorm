@@ -1897,16 +1897,13 @@ done:
  * - port
  * We also optionally support a user name, enclosed in parenthesis,
  * immediately after the port.
- * Note that this parser does not yet extract the individual parts
- * due to the restrictions in current liblognorm. This is planned for
- * after a general algorithm overhaul.
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
+ * TODO: memory leak on partial match (failure)
  */
 BEGINParser(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
-	size_t localParsed;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1916,6 +1913,7 @@ BEGINParser(CiscoInterfaceSpec)
 
 	if(c[i] == ':' || isspace(c[i])) goto fail;
 
+	const size_t idxInterface = i;
 	while(i < strLen) {
 		if(isspace(c[i])) goto fail;
 		if(c[i] == ':')
@@ -1923,25 +1921,47 @@ BEGINParser(CiscoInterfaceSpec)
 		++i;
 	}
 	if(i == strLen) goto fail;
+	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
-	if(ln_parseIPv4(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
-	i += localParsed;
+	const size_t idxIP = i;
+	size_t lenIP;
+	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto fail;
+	i += lenIP;
 	if(i == strLen || c[i] != '/') goto fail;
 	++i; /* skip slash */
-	if(ln_parseNumber(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
-	i += localParsed;
+	const size_t idxPort = i;
+	size_t lenPort;
+	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto fail;
+	i += lenPort;
 	if(i == strLen) goto success;
 
 	/* check optional part */
 	if(c[i] != '(' && !isspace(c[i])) goto fail;
 	size_t iTmp = i + 1;
+	const size_t idxUser = iTmp;
 	while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
 		++iTmp; /* just scan */
 
 	if(iTmp < strLen && c[iTmp] == ')')
 		i = iTmp + 1; /* we have a match, so use new index */
+	size_t lenUser = iTmp - idxUser;
+
+	/* all done, save data */
+	if(value == NULL)
+		goto success;
+
+	CHKN(*value = json_object_new_object());
+	json_object *json;
+	CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
+	json_object_object_add(*value, "interface", json);
+	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
+	json_object_object_add(*value, "ip", json);
+	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
+	json_object_object_add(*value, "port", json);
+	CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
+	json_object_object_add(*value, "user", json);
 
 success: /* success, persist */
 	*parsed = i - *offs;

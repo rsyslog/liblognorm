@@ -4,16 +4,16 @@ source ./exec.sh $0 "cisco-interface-spec syntax"
 add_rule 'rule=:begin %field:cisco-interface-spec% end'
 
 execute 'begin outside:176.97.252.102/50349 end'
-assert_output_json_eq '{"field": "outside:176.97.252.102/50349"}'
+assert_output_json_eq '{"field":  { "interface": "outside", "ip": "176.97.252.102", "port": "50349" } }'
 
 execute 'begin outside:176.97.252.102/50349(DOMAIN\rainer) end'
 # we need to add the backslash escape for the testbench plumbing
-assert_output_json_eq '{"field": "outside:176.97.252.102/50349(DOMAIN\\rainer)"}'
+assert_output_json_eq '{"field": { "interface": "outside", "ip": "176.97.252.102", "port": "50349", "user": "DOMAIN\\rainer" } }'
 
 execute 'begin outside:176.97.252.102/50349(test/rainer) end'
 # we need to add the backslash escape for the testbench plumbing
-assert_output_json_eq '{"field": "outside:176.97.252.102/50349(test/rainer)"}'
+assert_output_json_eq '{"field": { "interface": "outside", "ip": "176.97.252.102", "port": "50349", "user": "test/rainer" } }'
 
 execute 'begin outside:176.97.252.102/50349(rainer) end'
 # we need to add the backslash escape for the testbench plumbing
-assert_output_json_eq '{"field": "outside:176.97.252.102/50349(rainer)"}'
+assert_output_json_eq '{"field": { "interface": "outside", "ip": "176.97.252.102", "port": "50349", "user": "rainer" } }'
