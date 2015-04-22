@@ -1,5 +1,11 @@
 ----------------------------------------------------------------------
 Version 1.1.2, 2015-03-??
+- some parsers did incorrectly report success when an error occurred
+  this was caused by inconsistencies between various macros. We have
+  changed the parser-generation macros to match the semantics of the
+  broader CHKN/CHKR macros and also restructured/simplified the 
+  parser generation macros.
+  closes https://github.com/rsyslog/liblognorm/issues/41
 ----------------------------------------------------------------------
 Version 1.1.1, 2015-03-09
 - fixed library version numbering
