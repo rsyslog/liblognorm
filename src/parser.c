@@ -82,8 +82,9 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *           not successfully parse (but all went well otherwise) and something
  *           else in case of an error.
  */
-#define BEGINParser(ParserName) \
-int ln_parse##ParserName(const char *const str, const size_t strLen, size_t *const offs, \
+#define PARSER(ParserName) \
+int ln_parse##ParserName(const char *const str, const size_t strLen, \
+	size_t *const offs,       \
 	__attribute__((unused)) const ln_fieldList_t *node,  \
 	size_t *parsed,                                      \
 	__attribute__((unused)) struct json_object **value) \
@@ -93,24 +94,16 @@ int ln_parse##ParserName(const char *const str, const size_t strLen, size_t *con
 	*parsed = 0;
 
 #define FAILParser \
-	goto done; /* suppress warnings */ \
-done: \
+	goto parserdone; /* suppress warnings */ \
+parserdone: \
 	r = 0; \
-	goto fail; /* suppress warnings */ \
-fail: 
+	goto done; /* suppress warnings */ \
+done: 
 
 #define ENDFailParser \
 	return r; \
 }
 
-#define ENDParser \
-	goto done; /* suppress warnings */ \
-done: \
-	r = 0; \
-	goto fail; /* suppress warnings */ \
-fail: \
-	return r; \
-}
 
 /**
  * Utilities to allow constructors of complex parser's to
@@ -191,7 +184,7 @@ static void pcons_unescape_arg(pcons_args_t *dat, int i) {
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
  */
-BEGINParser(RFC5424Date)
+PARSER(RFC5424Date)
 	const unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int year;
@@ -216,33 +209,33 @@ BEGINParser(RFC5424Date)
 
 	/* We take the liberty to accept slightly malformed timestamps e.g. in 
 	 * the format of 2003-9-1T1:0:0.  */
-	if(len == 0 || *pszTS++ != '-') goto fail;
+	if(len == 0 || *pszTS++ != '-') goto done;
 	--len;
 	month = hParseInt(&pszTS, &len);
-	if(month < 1 || month > 12) goto fail;
+	if(month < 1 || month > 12) goto done;
 
 	if(len == 0 || *pszTS++ != '-')
-		goto fail;
+		goto done;
 	--len;
 	day = hParseInt(&pszTS, &len);
-	if(day < 1 || day > 31) goto fail;
+	if(day < 1 || day > 31) goto done;
 
-	if(len == 0 || *pszTS++ != 'T') goto fail;
+	if(len == 0 || *pszTS++ != 'T') goto done;
 	--len;
 
 	hour = hParseInt(&pszTS, &len);
-	if(hour < 0 || hour > 23) goto fail;
+	if(hour < 0 || hour > 23) goto done;
 
 	if(len == 0 || *pszTS++ != ':')
-		goto fail;
+		goto done;
 	--len;
 	minute = hParseInt(&pszTS, &len);
-	if(minute < 0 || minute > 59) goto fail;
+	if(minute < 0 || minute > 59) goto done;
 
-	if(len == 0 || *pszTS++ != ':') goto fail;
+	if(len == 0 || *pszTS++ != ':') goto done;
 	--len;
 	second = hParseInt(&pszTS, &len);
-	if(second < 0 || second > 60) goto fail;
+	if(second < 0 || second > 60) goto done;
 
 	/* Now let's see if we have secfrac */
 	if(len > 0 && *pszTS == '.') {
@@ -256,7 +249,7 @@ BEGINParser(RFC5424Date)
 	}
 
 	/* check the timezone */
-	if(len == 0) goto fail;
+	if(len == 0) goto done;
 
 	if(*pszTS == 'Z') {
 		--len;
@@ -271,40 +264,45 @@ BEGINParser(RFC5424Date)
 
 		OffsetHour = hParseInt(&pszTS, &len);
 		if(OffsetHour < 0 || OffsetHour > 23)
-			goto fail;
+			goto done;
 
 		if(len == 0 || *pszTS++ != ':')
-			goto fail;
+			goto done;
 		--len;
 		OffsetMinute = hParseInt(&pszTS, &len);
 		if(OffsetMinute < 0 || OffsetMinute > 59)
-			goto fail;
+			goto done;
 	} else {
 		/* there MUST be TZ information */
-		goto fail;
+		goto done;
 	}
 
 	if(len > 0) {
 		if(*pszTS != ' ') /* if it is not a space, it can not be a "good" time */
-			goto fail;
+			goto done;
 	}
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
  * Parse a RFC3164 Date.
  */
-BEGINParser(RFC3164Date)
+PARSER(RFC3164Date)
 	const unsigned char *p;
 	size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int month;
 	int day;
-	//int year = 0; /* 0 means no year provided */
+#if 0 /* TODO: why does this still exist? */
+	int year = 0; /* 0 means no year provided */
+#endif
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
@@ -320,7 +318,7 @@ BEGINParser(RFC3164Date)
 	 * fastest way to parse it.
 	 */
 	if(len < 3)
-		goto fail;
+		goto done;
 
 	switch(*p++)
 	{
@@ -332,7 +330,7 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 1;
 			} else
-				goto fail;
+				goto done;
 		} else if(*p == 'u' || *p == 'U') {
 			++p;
 			if(*p == 'n' || *p == 'N') {
@@ -342,9 +340,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 7;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'f':
 	case 'F':
@@ -354,9 +352,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 2;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'm':
 	case 'M':
@@ -369,9 +367,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 5;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'a':
 	case 'A':
@@ -381,16 +379,16 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 4;
 			} else
-				goto fail;
+				goto done;
 		} else if(*p == 'u' || *p == 'U') {
 			++p;
 			if(*p == 'g' || *p == 'G') {
 				++p;
 				month = 8;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 's':
 	case 'S':
@@ -400,9 +398,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 9;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'o':
 	case 'O':
@@ -412,9 +410,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 10;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'n':
 	case 'N':
@@ -425,9 +423,9 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 11;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	case 'd':
 	case 'D':
@@ -437,12 +435,12 @@ BEGINParser(RFC3164Date)
 				++p;
 				month = 12;
 			} else
-				goto fail;
+				goto done;
 		} else
-			goto fail;
+			goto done;
 		break;
 	default:
-		goto fail;
+		goto done;
 	}
 
 	len -= 3;
@@ -450,7 +448,7 @@ BEGINParser(RFC3164Date)
 	/* done month */
 
 	if(len == 0 || *p++ != ' ')
-		goto fail;
+		goto done;
 	--len;
 
 	/* we accept a slightly malformed timestamp with one-digit days. */
@@ -461,10 +459,10 @@ BEGINParser(RFC3164Date)
 
 	day = hParseInt(&p, &len);
 	if(day < 1 || day > 31)
-		goto fail;
+		goto done;
 
 	if(len == 0 || *p++ != ' ')
-		goto fail;
+		goto done;
 	--len;
 
 	/* time part */
@@ -478,27 +476,27 @@ BEGINParser(RFC3164Date)
 
 		/* re-query the hour, this time it must be valid */
 		if(len == 0 || *p++ != ' ')
-			goto fail;
+			goto done;
 		--len;
 		hour = hParseInt(&p, &len);
 	}
 
 	if(hour < 0 || hour > 23)
-		goto fail;
+		goto done;
 
 	if(len == 0 || *p++ != ':')
-		goto fail;
+		goto done;
 	--len;
 	minute = hParseInt(&p, &len);
 	if(minute < 0 || minute > 59)
-		goto fail;
+		goto done;
 
 	if(len == 0 || *p++ != ':')
-		goto fail;
+		goto done;
 	--len;
 	second = hParseInt(&p, &len);
 	if(second < 0 || second > 60)
-		goto fail;
+		goto done;
 
 	/* we provide support for an extra ":" after the date. While this is an
 	 * invalid format, it occurs frequently enough (e.g. with Cisco devices)
@@ -511,7 +509,11 @@ BEGINParser(RFC3164Date)
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
-ENDParser
+
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -519,7 +521,7 @@ ENDParser
  * Note that a number is an abstracted concept. We always represent it
  * as 64 bits (but may later change our mind if performance dictates so).
  */
-BEGINParser(Number)
+PARSER(Number)
 	const char *c;
 	size_t i;
 
@@ -530,46 +532,51 @@ BEGINParser(Number)
 
 	for (i = *offs; i < strLen && isdigit(c[i]); i++);
 	if (i == *offs)
-		goto fail;
+		goto done;
 	
 	/* success, persist */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a Real-number in floating-pt form.
  */
-BEGINParser(Float)
-const char *c;
-size_t i;
+PARSER(Float)
+	const char *c;
+	size_t i;
 
-assert(str != NULL);
-assert(offs != NULL);
-assert(parsed != NULL);
-c = str;
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
 
-int seen_point = 0;
+	int seen_point = 0;
 
-i = *offs;
+	i = *offs;
 
-if (c[i] == '-') i++; 
+	if (c[i] == '-') i++; 
 
-for (; i < strLen; i++) {
-	if (c[i] == '.') {
-		if (seen_point != 0) break;
-		seen_point = 1;
-	} else if (! isdigit(c[i])) {
-		break;
-	} 
+	for (; i < strLen; i++) {
+		if (c[i] == '.') {
+			if (seen_point != 0) break;
+			seen_point = 1;
+		} else if (! isdigit(c[i])) {
+			break;
+		} 
+	}
+	if (i == *offs)
+		goto done;
+		
+	/* success, persist */
+	*parsed = i - *offs;
+	r = 0; /* success */
+done:
+	return r;
 }
-if (i == *offs)
-	goto fail;
-	
-/* success, persist */
-*parsed = i - *offs;
-
-ENDParser
 
 
 /**
@@ -578,7 +585,7 @@ ENDParser
  * whitespace. Note that if a non-hex character is deteced inside the number string,
  * this is NOT considered to be a number.
  */
-BEGINParser(HexNumber)
+PARSER(HexNumber)
 	const char *c;
 	size_t i = *offs;
 
@@ -588,15 +595,19 @@ BEGINParser(HexNumber)
 	c = str;
 
 	if(c[i] != '0' || c[i+1] != 'x')
-		goto fail;
+		goto done;
 
 	for (i += 2 ; i < strLen && isxdigit(c[i]); i++);
 	if (i == *offs || !isspace(c[i]))
-		goto fail;
+		goto done;
 	
 	/* success, persist */
 	*parsed = i - *offs;
-ENDParser
+
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -609,7 +620,7 @@ ENDParser
  * no timestamp.
  */
 #define LEN_KERNEL_TIMESTAMP 14
-BEGINParser(KernelTimestamp)
+PARSER(KernelTimestamp)
 	const char *c;
 	size_t i;
 
@@ -626,13 +637,13 @@ BEGINParser(KernelTimestamp)
 	   || !isdigit(c[i+4])
 	   || !isdigit(c[i+5])
 	   )
-		goto fail;
+		goto done;
 	i += 6;
 	for(int j = 0 ; j < 7 && i < strLen && isdigit(c[i]) ; )
 		++i, ++j;	/* just scan */
 
 	if(i >= strLen || c[i] != '.')
-		goto fail;
+		goto done;
 
 	++i; /* skip over '.' */
 
@@ -645,12 +656,15 @@ BEGINParser(KernelTimestamp)
 	   || !isdigit(c[i+5])
 	   || c[i+6] != ']'
 	   )
-		goto fail;
+		goto done;
 	i += 7;
 
 	/* success, persist */
 	*parsed = i - *offs;
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse whitespace.
@@ -662,7 +676,7 @@ ENDParser
  * This parser is also a forward-compatibility tool for the upcoming
  * slsa (simple log structure analyser) tool.
  */
-BEGINParser(Whitespace)
+PARSER(Whitespace)
 	const char *c;
 	size_t i = *offs;
 
@@ -672,12 +686,15 @@ BEGINParser(Whitespace)
 	c = str;
 
 	if(!isspace(c[i]))
-		goto fail;
+		goto done;
 
 	for (i++ ; i < strLen && isspace(c[i]); i++);
 	/* success, persist */
 	*parsed = i - *offs;
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -685,7 +702,7 @@ ENDParser
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
  */
-BEGINParser(Word)
+PARSER(Word)
 	const char *c;
 	size_t i;
 
@@ -699,21 +716,23 @@ BEGINParser(Word)
 	while(i < strLen && c[i] != ' ') 
 		i++;
 
-	if(i == *offs) {
-		goto fail;
-	}
+	if(i == *offs)
+		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
  * Parse everything up to a specific string.
  * swisskid, 2015-01-21
  */
-BEGINParser(StringTo)
+PARSER(StringTo)
 	const char *c;
 	const char *toFind;
 	size_t i, j, k, m;
@@ -745,21 +764,23 @@ BEGINParser(StringTo)
 		}
 	    }
 	}
-	if(i == *offs || i == strLen || c[i] != toFind[0]) {
-		r = LN_WRONGPARSER;
-		goto fail;
-	} 
+	if(i == *offs || i == strLen || c[i] != toFind[0])
+		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
+
 /**
  * Parse a alphabetic word.
  * A alpha word is composed of characters for which isalpha returns true.
- * The parser fails if there is no alpha character at all.
+ * The parser dones if there is no alpha character at all.
  */
-BEGINParser(Alpha)
+PARSER(Alpha)
 	const char *c;
 	size_t i;
 
@@ -774,13 +795,15 @@ BEGINParser(Alpha)
 		i++;
 
 	if(i == *offs) {
-		goto fail;
+		goto done;
 	}
 
 	/* success, persist */
 	*parsed = i - *offs;
-
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -792,7 +815,7 @@ ENDParser
  * In those cases, the parsers declares itself as not being successful, in all
  * other cases a string is extracted.
  */
-BEGINParser(CharTo)
+PARSER(CharTo)
 	const char *c;
 	unsigned char cTerm;
 	size_t i;
@@ -809,15 +832,16 @@ BEGINParser(CharTo)
 	while(i < strLen && c[i] != cTerm) 
 		i++;
 
-	if(i == *offs || i == strLen || c[i] != cTerm) {
-		r = LN_WRONGPARSER;
-		goto fail;
-	}
+	if(i == *offs || i == strLen || c[i] != cTerm)
+		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -828,7 +852,7 @@ ENDParser
  * By nature of the parser, it is required that end of string or the separator
  * follows this field in rule.
  */
-BEGINParser(CharSeparated)
+PARSER(CharSeparated)
 	const char *c;
 	unsigned char cTerm;
 	size_t i;
@@ -848,7 +872,9 @@ BEGINParser(CharSeparated)
 	/* success, persist */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+	return r;
+}
 
 /**
  * Parse yet-to-be-matched portion of string by re-applying
@@ -862,7 +888,7 @@ struct recursive_parser_data_s {
 	int free_ctx;
 };
 
-BEGINParser(Recursive)
+PARSER(Recursive)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -888,12 +914,20 @@ BEGINParser(Recursive)
 			*parsed = strLen - *offs;
 		}
 	}
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 typedef ln_ctx (ctx_constructor)(ln_ctx, pcons_args_t*, const char*);
 
-static void* _recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx, int no_of_args, int remaining_field_arg_idx,
-												int free_ctx, ctx_constructor *fn) {
+static void*
+_recursive_parser_data_constructor(ln_fieldList_t *node,
+	ln_ctx ctx,
+	int no_of_args,
+	int remaining_field_arg_idx,
+	int free_ctx, ctx_constructor *fn)
+{
 	int r = LN_BADCONFIG;
 	char* name = NULL;
 	struct recursive_parser_data_s *pData = NULL;
@@ -911,7 +945,7 @@ done:
 		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
 		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation failed for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation doneed for field: %s", name);
 		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
 															  "recursive/descent field: %s", name);
 
@@ -989,7 +1023,7 @@ struct tokenized_parser_data_s {
 
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
 
-BEGINParser(Tokenized) {
+PARSER(Tokenized)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1011,7 +1045,7 @@ BEGINParser(Tokenized) {
 			if (! pData->use_default_field) {
 				json_object_put(json_p);
 				json_p = json_object_new_object();
-			} //TODO: handle null condition gracefully
+			} /*TODO: handle null condition gracefully*/
 
 			ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
 
@@ -1061,7 +1095,10 @@ BEGINParser(Tokenized) {
 		FAIL(LN_BADPARSERSTATE);
 	}
 
-} ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 void tokenized_parser_data_destructor(void** dataPtr) {
 	tokenized_parser_data_t *data = (tokenized_parser_data_t*) *dataPtr;
@@ -1075,7 +1112,7 @@ void tokenized_parser_data_destructor(void** dataPtr) {
 static void load_generated_parser_samples(ln_ctx ctx,
 	const char* const field_descr, const int field_descr_len,
 	const char* const suffix, const int length) {
-	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";//TODO: extract nice constants
+	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";/*TODO: extract nice constants*/
 	static const int RULE_PREFIX_LEN = 15;
 
 	char *sample_str = NULL;
@@ -1209,7 +1246,7 @@ struct regex_parser_data_s {
 	int max_groups;
 };
 
-BEGINParser(Regex)
+PARSER(Regex)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1223,7 +1260,7 @@ BEGINParser(Regex)
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
-			//please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic
+			/*please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic*/
 			if (ovector[2 * pData->consume_group] == *offs) {
 				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
 				if (pData->consume_group != pData->return_group) {
@@ -1241,7 +1278,10 @@ BEGINParser(Regex)
 		}
 		free(ovector);
 	}
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 static const char* regex_parser_configure_consume_and_return_group(pcons_args_t* args, struct regex_parser_data_s *pData) {
 	const char* consume_group_parse_error = "couldn't parse consume-group number";
@@ -1391,7 +1431,7 @@ static int reinterpret_value(json_object **value, enum interpret_type to_type) {
 	return 1;
 }
 
-BEGINParser(Interpret)
+PARSER(Interpret)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1419,7 +1459,10 @@ BEGINParser(Interpret)
 		}
 		json_object_put(parsed_raw);
 	}
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	int r = LN_BADCONFIG;
@@ -1491,7 +1534,7 @@ struct suffixed_parser_data_s {
 	char* suffix_field_name;
 };
 
-BEGINParser(Suffixed) {
+PARSER(Suffixed) {
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1685,8 +1728,7 @@ void suffixed_parser_data_destructor(void** dataPtr) {
 /**
  * Just get everything till the end of string.
  */
-BEGINParser(Rest)
-
+PARSER(Rest)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1695,8 +1737,9 @@ BEGINParser(Rest)
 	(void)str;
 	/* success, persist */
 	*parsed = strLen - *offs;
-
-ENDParser
+	r = 0;
+	return r;
+}
 
 /**
  * Parse a possibly quoted string. In this initial implementation, escaping of the quote
@@ -1705,7 +1748,7 @@ ENDParser
  * quote character seen. The extracted string does NOT include the quote characters.
  * swisskid, 2015-01-21
  */
-BEGINParser(OpQuotedString)
+PARSER(OpQuotedString)
 	const char *c;
 	size_t i;
 	char *cstr;
@@ -1720,9 +1763,8 @@ BEGINParser(OpQuotedString)
 		while(i < strLen && c[i] != ' ') 
 			i++;
 
-		if(i == *offs) {
-			goto fail;
-		}
+		if(i == *offs)
+			goto done;
 
 		/* success, persist */
 		*parsed = i - *offs;
@@ -1735,10 +1777,8 @@ BEGINParser(OpQuotedString)
 	    while(i < strLen && c[i] != '"') 
 		    i++;
 
-	    if(i == strLen || c[i] != '"') {
-		    r = LN_WRONGPARSER;
-		    goto fail;
-	    }
+	    if(i == strLen || c[i] != '"')
+		    goto done;
 	    /* success, persist */
 	    *parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	    /* create JSON value to save quoted string contents */
@@ -1747,7 +1787,10 @@ BEGINParser(OpQuotedString)
 	CHKN(*value = json_object_new_string(cstr));
 	free(cstr);
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a quoted string. In this initial implementation, escaping of the quote
@@ -1756,7 +1799,7 @@ ENDParser
  * quote character seen. The extracted string does NOT include the quote characters.
  * rgerhards, 2011-01-14
  */
-BEGINParser(QuotedString)
+PARSER(QuotedString)
 	const char *c;
 	size_t i;
 	char *cstr;
@@ -1767,20 +1810,18 @@ BEGINParser(QuotedString)
 	c = str;
 	i = *offs;
 	if(i + 2 > strLen)
-		goto fail;	/* needs at least 2 characters */
+		goto done;	/* needs at least 2 characters */
 
 	if(c[i] != '"')
-		goto fail;
+		goto done;
 	++i;
 
 	/* search end of string */
 	while(i < strLen && c[i] != '"') 
 		i++;
 
-	if(i == strLen || c[i] != '"') {
-		r = LN_WRONGPARSER;
-		goto fail;
-	}
+	if(i == strLen || c[i] != '"')
+		goto done;
 
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
@@ -1788,8 +1829,10 @@ BEGINParser(QuotedString)
 	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	CHKN(*value = json_object_new_string(cstr));
 	free(cstr);
-
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 /**
@@ -1797,7 +1840,7 @@ ENDParser
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-BEGINParser(ISODate)
+PARSER(ISODate)
 	const char *c;
 	size_t i;
 
@@ -1808,38 +1851,41 @@ BEGINParser(ISODate)
 	i = *offs;
 
 	if(*offs+10 > strLen)
-		goto fail;	/* if it is not 10 chars, it can't be an ISO date */
+		goto done;	/* if it is not 10 chars, it can't be an ISO date */
 
 	/* year */
-	if(!isdigit(c[i])) goto fail;
-	if(!isdigit(c[i+1])) goto fail;
-	if(!isdigit(c[i+2])) goto fail;
-	if(!isdigit(c[i+3])) goto fail;
-	if(c[i+4] != '-') goto fail;
+	if(!isdigit(c[i])) goto done;
+	if(!isdigit(c[i+1])) goto done;
+	if(!isdigit(c[i+2])) goto done;
+	if(!isdigit(c[i+3])) goto done;
+	if(c[i+4] != '-') goto done;
 	/* month */
 	if(c[i+5] == '0') {
-		if(c[i+6] < '1' || c[i+6] > '9') goto fail;
+		if(c[i+6] < '1' || c[i+6] > '9') goto done;
 	} else if(c[i+5] == '1') {
-		if(c[i+6] < '0' || c[i+6] > '2') goto fail;
+		if(c[i+6] < '0' || c[i+6] > '2') goto done;
 	} else {
-		goto fail;
+		goto done;
 	}
-	if(c[i+7] != '-') goto fail;
+	if(c[i+7] != '-') goto done;
 	/* day */
 	if(c[i+8] == '0') {
-		if(c[i+9] < '1' || c[i+9] > '9') goto fail;
+		if(c[i+9] < '1' || c[i+9] > '9') goto done;
 	} else if(c[i+8] == '1' || c[i+8] == '2') {
-		if(!isdigit(c[i+9])) goto fail;
+		if(!isdigit(c[i+9])) goto done;
 	} else if(c[i+8] == '3') {
-		if(c[i+9] != '0' && c[i+9] != '1') goto fail;
+		if(c[i+9] != '0' && c[i+9] != '1') goto done;
 	} else {
-		goto fail;
+		goto done;
 	}
 
 	/* success, persist */
 	*parsed = 10;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a Cisco interface spec. A sample for such a spec is:
@@ -1852,16 +1898,13 @@ ENDParser
  * - port
  * We also optionally support a user name, enclosed in parenthesis,
  * immediately after the port.
- * Note that this parser does not yet extract the individual parts
- * due to the restrictions in current liblognorm. This is planned for
- * after a general algorithm overhaul.
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
+ * TODO: memory leak on partial match (failure)
  */
-BEGINParser(CiscoInterfaceSpec)
+PARSER(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
-	size_t localParsed;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1869,38 +1912,64 @@ BEGINParser(CiscoInterfaceSpec)
 	c = str;
 	i = *offs;
 
-	if(c[i] == ':' || isspace(c[i])) goto fail;
+	if(c[i] == ':' || isspace(c[i])) goto done;
 
+	const size_t idxInterface = i;
 	while(i < strLen) {
-		if(isspace(c[i])) goto fail;
+		if(isspace(c[i])) goto done;
 		if(c[i] == ':')
 			break;
 		++i;
 	}
-	if(i == strLen) goto fail;
+	if(i == strLen) goto done;
+	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
-	if(ln_parseIPv4(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
-	i += localParsed;
-	if(i == strLen || c[i] != '/') goto fail;
+	const size_t idxIP = i;
+	size_t lenIP;
+	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
+	i += lenIP;
+	if(i == strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
-	if(ln_parseNumber(str, strLen, &i, node, &localParsed, NULL) != 0) goto fail;
-	i += localParsed;
+	const size_t idxPort = i;
+	size_t lenPort;
+	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto done;
+	i += lenPort;
 	if(i == strLen) goto success;
 
 	/* check optional part */
-	if(c[i] != '(' && !isspace(c[i])) goto fail;
+	if(c[i] != '(' && !isspace(c[i])) goto done;
 	size_t iTmp = i + 1;
+	const size_t idxUser = iTmp;
 	while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
 		++iTmp; /* just scan */
 
 	if(iTmp < strLen && c[iTmp] == ')')
 		i = iTmp + 1; /* we have a match, so use new index */
+	size_t lenUser = iTmp - idxUser;
+
+	/* all done, save data */
+	if(value == NULL)
+		goto success;
+
+	CHKN(*value = json_object_new_object());
+	json_object *json;
+	CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
+	json_object_object_add(*value, "interface", json);
+	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
+	json_object_object_add(*value, "ip", json);
+	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
+	json_object_object_add(*value, "port", json);
+	CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
+	json_object_object_add(*value, "user", json);
 
 success: /* success, persist */
 	*parsed = i - *offs;
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a duration. A duration is similar to a timestamp, except that
@@ -1909,7 +1978,7 @@ ENDParser
  * is commonly done in Cisco software).
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  */
-BEGINParser(Duration)
+PARSER(Duration)
 	const char *c;
 	size_t i;
 
@@ -1920,35 +1989,38 @@ BEGINParser(Duration)
 	i = *offs;
 
 	/* hour is a bit tricky */
-	if(!isdigit(c[i])) goto fail;
+	if(!isdigit(c[i])) goto done;
 	++i;
 	if(isdigit(c[i]))
 		++i;
 	if(c[i] == ':')
 		++i;
 	else
-		goto fail;
+		goto done;
 
 	if(i+5 > strLen)
-		goto fail;/* if it is not 5 chars from here, it can't be us */
+		goto done;/* if it is not 5 chars from here, it can't be us */
 
-	if(c[i] < '0' || c[i] > '5') goto fail;
-	if(!isdigit(c[i+1])) goto fail;
-	if(c[i+2] != ':') goto fail;
-	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
-	if(!isdigit(c[i+4])) goto fail;
+	if(c[i] < '0' || c[i] > '5') goto done;
+	if(!isdigit(c[i+1])) goto done;
+	if(c[i+2] != ':') goto done;
+	if(c[i+3] < '0' || c[i+3] > '5') goto done;
+	if(!isdigit(c[i+4])) goto done;
 
 	/* success, persist */
 	*parsed = (i + 5) - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a timestamp in 24hr format (exactly HH:MM:SS).
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-BEGINParser(Time24hr)
+PARSER(Time24hr)
 	const char *c;
 	size_t i;
 
@@ -1959,28 +2031,31 @@ BEGINParser(Time24hr)
 	i = *offs;
 
 	if(*offs+8 > strLen)
-		goto fail;	/* if it is not 8 chars, it can't be us */
+		goto done;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
 	if(c[i] == '0' || c[i] == '1') {
-		if(!isdigit(c[i+1])) goto fail;
+		if(!isdigit(c[i+1])) goto done;
 	} else if(c[i] == '2') {
-		if(c[i+1] < '0' || c[i+1] > '3') goto fail;
+		if(c[i+1] < '0' || c[i+1] > '3') goto done;
 	} else {
-		goto fail;
+		goto done;
 	}
 	/* TODO: the code below is a duplicate of 24hr parser - create common function */
-	if(c[i+2] != ':') goto fail;
-	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
-	if(!isdigit(c[i+4])) goto fail;
-	if(c[i+5] != ':') goto fail;
-	if(c[i+6] < '0' || c[i+6] > '5') goto fail;
-	if(!isdigit(c[i+7])) goto fail;
+	if(c[i+2] != ':') goto done;
+	if(c[i+3] < '0' || c[i+3] > '5') goto done;
+	if(!isdigit(c[i+4])) goto done;
+	if(c[i+5] != ':') goto done;
+	if(c[i+6] < '0' || c[i+6] > '5') goto done;
+	if(!isdigit(c[i+7])) goto done;
 
 	/* success, persist */
 	*parsed = 8;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a timestamp in 12hr format (exactly HH:MM:SS).
@@ -1988,7 +2063,7 @@ ENDParser
  * TODO: the code below is a duplicate of 24hr parser - create common function?
  * rgerhards, 2011-01-14
  */
-BEGINParser(Time12hr)
+PARSER(Time12hr)
 	const char *c;
 	size_t i;
 
@@ -1999,27 +2074,30 @@ BEGINParser(Time12hr)
 	i = *offs;
 
 	if(*offs+8 > strLen)
-		goto fail;	/* if it is not 8 chars, it can't be us */
+		goto done;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
 	if(c[i] == '0') {
-		if(!isdigit(c[i+1])) goto fail;
+		if(!isdigit(c[i+1])) goto done;
 	} else if(c[i] == '1') {
-		if(c[i+1] < '0' || c[i+1] > '2') goto fail;
+		if(c[i+1] < '0' || c[i+1] > '2') goto done;
 	} else {
-		goto fail;
+		goto done;
 	}
-	if(c[i+2] != ':') goto fail;
-	if(c[i+3] < '0' || c[i+3] > '5') goto fail;
-	if(!isdigit(c[i+4])) goto fail;
-	if(c[i+5] != ':') goto fail;
-	if(c[i+6] < '0' || c[i+6] > '5') goto fail;
-	if(!isdigit(c[i+7])) goto fail;
+	if(c[i+2] != ':') goto done;
+	if(c[i+3] < '0' || c[i+3] > '5') goto done;
+	if(!isdigit(c[i+4])) goto done;
+	if(c[i+5] != ':') goto done;
+	if(c[i+6] < '0' || c[i+6] > '5') goto done;
+	if(!isdigit(c[i+7])) goto done;
 
 	/* success, persist */
 	*parsed = 8;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 
 
@@ -2034,13 +2112,13 @@ static int
 chkIPv4AddrByte(const char *str, size_t strLen, size_t *offs)
 {
 	int val = 0;
-	int r = 1;	/* default: fail -- simplifies things */
+	int r = 1;	/* default: done -- simplifies things */
 	const char *c;
 	size_t i = *offs;
 
 	c = str;
 	if(i == strLen || !isdigit(c[i]))
-		goto fail;
+		goto done;
 	val = c[i++] - '0';
 	if(i < strLen && isdigit(c[i])) {
 		val = val * 10 + c[i++] - '0';
@@ -2048,18 +2126,18 @@ chkIPv4AddrByte(const char *str, size_t strLen, size_t *offs)
 			val = val * 10 + c[i++] - '0';
 	}
 	if(val > 255)	/* cannot be a valid IP address byte! */
-		goto fail;
+		goto done;
 
 	*offs = i;
 	r = 0;
-fail:
+done:
 	return r;
 }
 
 /**
  * Parser for IPv4 addresses.
  */
-BEGINParser(IPv4)
+PARSER(IPv4)
 	const char *c;
 	size_t i;
 
@@ -2069,26 +2147,29 @@ BEGINParser(IPv4)
 	i = *offs;
 	if(i + 7 > strLen) {
 		/* IPv4 addr requires at least 7 characters */
-		goto fail;
+		goto done;
 	}
 	c = str;
 
 	/* byte 1*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
-	if(i == strLen || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+	if(i == strLen || c[i++] != '.') goto done;
 	/* byte 2*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
-	if(i == strLen || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+	if(i == strLen || c[i++] != '.') goto done;
 	/* byte 3*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
-	if(i == strLen || c[i++] != '.') goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+	if(i == strLen || c[i++] != '.') goto done;
 	/* byte 4 - we do NOT need any char behind it! */
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto fail;
+	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
 
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /* helper to NameValue parser, parses out a a single name=value pair 
  *
@@ -2157,7 +2238,7 @@ fprintf(stderr, "return %d\n", r);
  * have much more frequent mismatches than matches.
  * added 2015-04-25 rgerhards
  */
-BEGINParser(NameValue)
+PARSER(NameValue)
 	size_t i = *offs;
 
 	/* stage one */
@@ -2183,4 +2264,7 @@ BEGINParser(NameValue)
 	*parsed = i - *offs;
 
 	/* TODO: fix mem leak if alloc json fails */
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
