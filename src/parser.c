@@ -1901,7 +1901,7 @@ done:
  * other than colon.
  * TODO: memory leak on partial match (failure)
  */
-BEGINParser(CiscoInterfaceSpec)
+PARSER(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
 
@@ -1911,34 +1911,34 @@ BEGINParser(CiscoInterfaceSpec)
 	c = str;
 	i = *offs;
 
-	if(c[i] == ':' || isspace(c[i])) goto fail;
+	if(c[i] == ':' || isspace(c[i])) goto done;
 
 	const size_t idxInterface = i;
 	while(i < strLen) {
-		if(isspace(c[i])) goto fail;
+		if(isspace(c[i])) goto done;
 		if(c[i] == ':')
 			break;
 		++i;
 	}
-	if(i == strLen) goto fail;
+	if(i == strLen) goto done;
 	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
 	const size_t idxIP = i;
 	size_t lenIP;
-	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto fail;
+	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
 	i += lenIP;
-	if(i == strLen || c[i] != '/') goto fail;
+	if(i == strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
 	const size_t idxPort = i;
 	size_t lenPort;
-	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto fail;
+	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto done;
 	i += lenPort;
 	if(i == strLen) goto success;
 
 	/* check optional part */
-	if(c[i] != '(' && !isspace(c[i])) goto fail;
+	if(c[i] != '(' && !isspace(c[i])) goto done;
 	size_t iTmp = i + 1;
 	const size_t idxUser = iTmp;
 	while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
@@ -1965,7 +1965,10 @@ BEGINParser(CiscoInterfaceSpec)
 
 success: /* success, persist */
 	*parsed = i - *offs;
-ENDParser
+	r = 0; /* success */
+done:
+	return r;
+}
 
 /**
  * Parse a duration. A duration is similar to a timestamp, except that
