@@ -2097,6 +2097,7 @@ ENDParser
  * - name=value
  * - name="value"
  * - name='value'
+ * Note "name=" is valid and means a field with empty value.
  * TODO: so far, quote characters are not permitted WITHIN quoted values.
  */
 static int
@@ -2111,8 +2112,11 @@ parseNameValue(const char *const __restrict__ str,
 	const size_t iName = i;
 	while(i < strLen && isalnum(str[i]))
 		++i;
+fprintf(stderr, "check = i %zd, iname %zd, str: '%s'/'%s'\n", i, iName, str, str+i);
 	if(i == iName || str[i] != '=')
+{ fprintf(stderr, "no =, r=%d\n", r);
 		goto done; /* no name at all! */
+}
 	const size_t lenName = i - iName;
 	++i; /* skip '=' */
 
@@ -2137,6 +2141,7 @@ parseNameValue(const char *const __restrict__ str,
 	json_object_object_add(valroot, name, json);
 	free(name);
 done:
+fprintf(stderr, "return %d\n", r);
 	return r;
 }
 
