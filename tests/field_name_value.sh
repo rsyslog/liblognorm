@@ -10,3 +10,9 @@ assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "
 
 execute 'name1=value1 name2=value2 name3=value3 '
 assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "value3" } }'
+
+execute 'name1= name2=value2 name3=value3 '
+assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "value3" } }'
+
+execute 'name1 name2=value2 name3=value3 '
+assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "value3" } }'

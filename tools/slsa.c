@@ -1147,6 +1147,7 @@ preprocessLine(const char *const __restrict__ buf,
 	size_t tocopylen;
 	size_t iout;
 
+printf("in preprocessline\n");fflush(stdout);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
 		/* in this stage, we must only detect syntaxes that we are
@@ -1160,6 +1161,9 @@ preprocessLine(const char *const __restrict__ buf,
 			tocopy = "%date-rfc5424%";
 		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-iso%";
+		} else if(ln_parseNameValue(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+printf("found namevalue(%zd):%s\n", nproc, buf+i);fflush(stdout);
+			tocopy = "%name-value-list%";
 		//} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			//tocopy = "%cisco-interface-spec%";
 		} else {
@@ -1179,6 +1183,7 @@ preprocessLine(const char *const __restrict__ buf,
 	}
 	bufout[iout] = '\0';
 	++lnCnt;
+printf("out preprocessline\n");fflush(stdout);
 }
 int
 processFile(FILE *fp)
