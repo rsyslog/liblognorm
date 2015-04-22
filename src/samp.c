@@ -219,19 +219,21 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseCEESyslog;
 	} else if(!es_strconstcmp(*str, "mac48")) {
 		node->parser = ln_parseMAC48;
+	} else if(!es_strconstcmp(*str, "name-value-list")) {
+		node->parser = ln_parseNameValue;
 	} else if(!es_strconstcmp(*str, "v2-iptables")) {
 		node->parser = ln_parsev2IPTables;
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;
 	} else if(!es_strconstcmp(*str, "string-to")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseStringTo;
 	} else if(!es_strconstcmp(*str, "char-to")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseCharTo;
 	} else if(!es_strconstcmp(*str, "char-sep")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseCharSeparated;
 	} else if(!es_strconstcmp(*str, "tokenized")) {
 		node->parser = ln_parseTokenized;
@@ -779,7 +781,7 @@ ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
 		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else {
-		// TODO error reporting
+		/* TODO error reporting */
 		char *str;
 		str = es_str2cstr(typeStr, NULL);
 		ln_dbgprintf(ctx, "invalid record type detected: '%s'", str);
@@ -800,7 +802,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 {
 	struct ln_samp *samp = NULL;
 	int done = 0;
-	char buf[10*1024]; /**< max size of rule */ // TODO: make configurable
+	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
 	es_size_t lenBuf;
 
 	/* we ignore empty lines and lines that begin with "#" */
@@ -824,7 +826,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	}
 
 	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
-    ln_processSamp(ctx, buf, lenBuf);
+	ln_processSamp(ctx, buf, lenBuf);
 
 done:
 	return samp;
