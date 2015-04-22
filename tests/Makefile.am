@@ -12,6 +12,7 @@ user_test_LDFLAGS = -no-install
 
 TESTS_SHELLSCRIPTS = \
 	field_hexnumber.sh \
+	field_name_value.sh \
 	field_kernel_timestamp.sh \
 	field_whitespace.sh \
 	field_rest.sh \
