@@ -27,6 +27,7 @@ stamp-h1
 test-driver
 *.trs
 *.log
+*.tar.gz
 test.out
 src/ln_test
 tests/options.sh

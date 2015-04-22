@@ -1831,95 +1831,98 @@ done:
 	return r;
 }
 
-BEGINParser(EscapedString)
-		size_t i;
-		char *cstr;
-		const char *in;
-		char *out;
-		int quoted, inQuotes, inDoubleQuotes, inEscape;
+PARSER(EscapedString)
+	size_t i;
+	char *cstr;
+	const char *in;
+	char *out;
+	int quoted, inQuotes, inDoubleQuotes, inEscape;
 
-		assert(str != NULL);
-		assert(offs != NULL);
-		assert(parsed != NULL);
-		i = *offs;
-		quoted = TRUE;
-		inQuotes = FALSE;
-		inDoubleQuotes = FALSE;
-		inEscape = FALSE;
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	i = *offs;
+	quoted = TRUE;
+	inQuotes = FALSE;
+	inDoubleQuotes = FALSE;
+	inEscape = FALSE;
 
-		CHKN(cstr = malloc(strLen-i+1));
-		in = str+i;
-		out = cstr;
-		
-		while (i<strLen) {
-			int doCopy = FALSE;
-			int endLoop = FALSE;
-			switch (*in) {
-				case '"':
-					if (inEscape) {
-						inEscape = FALSE;
-						doCopy = TRUE;
-					} else if (inQuotes) {
-						inQuotes = FALSE;
-						inDoubleQuotes = TRUE;
-					} else if (inDoubleQuotes) {
-						inQuotes = TRUE;
-						inDoubleQuotes = FALSE;
-						doCopy = TRUE;
-					} else {
-						inQuotes = TRUE;
-					}
-					break;
-				case '\\':
-					if (inEscape) {
-						inEscape = FALSE;
-						doCopy = TRUE;
-					} else {
-						inEscape = TRUE;
-					}
-					break;
-				case ' ':
-				case '\t':
-					if (inEscape) {
-						inEscape = FALSE;
-						doCopy = TRUE;
-					} else if (inQuotes) {
-						doCopy = TRUE;
-					} else {
-						endLoop = TRUE;
-					}
-					break;
-				default:
-					if (inEscape) {
-						inEscape = FALSE;
-					} else if (inDoubleQuotes) {
-						inQuotes = FALSE;
-						inDoubleQuotes = FALSE;
-					}
+	CHKN(cstr = malloc(strLen-i+1));
+	in = str+i;
+	out = cstr;
+	
+	while (i<strLen) {
+		int doCopy = FALSE;
+		int endLoop = FALSE;
+		switch (*in) {
+			case '"':
+				if (inEscape) {
+					inEscape = FALSE;
 					doCopy = TRUE;
-					break;
-			}
-			if (doCopy) {
-				*out++ = *in;
-			}
-			if (endLoop)
+				} else if (inQuotes) {
+					inQuotes = FALSE;
+					inDoubleQuotes = TRUE;
+				} else if (inDoubleQuotes) {
+					inQuotes = TRUE;
+					inDoubleQuotes = FALSE;
+					doCopy = TRUE;
+				} else {
+					inQuotes = TRUE;
+				}
 				break;
-			in++;
-			i++;
+			case '\\':
+				if (inEscape) {
+					inEscape = FALSE;
+					doCopy = TRUE;
+				} else {
+					inEscape = TRUE;
+				}
+				break;
+			case ' ':
+			case '\t':
+				if (inEscape) {
+					inEscape = FALSE;
+					doCopy = TRUE;
+				} else if (inQuotes) {
+					doCopy = TRUE;
+				} else {
+					endLoop = TRUE;
+				}
+				break;
+			default:
+				if (inEscape) {
+					inEscape = FALSE;
+				} else if (inDoubleQuotes) {
+					inQuotes = FALSE;
+					inDoubleQuotes = FALSE;
+				}
+				doCopy = TRUE;
+				break;
 		}
-		
-		if(i == *offs) {
-			goto fail;
+		if (doCopy) {
+			*out++ = *in;
 		}
-		
-		/* success, persist */
-		*parsed = i - *offs;
-		/* terminate JSON value to save quoted string contents */
-		*out = '\0';
-		CHKN(*value = json_object_new_string(cstr));
-		free(cstr);
+		if (endLoop)
+			break;
+		in++;
+		i++;
+	}
+	
+	if(i == *offs) {
+		goto done;
+	}
+	
+	/* success, persist */
+	*parsed = i - *offs;
+	/* terminate JSON value to save quoted string contents */
+	*out = '\0';
+	CHKN(*value = json_object_new_string(cstr));
+	free(cstr);
 
-ENDParser
+        r = 0; /* success */
+done:
+        return r;
+}
 
 
 /**
