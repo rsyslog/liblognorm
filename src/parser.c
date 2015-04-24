@@ -1887,16 +1887,13 @@ done:
 }
 
 /**
- * Parse a Cisco interface spec. A sample for such a spec is:
- *   outside:176.97.252.102/50349
- * right now, we interpret this as
- * - non-whitespace
- * - colon
- * - IP Address
- * - Slash
- * - port
- * We also optionally support a user name, enclosed in parenthesis,
- * immediately after the port.
+ * Parse a Cisco interface spec. Sample for such a spec are:
+ *   outside:192.168.52.102/50349
+ *   inside:192.168.1.15/56543 (192.168.1.112/54543)
+ *   outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
+ *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ * From this, we conclude the format is:
+ *   interface:ip/port [SP (ip2/port2)] [(username)]
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
  * TODO: memory leak on partial match (failure)
@@ -1937,16 +1934,48 @@ PARSER(CiscoInterfaceSpec)
 	i += lenPort;
 	if(i == strLen) goto success;
 
-	/* check optional part */
-	if(c[i] != '(' && !isspace(c[i])) goto done;
-	size_t iTmp = i + 1;
-	const size_t idxUser = iTmp;
-	while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
-		++iTmp; /* just scan */
+	/* check if optional second ip/port is present
+	 * We assume we must at least have 5 chars [" (::1)"]
+	 */
+	int bHaveIP2 = 0;
+	size_t idxIP2, lenIP2;
+	size_t idxPort2, lenPort2;
+	if(i+5 < strLen && c[i] == ' ' && c[i+1] == '(') {
+		size_t iTmp = i+2; /* skip over " (" */
+		idxIP2 = iTmp;
+		if(ln_parseIPv4(str, strLen, &iTmp, node, &lenIP2, NULL) == 0) {
+			iTmp += lenIP2;
+			if(i < strLen || c[iTmp] == '/') {
+				++iTmp; /* skip slash */
+				idxPort2 = iTmp;
+				if(ln_parseNumber(str, strLen, &iTmp, node, &lenPort2, NULL) == 0) {
+					iTmp += lenPort2;
+					if(iTmp < strLen && c[iTmp] == ')') {
+						i = iTmp + 1; /* match, so use new index */
+						bHaveIP2 = 1;
+					}
+				}
+			}
+		}
+	}
 
-	if(iTmp < strLen && c[iTmp] == ')')
-		i = iTmp + 1; /* we have a match, so use new index */
-	size_t lenUser = iTmp - idxUser;
+	/* check if optional username is present
+	 * We assume we must at least have 3 chars ["(n)"]
+	 */
+	int bHaveUser = 0;
+	size_t idxUser;
+	size_t lenUser;
+	if(i+2 < strLen && c[i] == '(' && !isspace(c[i+1])) {
+		idxUser = i+1; /* skip '(' */
+		size_t iTmp = idxUser;
+		while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
+			++iTmp; /* just scan */
+		if(iTmp < strLen && c[iTmp] == ')') {
+			i = iTmp + 1; /* we have a match, so use new index */
+			bHaveUser = 1;
+			lenUser = iTmp - idxUser;
+		}
+	}
 
 	/* all done, save data */
 	if(value == NULL)
@@ -1960,8 +1989,16 @@ PARSER(CiscoInterfaceSpec)
 	json_object_object_add(*value, "ip", json);
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
 	json_object_object_add(*value, "port", json);
-	CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
-	json_object_object_add(*value, "user", json);
+	if(bHaveIP2) {
+		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
+		json_object_object_add(*value, "ip2", json);
+		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
+		json_object_object_add(*value, "port2", json);
+	}
+	if(bHaveUser) {
+		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
+		json_object_object_add(*value, "user", json);
+	}
 
 success: /* success, persist */
 	*parsed = i - *offs;
