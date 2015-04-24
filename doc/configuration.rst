@@ -328,6 +328,52 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 
     %ip-src:ipv4%
 
+cisco-interface-spec
+####################
+
+A Cisco interface specifier, as for example seen in PIX or ASA.
+The format contains a number of optional parts and is described
+as follows (in ABNF-like manner where square brackets indicate
+optional parts):
+
+::
+
+  [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
+
+Samples for such a spec are:
+
+ * outside:192.168.52.102/50349
+ * inside:192.168.1.15/56543 (192.168.1.112/54543)
+ * outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
+ * outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ * inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
+ * 192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
+
+Note that the current verision of liblognorm does not permit sole
+IP addresses to be detected as a Cisco interface spec. However, we
+are reviewing more Cisco message and need to decide if this is
+to be supported. The problem here is that this would create a much
+broader parser which would potentially match many things that are
+**not** Cisco interface specs.
+
+As this object extracts multiple subelements, it create a JSON
+structure. 
+
+Let's for example look at this definiton::
+
+    %ifaddr:cisco-interface-spec%
+
+and assume the following message is to be parsed::
+
+ outside:192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\some.user)
+
+Then the resulting JSON will be as follows::
+
+{ "ifaddr": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }
+
+Subcomponents that are not given in the to-be-normalized string are
+also not present in the resulting JSON.
+
 tokenized
 #########
 
