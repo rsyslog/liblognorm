@@ -72,7 +72,8 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *            parsers, this sets variable "ed", which just is
  *            string data.
  * @param[out] parsed bytes
- * @param[out] json object containing parsed data (can be unused)
+ * @param[out] value json object containing parsed data (can be unused,
+ *             but if used *value MUST be NULL on entry)
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
@@ -1898,7 +1899,6 @@ done:
  *   [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
- * TODO: memory leak on partial match (failure)
  */
 PARSER(CiscoInterfaceSpec)
 	const char *c;
@@ -2025,6 +2025,10 @@ success: /* success, persist */
 	*parsed = i - *offs;
 	r = 0; /* success */
 done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(value);
+		*value = NULL; /* to be on the save side */
+	}
 	return r;
 }
 
