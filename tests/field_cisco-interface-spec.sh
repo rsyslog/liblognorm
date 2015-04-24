@@ -24,6 +24,9 @@ assert_output_json_eq ' { "field": { "interface": "outside", "ip": "192.168.1.13
 execute 'begin outside:192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\some.user) end'
 assert_output_json_eq ' { "field": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }'
 
+execute 'begin 192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\without.if) end'
+assert_output_json_eq ' { "field": { "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\without.if" } }'
+
 #
 # Test for things that MUST NOT match!
 #

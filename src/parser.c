@@ -1893,8 +1893,9 @@ done:
  *   outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
  *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
  *   inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
+ *   192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
  * From this, we conclude the format is:
- *   interface:ip/port [SP (ip2/port2)] [[SP](username)]
+ *   [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
  * TODO: memory leak on partial match (failure)
@@ -1911,22 +1912,38 @@ PARSER(CiscoInterfaceSpec)
 
 	if(c[i] == ':' || isspace(c[i])) goto done;
 
-	const size_t idxInterface = i;
-	while(i < strLen) {
-		if(isspace(c[i])) goto done;
-		if(c[i] == ':')
-			break;
-		++i;
+	/* first, check if we have an interface. We do this by trying
+	 * to detect if we have an IP. If we have, obviously no interface
+	 * is present. Otherwise, we check if we have a valid interface.
+	 */
+	int bHaveInterface = 0;
+	size_t idxInterface;
+	int bHaveIP = 0;
+	size_t lenIP;
+	size_t idxIP = i;
+	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) == 0) {
+		bHaveIP = 1;
+		i += lenIP - 1; /* position on delimiter */
+	} else {
+		idxInterface = i;
+		while(i < strLen) {
+			if(isspace(c[i])) goto done;
+			if(c[i] == ':')
+				break;
+			++i;
+		}
+		bHaveInterface = 1;
 	}
 	if(i == strLen) goto done;
 	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
-	const size_t idxIP = i;
-	size_t lenIP;
-	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
-	i += lenIP;
+	if(!bHaveIP) {
+		idxIP = i;
+		if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
+		i += lenIP;
+	}
 	if(i == strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
 	const size_t idxPort = i;
@@ -1985,8 +2002,10 @@ PARSER(CiscoInterfaceSpec)
 
 	CHKN(*value = json_object_new_object());
 	json_object *json;
-	CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
-	json_object_object_add(*value, "interface", json);
+	if(bHaveInterface) {
+		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
+		json_object_object_add(*value, "interface", json);
+	}
 	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
 	json_object_object_add(*value, "ip", json);
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
