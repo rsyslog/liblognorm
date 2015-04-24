@@ -1161,11 +1161,11 @@ printf("in preprocessline\n");fflush(stdout);
 			tocopy = "%date-rfc5424%";
 		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-iso%";
-		} else if(ln_parseNameValue(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
-printf("found namevalue(%zd):%s\n", nproc, buf+i);fflush(stdout);
-			tocopy = "%name-value-list%";
-		//} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
-			//tocopy = "%cisco-interface-spec%";
+		//} else if(ln_parseNameValue(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+//printf("found namevalue(%zd):%s\n", nproc, buf+i);fflush(stdout);
+			//tocopy = "%name-value-list%";
+		} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%cisco-interface-spec%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;
