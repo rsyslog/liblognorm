@@ -1893,8 +1893,9 @@ done:
  *   inside:192.168.1.15/56543 (192.168.1.112/54543)
  *   outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
  *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ *   inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
  * From this, we conclude the format is:
- *   interface:ip/port [SP (ip2/port2)] [(username)]
+ *   interface:ip/port [SP (ip2/port2)] [[SP](username)]
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
  * TODO: memory leak on partial match (failure)
@@ -1966,8 +1967,9 @@ PARSER(CiscoInterfaceSpec)
 	int bHaveUser = 0;
 	size_t idxUser;
 	size_t lenUser;
-	if(i+2 < strLen && c[i] == '(' && !isspace(c[i+1])) {
-		idxUser = i+1; /* skip '(' */
+	if(   (i+2 < strLen && c[i] == '(' && !isspace(c[i+1]) )
+	   || (i+3 < strLen && c[i] == ' ' && c[i+1] == '(' && !isspace(c[i+2])) ) {
+		idxUser = i + ((c[i] == ' ') ? 2 : 1); /* skip [SP]'(' */
 		size_t iTmp = idxUser;
 		while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
 			++iTmp; /* just scan */

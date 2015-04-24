@@ -19,7 +19,9 @@ execute 'begin outside:176.97.252.102/50349(rainer) end'
 assert_output_json_eq '{"field": { "interface": "outside", "ip": "176.97.252.102", "port": "50349", "user": "rainer" } }'
 
 execute 'begin outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user) end'
-# we need to add the backslash escape for the testbench plumbing
+assert_output_json_eq ' { "field": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }'
+
+execute 'begin outside:192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\some.user) end'
 assert_output_json_eq ' { "field": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }'
 
 #
