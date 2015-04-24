@@ -1147,7 +1147,7 @@ preprocessLine(const char *const __restrict__ buf,
 	size_t tocopylen;
 	size_t iout;
 
-printf("in preprocessline\n");fflush(stdout);
+//printf("in preprocessline\n");fflush(stdout);
 	iout = 0;
 	for(size_t i = 0 ; i < buflen ; ) {
 		/* in this stage, we must only detect syntaxes that we are
@@ -1183,7 +1183,7 @@ printf("in preprocessline\n");fflush(stdout);
 	}
 	bufout[iout] = '\0';
 	++lnCnt;
-printf("out preprocessline\n");fflush(stdout);
+//printf("out preprocessline\n");fflush(stdout);
 }
 int
 processFile(FILE *fp)
