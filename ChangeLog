@@ -7,6 +7,15 @@ Version 1.1.2, 2015-03-??
   broader CHKN/CHKR macros and also restructured/simplified the 
   parser generation macros.
   closes https://github.com/rsyslog/liblognorm/issues/41
+- call "rest" parser only if nothing else matches.
+  Versions prior to 1.1.2 did execute "rest" during regular parser
+  processing, and thus parser matches have been more or less random.
+  With 1.1.2 this is now always the last parser called. This may cause
+  problems with existing rulesets, HOWEVER, adding any other rule or
+  changing the load order would also have caused problems, so there
+  really is no compatibility to preserve.
+  see also:
+  http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
 ----------------------------------------------------------------------
 Version 1.1.1, 2015-03-09
 - fixed library version numbering

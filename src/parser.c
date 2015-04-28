@@ -2026,7 +2026,7 @@ success: /* success, persist */
 	r = 0; /* success */
 done:
 	if(r != 0 && value != NULL && *value != NULL) {
-		json_object_put(value);
+		json_object_put(*value);
 		*value = NULL; /* to be on the save side */
 	}
 	return r;

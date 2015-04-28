@@ -221,16 +221,19 @@ which can be escaped.
 rest
 ####
 
-Zero or more characters till end of line. Should be always at end of the 
-rule.
+Zero or more characters till end of line. Must always be at end of the 
+rule, even though this condition is currently **not** checked. In any case,
+any definitions after *rest* are ignored.
 
-**Note that the *rest* syntax should be avoided because it generates
-a very broad match. If used, it is impossible to match on a specific 
-character that is on the same position where *rest* is used.**
+Note that the *rest* syntax should be avoided because it generates
+a very broad match. To mitigate this effect, the rest parser is always
+only invoked if no other parser or string literal matches.
 
 ::
 
     %field_name:rest%
+
+See also `Rainer's blog posting on the "rest" parser <http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html>`_. 
 
 quoted-string
 #############   
