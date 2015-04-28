@@ -2248,9 +2248,19 @@ PARSER(JSON)
 	const size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 
+	if(str[i] != '{' && str[i] != ']') {
+		/* this can't be json, see RFC4627, Sect. 2
+		 * see this bug in json-c:
+		 * https://github.com/json-c/json-c/issues/181
+		 * In any case, it's better to do this quick check,
+		 * even if json-c did not have the bug because this
+		 * check here is much faster than calling the parser.
+		 */
+		goto done;
+	}
+
 	if((tokener = json_tokener_new()) == NULL)
 		goto done;
-
 
 	struct json_object *const json
 		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
@@ -2259,10 +2269,15 @@ PARSER(JSON)
 		goto done;
 
 	/* success, persist */
-	*value = json;
 	*parsed =  (i + tokener->char_offset) - *offs;
-
 	r = 0; /* success */
+
+	if(value == NULL) {
+		json_object_put(json);
+	} else {
+		*value = json;
+	}
+
 done:
 	if(tokener != NULL)
 		json_tokener_free(tokener);
