@@ -72,8 +72,8 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *            parsers, this sets variable "ed", which just is
  *            string data.
  * @param[out] parsed bytes
- * @param[out] value json object containing parsed data (can be unused,
- *             but if used *value MUST be NULL on entry)
+ * @param[out] value ptr to json object containing parsed data
+ *             (can be unused, but if used *value MUST be NULL on entry)
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
