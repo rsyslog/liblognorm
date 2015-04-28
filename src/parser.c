@@ -2283,3 +2283,61 @@ done:
 		json_tokener_free(tokener);
 	return r;
 }
+
+/**
+ * Parse CEE syslog.
+ * This essentially is a JSON parser, with additional restrictions:
+ * The message must start with "@cee:" and json must immediately follow (whitespace permitted).
+ * after the JSON, there must be no other non-whitespace characters.
+ * In other words: the message must consist of a single JSON object,
+ * only.
+ * added 2015-04-28 by rgerhards, v1.1.2
+ */
+PARSER(CEESyslog)
+	size_t i = *offs;
+	struct json_tokener *tokener = NULL;
+
+	if(strLen < i + 7  || /* "@cee:{}" is minimum text */
+	   str[i]   != '@' ||
+	   str[i+1] != 'c' ||
+	   str[i+2] != 'e' ||
+	   str[i+3] != 'e' ||
+	   str[i+4] != ':')
+	   	goto done;
+	
+	/* skip whitespace */
+	for(i += 5 ; i < strLen && isspace(str[i]) ; ++i)
+		/* just skip */;
+
+	if(i == strLen || str[i] != '{')
+		goto done;
+		/* note: we do not permit arrays in CEE mode */
+
+	if((tokener = json_tokener_new()) == NULL)
+		goto done;
+
+	struct json_object *json
+		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+
+	if(json == NULL)
+		goto done;
+
+	if(i + tokener->char_offset != strLen)
+		goto done;
+
+	/* success, persist */
+	*parsed =  strLen;
+	r = 0; /* success */
+
+	if(value != NULL) {
+		*value = json;
+		json = NULL; /* do NOT free below! */
+	}
+
+done:
+	if(tokener != NULL)
+		json_tokener_free(tokener);
+	if(json != NULL)
+		json_object_put(json);
+	return r;
+}
