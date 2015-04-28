@@ -15,6 +15,8 @@ TESTS_SHELLSCRIPTS = \
 	field_name_value.sh \
 	field_kernel_timestamp.sh \
 	field_whitespace.sh \
+	field_rest.sh \
+	field_json.sh \
 	field_duration.sh \
 	field_cisco-interface-spec.sh \
 	field_tokenized.sh \

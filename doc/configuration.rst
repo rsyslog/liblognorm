@@ -221,16 +221,19 @@ which can be escaped.
 rest
 ####
 
-Zero or more characters till end of line. Should be always at end of the 
-rule.
+Zero or more characters till end of line. Must always be at end of the 
+rule, even though this condition is currently **not** checked. In any case,
+any definitions after *rest* are ignored.
 
-**Note that the *rest* syntax should be avoided because it generates
-a very broad match. If used, it is impossible to match on a specific 
-character that is on the same position where *rest* is used.**
+Note that the *rest* syntax should be avoided because it generates
+a very broad match. To mitigate this effect, the rest parser is always
+only invoked if no other parser or string literal matches.
 
 ::
 
     %field_name:rest%
+
+See also `Rainer's blog posting on the "rest" parser <http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html>`_. 
 
 quoted-string
 #############   
@@ -327,6 +330,52 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 ::
 
     %ip-src:ipv4%
+
+cisco-interface-spec
+####################
+
+A Cisco interface specifier, as for example seen in PIX or ASA.
+The format contains a number of optional parts and is described
+as follows (in ABNF-like manner where square brackets indicate
+optional parts):
+
+::
+
+  [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
+
+Samples for such a spec are:
+
+ * outside:192.168.52.102/50349
+ * inside:192.168.1.15/56543 (192.168.1.112/54543)
+ * outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
+ * outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ * inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
+ * 192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
+
+Note that the current verision of liblognorm does not permit sole
+IP addresses to be detected as a Cisco interface spec. However, we
+are reviewing more Cisco message and need to decide if this is
+to be supported. The problem here is that this would create a much
+broader parser which would potentially match many things that are
+**not** Cisco interface specs.
+
+As this object extracts multiple subelements, it create a JSON
+structure. 
+
+Let's for example look at this definiton::
+
+    %ifaddr:cisco-interface-spec%
+
+and assume the following message is to be parsed::
+
+ outside:192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\some.user)
+
+Then the resulting JSON will be as follows::
+
+{ "ifaddr": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }
+
+Subcomponents that are not given in the to-be-normalized string are
+also not present in the resulting JSON.
 
 tokenized
 #########
@@ -707,6 +756,39 @@ after a general algorithm overhaul.
 
 In order to match, this syntax must start on a non-whitespace char
 other than colon.
+
+json
+####
+This parses native JSON from the message. All data up to the first non-JSON
+is parsed into the field. There may be any other field after the JSON,
+including another JSON section.
+
+Note that any white space after the actual JSON
+is considered **to be part of the JSON**. So you cannot filter on whitespace
+after the JSON.
+
+::
+
+    %data:json%
+
+Example
+.......
+
+Rule::
+
+    rule=:%field1:json%interim text %field2:json%'
+
+Data::
+
+   {"f1": "1"} interim text {"f2": 2}
+
+Result::
+
+   { "field2": { "f2": 2 }, "field1": { "f1": "1" } }
+
+Note also that the space before "interim" must **not** be given in the
+rule, as it is consumed by the JSON parser. However, the space after
+"text" is required.
 
 Prefixes
 --------

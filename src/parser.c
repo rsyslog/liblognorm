@@ -72,8 +72,8 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *            parsers, this sets variable "ed", which just is
  *            string data.
  * @param[out] parsed bytes
- * @param[out] ptr to json object containing parsed data (can be unused)
- *             if NULL on input, object is NOT persisted
+ * @param[out] value ptr to json object containing parsed data
+ *             (can be unused, but if used *value MUST be NULL on entry)
  *
  * They will try to parse out "their" object from the string. If they
  * succeed, they:
@@ -1899,7 +1899,6 @@ done:
  *   [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
- * TODO: memory leak on partial match (failure)
  */
 PARSER(CiscoInterfaceSpec)
 	const char *c;
@@ -2026,6 +2025,10 @@ success: /* success, persist */
 	*parsed = i - *offs;
 	r = 0; /* success */
 done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(*value);
+		*value = NULL; /* to be on the save side */
+	}
 	return r;
 }
 
@@ -2324,5 +2327,42 @@ PARSER(NameValue)
 	/* TODO: fix mem leak if alloc json fails */
 	r = 0; /* success */
 done:
+	return r;
+}
+
+/**
+ * Parse JSON. This parser tries to find JSON data inside a message.
+ * If it finds valid JSON, it will extract it. Extra data after the
+ * JSON is permitted.
+ * Note: the json-c JSON parser treats whitespace after the actual
+ * json to be part of the json. So in essence, any whitespace is
+ * processed by this parser. We use the same semantics to keep things
+ * neatly in sync. If json-c changes for some reason or we switch to
+ * an alternate json lib, we probably need to be sure to keep that
+ * behaviour, and probably emulate it.
+ * added 2015-04-28 by rgerhards, v1.1.2
+ */
+PARSER(JSON)
+	const size_t i = *offs;
+	struct json_tokener *tokener = NULL;
+
+	if((tokener = json_tokener_new()) == NULL)
+		goto done;
+
+
+	struct json_object *const json
+		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+
+	if(json == NULL)
+		goto done;
+
+	/* success, persist */
+	*value = json;
+	*parsed =  (i + tokener->char_offset) - *offs;
+
+	r = 0; /* success */
+done:
+	if(tokener != NULL)
+		json_tokener_free(tokener);
 	return r;
 }

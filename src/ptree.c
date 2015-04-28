@@ -653,6 +653,7 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 	size_t i;
 	int left;
 	ln_fieldList_t *node;
+	ln_fieldList_t *restMotifNode = NULL;
 	char *cstr;
 	const char *c;
 	unsigned char *cpfix;
@@ -718,6 +719,13 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 				if(left < r)
 					r = left;
 			}
+		} else if(node->parser == ln_parseRest) {
+			/* This is a quick and dirty adjustment to handle "rest" more intelligently.
+			 * It's just a tactical fix: in the longer term, we'll handle the whole
+			 * situation differently. However, it makes sense to fix this now, as this
+			 * solves some real-world problems immediately. -- rgerhards, 2015-04-15
+			 */
+			restMotifNode = node;
 		} else {
 			value = NULL;
 			localR = node->parser(str, strLen, &i, node, &parsed, &value);
@@ -783,6 +791,50 @@ ln_dbgprintf(tree->ctx, "%zu no field, offset already beyond end", offs);
 			r = left;
 	}
 
+	if(r == 0 && (*endNode)->flags.isTerminal)
+		goto done;
+
+	/* and finally give "rest" a try if it was present. Note that we MUST do this after
+	 * literal evaluation, otherwise "rest" can never be overriden by other rules.
+	 */
+	if(restMotifNode != NULL) {
+		ln_dbgprintf(tree->ctx, "rule has rest motif, forcing match via it\n");
+		value = NULL;
+		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
+		left = ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
+		if(left == 0 && (*endNode)->flags.isTerminal) {
+			ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
+			if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
+				/* Store the value here; create json if not already created */
+				if (value == NULL) { 
+					CHKN(cstr = strndup(str + i, parsed));
+					value = json_object_new_string(cstr);
+					free(cstr);
+				}
+				if (value == NULL) {
+					ln_dbgprintf(tree->ctx, "unable to create json");
+					goto done;
+				}
+				namestr = ln_es_str2cstr(&restMotifNode->name);
+				json_object_object_add(json, namestr, value);
+			} else {
+				if (value != NULL) {
+					/* Free the unneeded value */
+					json_object_put(value);
+				}
+			}
+			r = 0;
+			goto done;
+		}
+		ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d",
+				offs, left);
+		if (value != NULL) {
+			/* Free the value if it was created */
+			json_object_put(value);
+		}
+		if(left < r)
+			r = left;
+	}
 done:
 	ln_dbgprintf(tree->ctx, "%zu returns %d", offs, r);
 	return r;
