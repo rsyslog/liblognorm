@@ -233,6 +233,8 @@ only invoked if no other parser or string literal matches.
 
     %field_name:rest%
 
+See also `Rainer's blog posting on the "rest" parser <http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html>`_. 
+
 quoted-string
 #############   
 
