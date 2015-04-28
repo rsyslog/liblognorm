@@ -757,6 +757,39 @@ after a general algorithm overhaul.
 In order to match, this syntax must start on a non-whitespace char
 other than colon.
 
+json
+####
+This parses native JSON from the message. All data up to the first non-JSON
+is parsed into the field. There may be any other field after the JSON,
+including another JSON section.
+
+Note that any white space after the actual JSON
+is considered **to be part of the JSON**. So you cannot filter on whitespace
+after the JSON.
+
+::
+
+    %data:json%
+
+Example
+.......
+
+Rule::
+
+    rule=:%field1:json%interim text %field2:json%'
+
+Data::
+
+   {"f1": "1"} interim text {"f2": 2}
+
+Result::
+
+   { "field2": { "f2": 2 }, "field1": { "f1": "1" } }
+
+Note also that the space before "interim" must **not** be given in the
+rule, as it is consumed by the JSON parser. However, the space after
+"text" is required.
+
 Prefixes
 --------
 
