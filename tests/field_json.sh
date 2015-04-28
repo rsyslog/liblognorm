@@ -46,3 +46,12 @@ assert_output_json_eq '{ "field2": { "f2": 2 }, "field1": { "f1": "1" } }'
 # re-check previsous def still works
 execute '{"f1": "1", "f2": 2}'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
+
+# now check some strange cases
+reset_rules
+add_rule 'rule=:%field:json%'
+
+# this check is because of bug in json-c:
+# https://github.com/json-c/json-c/issues/181
+execute '15:00'
+assert_output_json_eq '{ "originalmsg": "15:00", "unparsed-data": "15:00" }'
