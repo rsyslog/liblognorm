@@ -1,6 +1,7 @@
 ----------------------------------------------------------------------
 Version 1.1.2, 2015-03-??
 - new parser "cisco-interface-spec"
+- new parser "json" to process json parts of the message
 - some parsers did incorrectly report success when an error occurred
   this was caused by inconsistencies between various macros. We have
   changed the parser-generation macros to match the semantics of the

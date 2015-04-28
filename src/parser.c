@@ -2231,3 +2231,40 @@ PARSER(IPv4)
 done:
 	return r;
 }
+
+/**
+ * Parse JSON. This parser tries to find JSON data inside a message.
+ * If it finds valid JSON, it will extract it. Extra data after the
+ * JSON is permitted.
+ * Note: the json-c JSON parser treats whitespace after the actual
+ * json to be part of the json. So in essence, any whitespace is
+ * processed by this parser. We use the same semantics to keep things
+ * neatly in sync. If json-c changes for some reason or we switch to
+ * an alternate json lib, we probably need to be sure to keep that
+ * behaviour, and probably emulate it.
+ * added 2015-04-28 by rgerhards, v1.1.2
+ */
+PARSER(JSON)
+	const size_t i = *offs;
+	struct json_tokener *tokener = NULL;
+
+	if((tokener = json_tokener_new()) == NULL)
+		goto done;
+
+
+	struct json_object *const json
+		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+
+	if(json == NULL)
+		goto done;
+
+	/* success, persist */
+	*value = json;
+	*parsed =  (i + tokener->char_offset) - *offs;
+
+	r = 0; /* success */
+done:
+	if(tokener != NULL)
+		json_tokener_free(tokener);
+	return r;
+}
