@@ -1166,6 +1166,8 @@ preprocessLine(const char *const __restrict__ buf,
 			//tocopy = "%name-value-list%";
 		} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%cisco-interface-spec%";
+		} else if(ln_parseJSON(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%json%";
 		} else {
 			tocopy = NULL;
 			nproc = 1;
