@@ -2259,10 +2259,15 @@ PARSER(JSON)
 		goto done;
 
 	/* success, persist */
-	*value = json;
 	*parsed =  (i + tokener->char_offset) - *offs;
-
 	r = 0; /* success */
+
+	if(value == NULL) {
+		json_object_put(json);
+	} else {
+		*value = json;
+	}
+
 done:
 	if(tokener != NULL)
 		json_tokener_free(tokener);
