@@ -790,6 +790,27 @@ Note also that the space before "interim" must **not** be given in the
 rule, as it is consumed by the JSON parser. However, the space after
 "text" is required.
 
+cee-syslog
+##########
+This parses cee syslog from the message. This format has been defined
+by Mitre CEE as well as Project Lumberjack.
+
+This format essentially is JSON with additional restrictions:
+
+ * The message must start with "@cee:"
+ * an JSON **object** must immediately follow (whitespace before it permitted,
+   but a JSON array is **not** permitted)
+ * after the JSON, there must be no other non-whitespace characters.
+
+In other words: the message must consist of a single JSON object only, 
+prefixed by the "@cee:" cookie.
+
+Note that the cee cookie is case sensitive, so "@CEE:" is **NOT** valid.
+
+::
+
+    %data:cee-syslog%
+
 Prefixes
 --------
 
