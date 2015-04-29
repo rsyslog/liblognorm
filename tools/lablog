@@ -51,6 +51,30 @@ Logs often contain URLs (and file pathes), just like this:
 We need to find a proper way to identify them. This motif is probably very
 broad and hard to specify, especially when thinking about multiple platforms.
 
+[T00003] - name=value motif
+name=value is very common and justifed to be treated as motif.
+
+[T00004] - quote characters in n=v pairs
+We need to find out which quote characters happen to be present in especially
+values of a wide variety of Linux logs (at least the typical ones). This can 
+be used to better describe the n=v motif.
+
+Recommended further testing
+---------------------------
+This section lists some tests that would be good to conduct as part of the
+project. However, it is NOT thought that these experiments are vital for
+the results.
+
+- test slsa on iptables logs with the regular n=v parser
+We want to see here if there is a way to still properly detect the structure.
+Maybe we need to shuffle the "nondetected" word elements.
+
+- test slsa without cisco-interface-spec parser
+Same question as above, can the generic heuristic sufficiently well detect
+structure?
+
+The core goal of these tests is to find ways to improve the slsa algorithm.
+
 Indicators in first column of actual log
 ----------------------------------------
 - lesson learned, general info
@@ -163,9 +187,53 @@ Actual Log 09:55:01
   name=value fields, but only if they are all in the same sequence. It
   looks like it is a much better idea, for real N=V type of log messages
   to generate an parser that works on the complete line (things like
-  iptables). It may still make sense to have individual N=V parsers if these
+  iptables) [T00003]. It may still make sense to have individual N=V parsers if these
   constructs are seen within otherwise non-structured messages.
 
 2015-04-17
 - as expected, the Linux kernel timestamp motif parser proved to be
   useful.
+
+2015-04-29
+- some interim entries are missing, as I was focussed on some other work,
+  including support for some structured formats.
+- I added cee-syslog and pure JSON motifs for structured formats. As
+  expected, this permits slsa to process log files that contain both
+  structured and unstructured formats (a common use case) much more
+  rapidly and also improved the correct detection.
+  Note that pure JSON is seen for example in GELF, wheres cee-syslog is
+  seen in ossec. Both are frequently used.
+- I also worked on a specifc motif parser for interface specifiers found
+  in Cisco logs. This, too, improved detection, but at a later stage we
+  may want to try if we can gain to similar results without a specific
+  parser. For practical cases, however, a specific parser is much more
+  user-friendly.
+- I have also continued to work on a specific Name=Value (N=V) parser [T00003].
+  A first test some days ago showed that iptables needs a special parser
+  because it also has name "flags", that is a field without a value and
+  WITHOUT an equal sign (e.g. "DF"). This is not something we want in the
+  regular n=v motif as it would match much to broadly. For iptables, we can
+  do other restrictions (e.g. names need to consist of uppercase letters A..Z).
+  So an iptable motif would not match too broad. Unfortunately, iptables is
+  an example of where a specialised parser is needed for a single application.
+  At least from the slsa point of view, this is bad, because it shows that
+  the tool has limited potential. From a practical perspective, that iptables
+  motif is definitely frequent enough to justify the (small) effort to
+  implement a specific parser.
+- on the n=v parser: it turns out to be somewhat problematic to find good
+  sets of characters permitted in name and value. Value is not so much a 
+  problem for quoted strings, but unquoted strings are very common. For
+  example
+  "session opened for user root by (uid=0)"
+  will lead to 
+  "session opened for user root by (%name-value-list%"
+  This shows
+  a) the we must not insist on whitespace before the name, as quoted forms
+     (like the brace here) are common
+  b) but the terminating brace is treated as part of the value if we only
+     use whitespace delimition
+  Especially b) is a bit hard of a problem, because we may also see things
+  like "name=(value)", so it seems we cannot forbid braces in values.
+  HOWEVER, we may actually forbid them if inside the string and not being
+  escaped - so think of them as just different types of quoting, which they
+  are most probably like. This should be verified by experiments. --> [T00004]
