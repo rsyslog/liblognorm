@@ -2296,6 +2296,7 @@ done:
 PARSER(CEESyslog)
 	size_t i = *offs;
 	struct json_tokener *tokener = NULL;
+	struct json_object *json = NULL;
 
 	if(strLen < i + 7  || /* "@cee:{}" is minimum text */
 	   str[i]   != '@' ||
@@ -2316,8 +2317,7 @@ PARSER(CEESyslog)
 	if((tokener = json_tokener_new()) == NULL)
 		goto done;
 
-	struct json_object *json
-		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+	json = json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
 
 	if(json == NULL)
 		goto done;
