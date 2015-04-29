@@ -2309,6 +2309,10 @@ PARSER(NameValue)
 			++i;
 	}
 
+	/* success, persist */
+	*parsed = i - *offs;
+	r = 0; /* success */
+
 	/* stage two */
 	if(value == NULL)
 		goto done;
@@ -2321,11 +2325,8 @@ PARSER(NameValue)
 			++i;
 	}
 
-	/* success, persist */
-	*parsed = i - *offs;
-
 	/* TODO: fix mem leak if alloc json fails */
-	r = 0; /* success */
+
 done:
 	return r;
 }
@@ -2383,58 +2384,6 @@ done:
 }
 
 
-/* helper to NameValue parser, parses out a a single name=value pair 
- *
- * name must be alphanumeric characters, value must be non-whitespace
- * characters, if quoted than with symmetric quotes. Supported formats
- * - name=value
- * - name="value"
- * - name='value'
- * Note "name=" is valid and means a field with empty value.
- * TODO: so far, quote characters are not permitted WITHIN quoted values.
- */
-static int
-parseNameValue(const char *const __restrict__ str,
-	const size_t strLen, 
-	size_t *const __restrict__ offs,
-	struct json_object *const __restrict__ valroot)
-{
-	int r = LN_WRONGPARSER;
-	size_t i = *offs;
-
-	const size_t iName = i;
-	while(i < strLen && isalnum(str[i]))
-		++i;
-	if(i == iName || str[i] != '=')
-		goto done; /* no name at all! */
-
-	const size_t lenName = i - iName;
-	++i; /* skip '=' */
-
-	const size_t iVal = i;
-	while(i < strLen && !isspace(str[i]))
-		++i;
-	const size_t lenVal = i - iVal;
-
-	/* parsing OK */
-	*offs = i;
-	r = 0;
-
-	if(valroot == NULL)
-		goto done;
-
-	char *name;
-	CHKN(name = malloc(lenName+1));
-	memcpy(name, str+iName, lenName);
-	name[lenName] = '\0';
-	json_object *json;
-	CHKN(json = json_object_new_string_len(str+iVal, lenVal));
-	json_object_object_add(valroot, name, json);
-	free(name);
-done:
-	return r;
-}
-
 /**
  * Parse CEE syslog.
  * This essentially is a JSON parser, with additional restrictions:
@@ -2447,6 +2396,7 @@ done:
 PARSER(CEESyslog)
 	size_t i = *offs;
 	struct json_tokener *tokener = NULL;
+	struct json_object *json = NULL;
 
 	if(strLen < i + 7  || /* "@cee:{}" is minimum text */
 	   str[i]   != '@' ||
@@ -2467,8 +2417,7 @@ PARSER(CEESyslog)
 	if((tokener = json_tokener_new()) == NULL)
 		goto done;
 
-	struct json_object *json
-		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+	json = json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
 
 	if(json == NULL)
 		goto done;
@@ -2490,49 +2439,5 @@ done:
 		json_tokener_free(tokener);
 	if(json != NULL)
 		json_object_put(json);
-	return r;
-}
-
-/**
- * Parser for name/value pairs.
- * On entry must point to alnum char. All following chars must be
- * name/value pairs delimited by whitespace up until the end of string.
- * For performance reasons, this works in two stages. In the first
- * stage, we only detect if the motif is correct. The second stage is
- * only called when we know it is. In it, we go once again over the
- * message again and actually extract the data. This is done because
- * data extraction is relatively expensive and in most cases we will
- * have much more frequent mismatches than matches.
- * added 2015-04-25 rgerhards
- */
-PARSER(NameValue)
-	size_t i = *offs;
-
-	/* stage one */
-	while(i < strLen) {
-		CHKR(parseNameValue(str, strLen, &i, NULL));
-		while(i < strLen && isspace(str[i]))
-			++i;
-	}
-
-	/* success, persist */
-	*parsed = i - *offs;
-	r = 0; /* success */
-
-	/* stage two */
-	if(value == NULL)
-		goto done;
-
-	i = *offs;
-	CHKN(*value = json_object_new_object());
-	while(i < strLen) {
-		CHKR(parseNameValue(str, strLen, &i, *value));
-		while(i < strLen && isspace(str[i]))
-			++i;
-	}
-
-	/* TODO: fix mem leak if alloc json fails */
-
-done:
 	return r;
 }
