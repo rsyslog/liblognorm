@@ -2409,6 +2409,20 @@ done:
 }
 
 
+/* check if a char is valid inside a name of a NameValue list
+ * The set of valid characters may be extended if there is good
+ * need to do so. We have selected the current set carefully, but
+ * may have overlooked some cases.
+ */
+static inline int
+isValidNameChar(const char c)
+{
+	return (isalnum(c)
+		|| c == '.'
+		|| c == '_'
+		|| c == '-'
+		) ? 1 : 0;
+}
 /* helper to NameValue parser, parses out a a single name=value pair 
  *
  * name must be alphanumeric characters, value must be non-whitespace
@@ -2429,7 +2443,7 @@ parseNameValue(const char *const __restrict__ str,
 	size_t i = *offs;
 
 	const size_t iName = i;
-	while(i < strLen && isalnum(str[i]))
+	while(i < strLen && isValidNameChar(str[i]))
 		++i;
 	if(i == iName || str[i] != '=')
 		goto done; /* no name at all! */
