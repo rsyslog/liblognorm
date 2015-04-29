@@ -2281,7 +2281,6 @@ PARSER(JSON)
 done:
 	if(tokener != NULL)
 		json_tokener_free(tokener);
-done:
 	return r;
 }
 
@@ -2393,7 +2392,6 @@ done:
 		json_tokener_free(tokener);
 	if(json != NULL)
 		json_object_put(json);
-done:
 	return r;
 }
 
