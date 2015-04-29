@@ -15,6 +15,9 @@ assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "
 execute 'name1= name2=value2 name3=value3 '
 assert_output_json_eq '{ "f": { "name1": "", "name2": "value2", "name3": "value3" } }'
 
+execute 'origin=core.action processed=67 failed=0 suspended=0 suspended.duration=0 resumed=0 '
+assert_output_json_eq '{ "f": { "origin": "core.action", "processed": "67", "failed": "0", "suspended": "0", "suspended.duration": "0", "resumed": "0" } }'
+
 # check for required non-matches
 execute 'name'
 assert_output_json_eq ' {"originalmsg": "name", "unparsed-data": "name" }'
