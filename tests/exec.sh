@@ -20,7 +20,7 @@ function execute() {
 	echo "====================="
 	set -x
     fi
-    echo $1 | $cmd $ln_opts -r tmp.rulebase -e json > test.out 
+    echo "$1" | $cmd $ln_opts -r tmp.rulebase -e json > test.out 
     echo "Out:"
     cat test.out
     if [ "x$debug" == "xon" ]; then
