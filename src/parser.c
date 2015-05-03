@@ -2328,8 +2328,9 @@ PARSER(v2IPTables)
 			++i;
 	}
 
-	if(nfields == 1)
-		goto done;
+	if(nfields < 2) {
+		FAIL(LN_WRONGPARSER);
+	}
 
 	/* success, persist */
 	*parsed = i - *offs;
