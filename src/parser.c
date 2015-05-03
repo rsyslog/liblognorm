@@ -2340,7 +2340,7 @@ PARSER(v2IPTables)
 	}
 
 done:
-	if(r != 0 && *value != NULL) {
+	if(r != 0 && value != NULL && *value != NULL) {
 		json_object_put(*value);
 		*value = NULL;
 	}

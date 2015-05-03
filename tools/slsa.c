@@ -1160,6 +1160,8 @@ preprocessLine(const char *const __restrict__ buf,
 			tocopy = "%date-rfc5424%";
 		} else if(ln_parseISODate(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%date-iso%";
+		} else if(ln_parsev2IPTables(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
+			tocopy = "%v2-iptables%";
 		} else if(ln_parseNameValue(buf, buflen, &i, NULL, &nproc, NULL) == 0) {
 			tocopy = "%name-value-list%";
 		} else if(ln_parseCiscoInterfaceSpec(buf, buflen, &i, NULL, &nproc, NULL) == 0) {

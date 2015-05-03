@@ -237,3 +237,13 @@ Actual Log 09:55:01
   HOWEVER, we may actually forbid them if inside the string and not being
   escaped - so think of them as just different types of quoting, which they
   are most probably like. This should be verified by experiments. --> [T00004]
+2015-05-03
+- did some experiments with the v2-iptables parser I had newly written. It turned
+  out that the parser is matching too broad (e.g a single upper case latter will
+  qualify as an iptables entry, because it looks like a single flag value). While
+  this is fine with a manually crafted rulebase, it doesn't work with tools like
+  slsa, which try to detect what the motif is. Also, it may cause misdetection
+  even in the manually crafted case. So this is a very good proof that motif
+  parsers (and thus the motifs) need to be very well defined and as specific as
+  possible. We will sort this out with the idea that an iptables entry always has
+  more than a single word.
