@@ -247,3 +247,5 @@ Actual Log 09:55:01
   parsers (and thus the motifs) need to be very well defined and as specific as
   possible. We will sort this out with the idea that an iptables entry always has
   more than a single word.
++ fixing the v2-iptables parser as proposed above did solve the issue with
+  misdetection
