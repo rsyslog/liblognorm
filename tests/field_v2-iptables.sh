@@ -11,13 +11,13 @@ assert_output_json_eq '{ "field": { "IN": "", "OUT": "eth0", "SRC": "176.9.56.14
 reset_rules
 add_rule 'rule=:iptables: %field:v2-iptables%'
 
-execute 'iptables: IN=value'
-assert_output_json_eq '{ "field": { "IN": "value"} }'
+execute 'iptables: IN=value SECOND=test'
+assert_output_json_eq '{ "field": { "IN": "value", "SECOND": "test" }} }'
 
-execute 'iptables: IN='
+execute 'iptables: IN= SECOND=test'
 assert_output_json_eq '{ "field": { "IN": ""} }'
 
-execute 'iptables: IN'
+execute 'iptables: IN SECOND=test'
 assert_output_json_eq '{ "field": { "IN": null} }'
 
 execute 'iptables: IN=invalue OUT=outvalue'
@@ -43,6 +43,9 @@ assert_output_json_eq '{ "originalmsg": "iptables: in=", "unparsed-data": "in=" 
 
 execute 'iptables: in'
 assert_output_json_eq '{ "originalmsg": "iptables: in", "unparsed-data": "in" }'
+
+execute 'iptables: IN' # single field is NOT permitted!
+assert_output_json_eq '{ "originalmsg": "iptables: IN", "unparsed-data": "IN" }'
 
 # multiple spaces between n=v pairs are not permitted
 execute 'iptables: IN=invalue  OUT=outvalue'
