@@ -2310,18 +2310,26 @@ done:
  * message again and actually extract the data. This is done because
  * data extraction is relatively expensive and in most cases we will
  * have much more frequent mismatches than matches.
+ * Note that this motif must have at least one field, otherwise it
+ * could detect things that are not iptables to be it. Further limits
+ * may be imposed in the future as we see additional need.
  * added 2015-04-30 rgerhards
  */
 PARSER(v2IPTables)
 	size_t i = *offs;
+	int nfields = 0;
 
 	/* stage one */
 	while(i < strLen) {
 		CHKR(parseIPTablesNameValue(str, strLen, &i, NULL));
+		++nfields;
 		/* exactly one SP is permitted between fields */
 		if(i < strLen && str[i] == ' ')
 			++i;
 	}
+
+	if(nfields == 1)
+		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
