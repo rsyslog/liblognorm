@@ -219,6 +219,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseJSON;
 	} else if(!es_strconstcmp(*str, "cee-syslog")) {
 		node->parser = ln_parseCEESyslog;
+	} else if(!es_strconstcmp(*str, "mac48")) {
+		node->parser = ln_parseMAC48;
 	} else if(!es_strconstcmp(*str, "name-value-list")) {
 		node->parser = ln_parseNameValue;
 	} else if(!es_strconstcmp(*str, "v2-iptables")) {

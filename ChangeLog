@@ -1,9 +1,9 @@
 ----------------------------------------------------------------------
 Version 1.1.2, 2015-03-??
-- new parser "name-value-list"
 - new parser "cisco-interface-spec"
 - new parser "json" to process json parts of the message
-- new parser "name-value-list"
+- new parser "mac48" to process mac layer addresses
+- new parser "name-value-list" (currently inofficial, experimental)
 - some parsers did incorrectly report success when an error occurred
   this was caused by inconsistencies between various macros. We have
   changed the parser-generation macros to match the semantics of the

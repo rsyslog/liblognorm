@@ -331,6 +331,20 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 
     %ip-src:ipv4%
 
+mac48
+#####
+
+The standard (IEEE 802) format for printing MAC-48 addresses in
+human-friendly form is six groups of two hexadecimal digits,
+separated by hyphens (-) or colons (:), in transmission order
+(e.g. 01-23-45-67-89-ab or 01:23:45:67:89:ab ).
+This form is also commonly used for EUI-64.
+from: http://en.wikipedia.org/wiki/MAC_address
+
+::
+
+    %mac:mac48%
+
 cisco-interface-spec
 ####################
 

@@ -169,6 +169,11 @@ int ln_parsev2IPTables(const char *str, size_t strlen, size_t *offs, const ln_fi
 int ln_parseCiscoInterfaceSpec(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
+ * Parser 48 bit MAC layer addresses.
+ */
+int ln_parseMAC48(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/** 
  * Parser for name/value pairs.
  */
 int ln_parseNameValue(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
