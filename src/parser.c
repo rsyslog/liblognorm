@@ -2341,3 +2341,63 @@ done:
 		json_object_put(json);
 	return r;
 }
+
+/**
+ * Parse a MAC layer address.
+ * The standard (IEEE 802) format for printing MAC-48 addresses in
+ * human-friendly form is six groups of two hexadecimal digits,
+ * separated by hyphens (-) or colons (:), in transmission order
+ * (e.g. 01-23-45-67-89-ab or 01:23:45:67:89:ab ).
+ * This form is also commonly used for EUI-64.
+ * from: http://en.wikipedia.org/wiki/MAC_address
+ *
+ * This parser must start on a hex digit.
+ * added 2015-05-04 by rgerhards, v1.1.2
+ */
+PARSER(MAC48)
+	size_t i = *offs;
+	char delim;
+
+	if(strLen < i + 17 || /* this motif has exactly 11 characters */
+	   !isxdigit(str[i]) ||
+	   !isxdigit(str[i+1])
+	   )
+		FAIL(LN_WRONGPARSER);
+
+	if(str[i+2] == ':')
+		delim = ':';
+	else if(str[i+2] == '-')
+		delim = '-';
+	else
+		FAIL(LN_WRONGPARSER);
+
+	/* first byte ok */
+	if(!isxdigit(str[i+3])  ||
+	   !isxdigit(str[i+4])  ||
+	   str[i+5] != delim    || /* 2nd byte ok */
+	   !isxdigit(str[i+6])  ||
+	   !isxdigit(str[i+7])  ||
+	   str[i+8] != delim    || /* 3rd byte ok */
+	   !isxdigit(str[i+9])  ||
+	   !isxdigit(str[i+10]) ||
+	   str[i+11] != delim   || /* 4th byte ok */
+	   !isxdigit(str[i+12]) ||
+	   !isxdigit(str[i+13]) ||
+	   str[i+14] != delim   || /* 5th byte ok */
+	   !isxdigit(str[i+15]) ||
+	   !isxdigit(str[i+16])    /* 6th byte ok */
+	   )
+		FAIL(LN_WRONGPARSER);
+
+	/* success, persist */
+	*parsed = 17;
+	r = 0; /* success */
+
+	if(value != NULL) {
+		CHKN(*value = json_object_new_string_len(str+i, 17));
+	}
+
+done:
+fflush(stderr);
+	return r;
+}
