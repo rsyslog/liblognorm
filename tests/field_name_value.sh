@@ -23,4 +23,4 @@ execute 'name'
 assert_output_json_eq ' {"originalmsg": "name", "unparsed-data": "name" }'
 
 execute 'noname1 name2=value2 name3=value3 '
-assert_output_json_eq '{ "originalmsg": "noname1 name2=value2 name3=value3", "unparsed-data": "noname1 name2=value2 name3=value3" }'
+assert_output_json_eq '{ "originalmsg": "noname1 name2=value2 name3=value3 ", "unparsed-data": "noname1 name2=value2 name3=value3 " }'
