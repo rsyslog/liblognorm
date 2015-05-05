@@ -219,6 +219,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseCEESyslog;
 	} else if(!es_strconstcmp(*str, "mac48")) {
 		node->parser = ln_parseMAC48;
+	} else if(!es_strconstcmp(*str, "v2-iptables")) {
+		node->parser = ln_parsev2IPTables;
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;
