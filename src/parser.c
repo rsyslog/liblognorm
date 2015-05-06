@@ -2638,13 +2638,14 @@ done:
 
 
 /* This parses the extension value and updates the index
- * to point to the end of the it.
+ * to point to the end of it.
  */
 static int
 cefParseExtensionValue(const char *const __restrict__ str,
 	const size_t strLen,
 	size_t *__restrict__ iEndVal)
 {
+	int r = 0;
 	size_t i = *iEndVal;
 	size_t iLastWordBegin;
 	/* first find next unquoted equal sign and record begin of
@@ -2654,23 +2655,28 @@ cefParseExtensionValue(const char *const __restrict__ str,
 	int hadSP = 0;
 	int inEscape = 0;
 	for(iLastWordBegin = 0 ; i < strLen ; ++i) {
-		if(str[i] == '=') {
-			if(inEscape)
-				inEscape = 0;
-			else
-				break;
-		} else if(str[i] == '\\') {
-			inEscape = inEscape ? 0 : 1;
-		} else if(str[i] == ' ') {
-			hadSP = 1;
+		if(inEscape) {
+			if(str[i] != '=' &&
+			   str[i] != '\\' &&
+			   str[i] != 'r' &&
+			   str[i] != 'n')
+			FAIL(LN_WRONGPARSER);
+			inEscape = 0;
 		} else {
-			if(hadSP) {
-				iLastWordBegin = i;
-				hadSP = 0;
+			if(str[i] == '=') {
+				break;
+			} else if(str[i] == '\\') {
+				inEscape = 1;
+			} else if(str[i] == ' ') {
+				hadSP = 1;
+			} else {
+				if(hadSP) {
+					iLastWordBegin = i;
+					hadSP = 0;
+				}
 			}
 		}
 	}
-	// TODO: handle escapes more intelligently
 
 	/* Note: iLastWordBegin can never be at offset zero, because
 	 * the CEF header starts there!
@@ -2680,8 +2686,8 @@ cefParseExtensionValue(const char *const __restrict__ str,
 	} else {
 		*iEndVal = i;
 	}
-
-	return 0; // TODO: correct!
+done:
+	return r;
 }
 
 /* must be positioned on first char of name, returns index
@@ -2750,9 +2756,22 @@ cefParseExtensions(const char *const __restrict__ str,
 			/* copy value but escape it */
 			size_t iDst = 0;
 			for(size_t iSrc = 0 ; iSrc < lenValue ; ++iSrc) {
-				if(str[iValue+iSrc] == '\\') 
+				if(str[iValue+iSrc] == '\\') {
 					++iSrc; /* we know the next char must exist! */
-				value[iDst++] = str[iValue+iSrc];
+					switch(str[iValue+iSrc]) {
+					case '=':	value[iDst] = '=';
+							break;
+					case 'n':	value[iDst] = '\n';
+							break;
+					case 'r':	value[iDst] = '\r';
+							break;
+					case '\\':	value[iDst] = '\\';
+							break;
+					}
+				} else {
+					value[iDst] = str[iValue+iSrc];
+				}
+				++iDst;
 			}
 			value[iDst] = '\0';
 			json_object *json;
@@ -2769,17 +2788,55 @@ done:
 
 /* gets a CEF header field. Must be positioned on the
  * first char after the '|' in front of field.
+ * Note that '|' may be escaped as "\|", which also means
+ * we need to supprot "\\" (see CEF spec for details).
+ * We return the string in *val, if val is non-null. In
+ * that case we allocate memory that the caller must free.
+ * This is necessary because there are potentially escape
+ * sequences inside the string.
  */
 static int
 cefGetHdrField(const char *const __restrict__ str,
 	const size_t strLen,
-	size_t *const __restrict__ i)
+	size_t *const __restrict__ offs,
+	char **val)
 {
-	assert(str[*i] != '|');
-	while(*i < strLen && str[*i] != '|')
-		++(*i); /* scan to next delimiter */
+	int r = 0;
+	size_t i = *offs;
+	assert(str[i] != '|');
+	while(i < strLen && str[i] != '|') {
+		if(str[i] == '\\') {
+			++i; /* skip esc char */
+			if(str[i] != '\\' && str[i] != '|')
+				FAIL(LN_WRONGPARSER);
+		}
+		++i; /* scan to next delimiter */
+	}
 
-	return (str[*i] == '|') ? 0 : LN_WRONGPARSER;
+	if(str[i] != '|')
+		FAIL(LN_WRONGPARSER);
+
+	const size_t iBegin = *offs;
+	/* success, persist */
+	*offs = i + 1;
+
+	if(val == NULL) {
+		r = 0;
+		goto done;
+	}
+	
+	const size_t len = i - iBegin;
+	CHKN(*val = malloc(len + 1));
+	size_t iDst = 0;
+	for(size_t iSrc = 0 ; iSrc < len ; ++iSrc) {
+		if(str[iBegin+iSrc] == '\\')
+			++iSrc; /* we already checked above that this is OK! */
+		(*val)[iDst++] = str[iBegin+iSrc];
+	}
+	(*val)[iDst] = 0;
+	r = 0;
+done:
+	return r;
 }
 
 /**
@@ -2801,30 +2858,18 @@ PARSER(CEF)
 	
 	i += 6; /* position on '|' */
 
-	const size_t iVendor = i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenVendor = i - iVendor;
-
-	const size_t iProduct = ++i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenProduct = i - iProduct;
-
-	const size_t iVersion = ++i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenVersion = i - iVersion;
-
-	const size_t iSigID = ++i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenSigID = i - iSigID;
-
-	const size_t iName = ++i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenName = i - iName;
-
-	const size_t iSeverity = ++i;
-	CHKR(cefGetHdrField(str, strLen, &i));
-	const size_t lenSeverity = i - iSeverity;
-
+	char *vendor = NULL;
+	char *product = NULL;
+	char *version = NULL;
+	char *sigID = NULL;
+	char *name = NULL;
+	char *severity = NULL;
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &vendor));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &product));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &version));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &sigID));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &name));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &severity));
 	++i; /* skip over terminal '|' */
 
 	/* OK, we now know we have a good header. Now, we need
@@ -2849,17 +2894,17 @@ PARSER(CEF)
 	if(value != NULL) {
 		CHKN(*value = json_object_new_object());
 		json_object *json;
-		CHKN(json = json_object_new_string_len(str+iVendor, lenVendor));
+		CHKN(json = json_object_new_string(vendor));
 		json_object_object_add(*value, "DeviceVendor", json);
-		CHKN(json = json_object_new_string_len(str+iProduct, lenProduct));
+		CHKN(json = json_object_new_string(product));
 		json_object_object_add(*value, "DeviceProduct", json);
-		CHKN(json = json_object_new_string_len(str+iVersion, lenVersion));
+		CHKN(json = json_object_new_string(version));
 		json_object_object_add(*value, "DeviceVersion", json);
-		CHKN(json = json_object_new_string_len(str+iSigID, lenSigID));
+		CHKN(json = json_object_new_string(sigID));
 		json_object_object_add(*value, "SignatureID", json);
-		CHKN(json = json_object_new_string_len(str+iName, lenName));
+		CHKN(json = json_object_new_string(name));
 		json_object_object_add(*value, "Name", json);
-		CHKN(json = json_object_new_string_len(str+iSeverity, lenSeverity));
+		CHKN(json = json_object_new_string(severity));
 		json_object_object_add(*value, "Severity", json);
 
 		json_object *jext;
@@ -2867,7 +2912,7 @@ PARSER(CEF)
 		json_object_object_add(*value, "Extensions", jext);
 
 		i = iBeginExtensions;
-		 cefParseExtensions(str, strLen, &i, jext);
+		cefParseExtensions(str, strLen, &i, jext);
 	}
 
 done:
@@ -2875,5 +2920,11 @@ done:
 		json_object_put(*value);
 		value = NULL;
 	}
+	free(vendor);
+	free(product);
+	free(version);
+	free(sigID);
+	free(name);
+	free(severity);
 	return r;
 }
