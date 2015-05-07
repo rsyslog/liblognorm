@@ -345,6 +345,45 @@ from: http://en.wikipedia.org/wiki/MAC_address
 
     %mac:mac48%
 
+cef
+###
+
+This parses ArcSight Comment Event Format (CEF) as described in 
+the "Implementing ArcSight CEF" manual revision 20 (2013-06-15).
+
+It matches a format that closely follows the spec. The header fields
+are extracted into the field name container, all extension are
+extracted into a container called "Extensions" beneath it.
+
+Example
+.......
+
+Rule::
+
+    rule=:%f:cef'
+
+Data::
+
+    CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a value cc=field 3
+
+Result::
+
+    {
+      "f": {
+        "DeviceVendor": "Vendor",
+        "DeviceProduct": "Product",
+        "DeviceVersion": "Version",
+        "SignatureID": "Signature ID",
+        "Name": "some name",
+        "Severity": "Severity",
+        "Extensions": {
+          "aa": "field1",
+          "bb": "this is a value",
+          "cc": "field 3"
+        }
+      }
+    }
+
 cisco-interface-spec
 ####################
 

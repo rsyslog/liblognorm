@@ -2593,7 +2593,7 @@ PARSER(MAC48)
 	size_t i = *offs;
 	char delim;
 
-	if(strLen < i + 17 || /* this motif has exactly 11 characters */
+	if(strLen < i + 17 || /* this motif has exactly 17 characters */
 	   !isxdigit(str[i]) ||
 	   !isxdigit(str[i+1])
 	   )
@@ -2633,6 +2633,299 @@ PARSER(MAC48)
 	}
 
 done:
-fflush(stderr);
+	return r;
+}
+
+
+/* This parses the extension value and updates the index
+ * to point to the end of it.
+ */
+static int
+cefParseExtensionValue(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *__restrict__ iEndVal)
+{
+	int r = 0;
+	size_t i = *iEndVal;
+	size_t iLastWordBegin;
+	/* first find next unquoted equal sign and record begin of
+	 * last word in front of it - this is the actual end of the
+	 * current name/value pair and the begin of the next one.
+	 */
+	int hadSP = 0;
+	int inEscape = 0;
+	for(iLastWordBegin = 0 ; i < strLen ; ++i) {
+		if(inEscape) {
+			if(str[i] != '=' &&
+			   str[i] != '\\' &&
+			   str[i] != 'r' &&
+			   str[i] != 'n')
+			FAIL(LN_WRONGPARSER);
+			inEscape = 0;
+		} else {
+			if(str[i] == '=') {
+				break;
+			} else if(str[i] == '\\') {
+				inEscape = 1;
+			} else if(str[i] == ' ') {
+				hadSP = 1;
+			} else {
+				if(hadSP) {
+					iLastWordBegin = i;
+					hadSP = 0;
+				}
+			}
+		}
+	}
+
+	/* Note: iLastWordBegin can never be at offset zero, because
+	 * the CEF header starts there!
+	 */
+	if(i < strLen) {
+		*iEndVal = (iLastWordBegin == 0) ? i : iLastWordBegin - 1;
+	} else {
+		*iEndVal = i;
+	}
+done:
+	return r;
+}
+
+/* must be positioned on first char of name, returns index
+ * of end of name.
+ * Note: ArcSight violates the CEF spec ifself: they generate
+ * leading underscores in their extension names, which are
+ * definetly not alphanumeric. We still accept them...
+ * They also seem to use dots.
+ */
+static int
+cefParseName(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ i)
+{
+	int r = 0;
+	while(*i < strLen && str[*i] != '=') {
+		if(!(isalnum(str[*i]) || str[*i] == '_' || str[*i] == '.'))
+			FAIL(LN_WRONGPARSER);
+		++(*i);
+	}
+done:
+	return r;
+}
+
+/* parse CEF extensions. They are basically name=value
+ * pairs with the ugly exception that values may contain
+ * spaces but need NOT to be quoted. Thankfully, at least
+ * names are specified as being alphanumeric without spaces
+ * in them. So we must add a lookahead parser to check if
+ * a word is a name (and thus the begin of a new pair) or
+ * not. This is done by subroutines.
+ */
+static int
+cefParseExtensions(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs,
+	json_object *const __restrict__ jroot)
+{
+	int r = 0;
+	size_t i = *offs;
+	size_t iName, lenName;
+	size_t iValue, lenValue;
+	
+	while(i < strLen) {
+		while(i < strLen && str[i] == ' ')
+			++i;
+		iName = i;
+		CHKR(cefParseName(str, strLen, &i));
+		if(i+1 >= strLen || str[i] != '=')
+			FAIL(LN_WRONGPARSER);
+		lenName = i - iName;
+		++i; /* skip '=' */
+
+		iValue = i;
+		CHKR(cefParseExtensionValue(str, strLen, &i));
+		lenValue = i - iValue;
+
+		++i; /* skip past value */
+
+		if(jroot != NULL) {
+			char *name;
+			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
+			memcpy(name, str+iName, lenName);
+			name[lenName] = '\0';
+			char *value;
+			CHKN(value = malloc(sizeof(char) * (lenValue + 1)));
+			/* copy value but escape it */
+			size_t iDst = 0;
+			for(size_t iSrc = 0 ; iSrc < lenValue ; ++iSrc) {
+				if(str[iValue+iSrc] == '\\') {
+					++iSrc; /* we know the next char must exist! */
+					switch(str[iValue+iSrc]) {
+					case '=':	value[iDst] = '=';
+							break;
+					case 'n':	value[iDst] = '\n';
+							break;
+					case 'r':	value[iDst] = '\r';
+							break;
+					case '\\':	value[iDst] = '\\';
+							break;
+					}
+				} else {
+					value[iDst] = str[iValue+iSrc];
+				}
+				++iDst;
+			}
+			value[iDst] = '\0';
+			json_object *json;
+			CHKN(json = json_object_new_string(value));
+			json_object_object_add(jroot, name, json);
+			free(name);
+			free(value);
+		}
+	}
+
+done:
+	return r;
+}
+
+/* gets a CEF header field. Must be positioned on the
+ * first char after the '|' in front of field.
+ * Note that '|' may be escaped as "\|", which also means
+ * we need to supprot "\\" (see CEF spec for details).
+ * We return the string in *val, if val is non-null. In
+ * that case we allocate memory that the caller must free.
+ * This is necessary because there are potentially escape
+ * sequences inside the string.
+ */
+static int
+cefGetHdrField(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs,
+	char **val)
+{
+	int r = 0;
+	size_t i = *offs;
+	assert(str[i] != '|');
+	while(i < strLen && str[i] != '|') {
+		if(str[i] == '\\') {
+			++i; /* skip esc char */
+			if(str[i] != '\\' && str[i] != '|')
+				FAIL(LN_WRONGPARSER);
+		}
+		++i; /* scan to next delimiter */
+	}
+
+	if(str[i] != '|')
+		FAIL(LN_WRONGPARSER);
+
+	const size_t iBegin = *offs;
+	/* success, persist */
+	*offs = i + 1;
+
+	if(val == NULL) {
+		r = 0;
+		goto done;
+	}
+	
+	const size_t len = i - iBegin;
+	CHKN(*val = malloc(len + 1));
+	size_t iDst = 0;
+	for(size_t iSrc = 0 ; iSrc < len ; ++iSrc) {
+		if(str[iBegin+iSrc] == '\\')
+			++iSrc; /* we already checked above that this is OK! */
+		(*val)[iDst++] = str[iBegin+iSrc];
+	}
+	(*val)[iDst] = 0;
+	r = 0;
+done:
+	return r;
+}
+
+/**
+ * Parser for ArcSight Common Event Format (CEF) version 0.
+ * added 2015-05-05 by rgerhards, v1.1.2
+ */
+PARSER(CEF)
+	size_t i = *offs;
+	char *vendor = NULL;
+	char *product = NULL;
+	char *version = NULL;
+	char *sigID = NULL;
+	char *name = NULL;
+	char *severity = NULL;
+
+	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
+	if(strLen < i + 17 ||
+	   str[i]   != 'C' ||
+	   str[i+1] != 'E' ||
+	   str[i+2] != 'F' ||
+	   str[i+3] != ':' ||
+	   str[i+4] != '0' ||
+	   str[i+5] != '|'
+	   )	FAIL(LN_WRONGPARSER);
+	
+	i += 6; /* position on '|' */
+
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &vendor));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &product));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &version));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &sigID));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &name));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &severity));
+	++i; /* skip over terminal '|' */
+
+	/* OK, we now know we have a good header. Now, we need
+	 * to process extensions.
+	 * This time, we do NOT pre-process the extension, but rather
+	 * persist them directly to JSON. This is contrary to other
+	 * parsers, but as the CEF header is pretty unique, this time
+	 * it is exteremely unlike we will get a no-match during
+	 * extension processing. Even if so, nothing bad happens, as
+	 * the extracted data is discarded. But the regular case saves
+	 * us processing time and complexity. The only time when we
+	 * cannot directly process it is when the caller asks us not
+	 * to persist the data. So this must be handled differently.
+	 */
+	 size_t iBeginExtensions = i;
+	 CHKR(cefParseExtensions(str, strLen, &i, NULL));
+
+	/* success, persist */
+	*parsed = *offs - i;
+	r = 0; /* success */
+
+	if(value != NULL) {
+		CHKN(*value = json_object_new_object());
+		json_object *json;
+		CHKN(json = json_object_new_string(vendor));
+		json_object_object_add(*value, "DeviceVendor", json);
+		CHKN(json = json_object_new_string(product));
+		json_object_object_add(*value, "DeviceProduct", json);
+		CHKN(json = json_object_new_string(version));
+		json_object_object_add(*value, "DeviceVersion", json);
+		CHKN(json = json_object_new_string(sigID));
+		json_object_object_add(*value, "SignatureID", json);
+		CHKN(json = json_object_new_string(name));
+		json_object_object_add(*value, "Name", json);
+		CHKN(json = json_object_new_string(severity));
+		json_object_object_add(*value, "Severity", json);
+
+		json_object *jext;
+		CHKN(jext = json_object_new_object());
+		json_object_object_add(*value, "Extensions", jext);
+
+		i = iBeginExtensions;
+		cefParseExtensions(str, strLen, &i, jext);
+	}
+
+done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(*value);
+		value = NULL;
+	}
+	free(vendor);
+	free(product);
+	free(version);
+	free(sigID);
+	free(name);
+	free(severity);
 	return r;
 }

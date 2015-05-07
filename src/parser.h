@@ -171,7 +171,12 @@ int ln_parseCiscoInterfaceSpec(const char *str, size_t strlen, size_t *offs, con
  */
 int ln_parseMAC48(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
+ * Parser for CEF version 0.
+ */
+int ln_parseCEF(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/**
  * Parser for name/value pairs.
  */
 int ln_parseNameValue(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
