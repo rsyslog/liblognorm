@@ -2695,6 +2695,7 @@ done:
  * Note: ArcSight violates the CEF spec ifself: they generate
  * leading underscores in their extension names, which are
  * definetly not alphanumeric. We still accept them...
+ * They also seem to use dots.
  */
 static int
 cefParseName(const char *const __restrict__ str,
@@ -2703,7 +2704,7 @@ cefParseName(const char *const __restrict__ str,
 {
 	int r = 0;
 	while(*i < strLen && str[*i] != '=') {
-		if(!isalnum(str[*i]) && !str[*i] == '_')
+		if(!(isalnum(str[*i]) || str[*i] == '_' || str[*i] == '.'))
 			FAIL(LN_WRONGPARSER);
 		++(*i);
 	}
@@ -2845,6 +2846,12 @@ done:
  */
 PARSER(CEF)
 	size_t i = *offs;
+	char *vendor = NULL;
+	char *product = NULL;
+	char *version = NULL;
+	char *sigID = NULL;
+	char *name = NULL;
+	char *severity = NULL;
 
 	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
 	if(strLen < i + 17 ||
@@ -2858,12 +2865,6 @@ PARSER(CEF)
 	
 	i += 6; /* position on '|' */
 
-	char *vendor = NULL;
-	char *product = NULL;
-	char *version = NULL;
-	char *sigID = NULL;
-	char *name = NULL;
-	char *severity = NULL;
 	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &vendor));
 	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &product));
 	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &version));
