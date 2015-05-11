@@ -668,6 +668,7 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 		goto done;
 	}
 
+ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 	c = str;
 	cpfix = prefixBase(tree);
 	node = tree->froot;
@@ -732,8 +733,9 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %zu", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
-				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
+				ln_dbgprintf(tree->ctx, "%zu: potential hit, trying subtree %p", offs, node->subtree);
 				left = ln_normalizeRec(node->subtree, str, strLen, i + parsed, json, endNode);
+				ln_dbgprintf(tree->ctx, "%zu: subtree returns %d", offs, r);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
