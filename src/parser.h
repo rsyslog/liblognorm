@@ -177,6 +177,11 @@ int ln_parseMAC48(const char *str, size_t strlen, size_t *offs, const ln_fieldLi
 int ln_parseCEF(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /**
+ * Parser for Checkpoint LEA.
+ */
+int ln_parseCheckpointLEA(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/**
  * Parser for name/value pairs.
  */
 int ln_parseNameValue(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
