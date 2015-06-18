@@ -384,6 +384,24 @@ Result::
       }
     }
 
+checkpoint-lea
+##############
+
+This supports the LEA on-disk format. Unfortunately, the format
+is underdocumented, the Checkpoint docs we could get hold of just
+describe the API and provide a field dictionary. In a nutshell, what
+we do is extract field names up to the colon and values up to the
+semicolon. No escaping rules are known to us, so we assume none
+exists (and as such no semicolon can be part of a value).
+
+If someone has a definitive reference or a sample set to contribute
+to the project, please let us know and we will check if we need to
+add additional transformations.
+
+::
+
+    %fields:checkpoint-lea%
+
 cisco-interface-spec
 ####################
 

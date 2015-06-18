@@ -2929,3 +2929,75 @@ done:
 	free(severity);
 	return r;
 }
+
+/**
+ * Parser for Checkpoint LEA on-disk format.
+ * added 2015-06-18 by rgerhards, v1.1.2
+ */
+PARSER(CheckpointLEA)
+	size_t i = *offs;
+	size_t iName, lenName;
+	size_t iValue, lenValue;
+	int foundFields = 0;
+
+	while(i < strLen) {
+		while(i < strLen && str[i] == ' ') /* skip leading SP */
+			++i;
+		if(i == strLen) { /* OK if just trailing space */
+			if(foundFields == 0)
+				FAIL(LN_WRONGPARSER);
+		break; /* we are done with the loop, all processed */
+		} else {
+			++foundFields;
+		}
+		iName = i;
+		/* TODO: do a stricter check? ... but we don't have a spec */
+		while(i < strLen && str[i] != ':') {
+			++i;
+		}
+		if(i+1 >= strLen || str[i] != ':')
+			FAIL(LN_WRONGPARSER);
+		lenName = i - iName;
+		++i; /* skip ':' */
+
+		while(i < strLen && str[i] == ' ') /* skip leading SP */
+			++i;
+		iValue = i;
+		while(i < strLen && str[i] != ';') {
+			++i;
+		}
+		if(i+1 > strLen || str[i] != ';')
+			FAIL(LN_WRONGPARSER);
+		lenValue = i - iValue;
+		++i; /* skip ';' */
+
+		if(value != NULL) {
+			char *name;
+			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
+			memcpy(name, str+iName, lenName);
+			name[lenName] = '\0';
+			char *val;
+			CHKN(val = malloc(sizeof(char) * (lenValue + 1)));
+			memcpy(val, str+iValue, lenValue);
+			val[lenValue] = '\0';
+			if(*value == NULL)
+				CHKN(*value = json_object_new_object());
+			json_object *json;
+			CHKN(json = json_object_new_string(val));
+			json_object_object_add(*value, name, json);
+			free(name);
+			free(val);
+		}
+	}
+
+	/* success, persist */
+	*parsed = *offs - i;
+	r = 0; /* success */
+
+done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(*value);
+		value = NULL;
+	}
+	return r;
+}

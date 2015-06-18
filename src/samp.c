@@ -223,6 +223,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseNameValue;
 	} else if(!es_strconstcmp(*str, "cef")) {
 		node->parser = ln_parseCEF;
+	} else if(!es_strconstcmp(*str, "checkpoint-lea")) {
+		node->parser = ln_parseCheckpointLEA;
 	} else if(!es_strconstcmp(*str, "v2-iptables")) {
 		node->parser = ln_parsev2IPTables;
 	} else if(!es_strconstcmp(*str, "iptables")) {
