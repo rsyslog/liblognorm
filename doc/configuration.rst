@@ -331,6 +331,23 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 
     %ip-src:ipv4%
 
+ipv6
+####
+
+IPv6 address, in textual notation as specified in RFC4291.
+All formats specified in section 2.2 are supported, including
+embedded IPv4 address (e.g. "::13.1.68.3"). Note that a 
+**pure** IPv4 address ("13.1.68.3") is **not** valid and as
+such not recognized.
+
+To avoid false positives, there must be either a whitespace
+character after the IPv6 address or the end of string must be
+reached.
+
+::
+
+    %ip-src:ipv6%
+
 mac48
 #####
 

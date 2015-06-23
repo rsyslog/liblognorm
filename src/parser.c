@@ -2161,8 +2161,6 @@ done:
 }
 
 
-
-
 /* helper to IPv4 address parser, checks the next set of numbers.
  * Syntax 1 to 3 digits, value together not larger than 255.
  * @param[in] str parse buffer
@@ -2223,6 +2221,112 @@ PARSER(IPv4)
 	if(i == strLen || c[i++] != '.') goto done;
 	/* byte 4 - we do NOT need any char behind it! */
 	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+
+	/* if we reach this point, we found a valid IP address */
+	*parsed = i - *offs;
+
+	r = 0; /* success */
+done:
+	return r;
+}
+
+
+/* skip past the IPv6 address block, parse pointer is set to 
+ * first char after the block. Returns an error if already at end
+ * of string.
+ * @param[in] str parse buffer
+ * @param[in/out] offs offset into buffer, updated if successful
+ * @return 0 if OK, 1 otherwise
+ */
+static int
+skipIPv6AddrBlock(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs)
+{
+	int j;
+	if(*offs == strLen)
+		return 1;
+
+	for(j = 0 ; j < 4  && *offs+j < strLen && isxdigit(str[*offs+j]) ; ++j)
+		/*just skip*/ ;
+
+	*offs += j;
+	return 0;
+}
+
+/**
+ * Parser for IPv6 addresses.
+ * Bases on RFC4291 Section 2.2. The address must be followed
+ * by whitespace or end-of-string, else it is not considered
+ * a valid address. This prevents false positives.
+ */
+PARSER(IPv6)
+	const char *c;
+	size_t i;
+	size_t beginBlock; /* last block begin in case we need IPv4 parsing */
+	int hasIPv4 = 0;
+	int nBlocks = 0; /* how many blocks did we already have? */
+	int bHad0Abbrev = 0; /* :: already used? */
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	i = *offs;
+	if(i + 2 > strLen) {
+		/* IPv6 addr requires at least 2 characters ("::") */
+		goto done;
+	}
+	c = str;
+
+	/* check that first block is non-empty */
+	if(! ( isxdigit(c[i]) || (c[i] == ':' && c[i+1] == ':') ) )
+		goto done;
+
+	/* try for all potential blocks plus one more (so we see errors!) */
+	for(int j = 0 ; j < 9 ; ++j) {
+		beginBlock = i;
+		if(skipIPv6AddrBlock(str, strLen, &i) != 0) goto done;
+		nBlocks++;
+		if(i == strLen) goto chk_ok;
+		if(isspace(c[i])) goto chk_ok;
+		if(c[i] == '.'){ /* IPv4 processing! */
+			hasIPv4 = 1;
+			break;
+		}
+		if(c[i] != ':') goto done;
+		i++; /* "eat" ':' */
+		if(i == strLen) goto chk_ok;
+		/* check for :: */
+		if(bHad0Abbrev) {
+			if(c[i] == ':') goto done;
+		} else {
+			if(c[i] == ':') {
+				bHad0Abbrev = 1;
+				++i;
+				if(i == strLen) goto chk_ok;
+			}
+		}
+	}
+
+	if(hasIPv4) {
+		size_t ipv4_parsed;
+		--nBlocks;
+		/* prevent pure IPv4 address to be recognized */
+		if(beginBlock == *offs) goto done;
+		i = beginBlock;
+		if(ln_parseIPv4(str, strLen, &i, node, &ipv4_parsed, NULL) != 0)
+			goto done;
+		i += ipv4_parsed;
+	}
+
+chk_ok:	/* we are finished parsing, check if things are ok */
+	if(nBlocks > 8) goto done;
+	if(bHad0Abbrev && nBlocks >= 8) goto done;
+	/* now check if trailing block is missing. Note that i is already
+	 * on next character, so we need to go two back. Two are always
+	 * present, else we would not reach this code here.
+	 */
+	if(c[i-1] == ':' && c[i-2] != ':') goto done;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
