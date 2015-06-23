@@ -784,8 +784,8 @@ ln_dbgprintf(tree->ctx, "%zu no field, trying subtree char '%c': %p", offs, cc, 
 ln_dbgprintf(tree->ctx, "%zu no field, offset already beyond end", offs);
 }
 	/* now let's see if we have a literal */
-	if(tree->subtree[(int)str[offs]] != NULL) {
-		left = ln_normalizeRec(tree->subtree[(int)str[offs]],
+	if(tree->subtree[(unsigned char)str[offs]] != NULL) {
+		left = ln_normalizeRec(tree->subtree[(unsigned char)str[offs]],
 				       str, strLen, offs + 1, json, endNode);
 		if(left < r)
 			r = left;
