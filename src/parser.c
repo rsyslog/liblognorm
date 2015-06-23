@@ -2946,7 +2946,7 @@ PARSER(CheckpointLEA)
 		if(i == strLen) { /* OK if just trailing space */
 			if(foundFields == 0)
 				FAIL(LN_WRONGPARSER);
-		break; /* we are done with the loop, all processed */
+			break; /* we are done with the loop, all processed */
 		} else {
 			++foundFields;
 		}
