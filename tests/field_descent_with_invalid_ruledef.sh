@@ -72,12 +72,3 @@ reset_rules 'child'
 add_rule 'rule=:%ip_addr:ipv4% %tail:rest%' 'child'
 execute '10.20.30.40 foo'
 assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "" }'
-
-#named tail-field not populated
-echo tail-field not populated
-reset_rules
-add_rule 'rule=:%net:descent:'$srcdir'/child.rulebase:foo% foo'
-reset_rules 'child'
-add_rule 'rule=:%ip_addr:ipv4% %tail:rest%' 'child'
-execute '10.20.30.40 foo'
-assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "" }'
