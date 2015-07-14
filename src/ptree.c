@@ -636,8 +636,9 @@ done:
  *
  * @param[in] tree current tree to process
  * @param[in] string string to be matched against (the to-be-normalized data)
+ * @param[in] strLen length of the to-be-matched string
  * @param[in] offs start position in input data
- * @param[in/out] event handle to event that is being created during normalization
+ * @param[in/out] json ... that is being created during normalization
  * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
  * @return number of characters left unparsed by following the subtree, negative if
