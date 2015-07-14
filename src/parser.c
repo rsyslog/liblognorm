@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
+#include <sys/types.h>
 #include <string.h>
 
 #include "json_compatibility.h"
