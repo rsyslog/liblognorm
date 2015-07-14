@@ -808,38 +808,30 @@ ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 		value = NULL;
 		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
 		left = ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
-		if(left == 0 && (*endNode)->flags.isTerminal) {
-			ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
-			if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
-				/* Store the value here; create json if not already created */
-				if (value == NULL) { 
-					CHKN(cstr = strndup(str + i, parsed));
-					value = json_object_new_string(cstr);
-					free(cstr);
-				}
-				if (value == NULL) {
-					ln_dbgprintf(tree->ctx, "unable to create json");
-					goto done;
-				}
-				namestr = ln_es_str2cstr(&restMotifNode->name);
-				json_object_object_add(json, namestr, value);
-			} else {
-				if (value != NULL) {
-					/* Free the unneeded value */
-					json_object_put(value);
-				}
+		assert(left == 0); /* with rest, we have this invariant */
+		assert((*endNode)->flags.isTerminal); /* this one also */
+		ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
+		if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
+			/* Store the value here; create json if not already created */
+			if (value == NULL) { 
+				CHKN(cstr = strndup(str + i, parsed));
+				value = json_object_new_string(cstr);
+				free(cstr);
 			}
-			r = 0;
-			goto done;
+			if (value == NULL) {
+				ln_dbgprintf(tree->ctx, "unable to create json");
+				goto done;
+			}
+			namestr = ln_es_str2cstr(&restMotifNode->name);
+			json_object_object_add(json, namestr, value);
+		} else {
+			if (value != NULL) {
+				/* Free the unneeded value */
+				json_object_put(value);
+			}
 		}
-		ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d",
-				offs, left);
-		if (value != NULL) {
-			/* Free the value if it was created */
-			json_object_put(value);
-		}
-		if(left < r)
-			r = left;
+		r = 0;
+		goto done;
 	}
 done:
 	ln_dbgprintf(tree->ctx, "%zu returns %d", offs, r);
