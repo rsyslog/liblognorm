@@ -117,13 +117,13 @@ fi
 AM_CONDITIONAL([ENABLE_DOCS], [test "$enable_docs" = "yes"])
 
 AC_ARG_ENABLE(testbench,
-        [AS_HELP_STRING([--enable-testbench],[testbench enabled @<:@default=no@:>@])],
+        [AS_HELP_STRING([--enable-testbench],[testbench enabled @<:@default=yes@:>@])],
         [case "${enableval}" in
          yes) enable_testbench="yes" ;;
           no) enable_testbench="no" ;;
            *) AC_MSG_ERROR(bad value ${enableval} for --enable-testbench) ;;
          esac],
-        [enable_testbench=no]
+        [enable_testbench=yes]
 )
 AM_CONDITIONAL(ENABLE_TESTBENCH, test x$enable_testbench = xyes)
 
