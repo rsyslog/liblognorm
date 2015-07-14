@@ -19,6 +19,7 @@ Version 1.1.2, 2015-03-??
   really is no compatibility to preserve.
   see also:
   http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
+- testbench is now enabled by default
 ----------------------------------------------------------------------
 Version 1.1.1, 2015-03-09
 - fixed library version numbering
