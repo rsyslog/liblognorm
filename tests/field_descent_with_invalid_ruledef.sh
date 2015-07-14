@@ -55,14 +55,17 @@ execute '10.20.30.40 foo'
 assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "10.20.30.40 foo" }'
 
 #empty tail-field given
+echo empty tail-field given
+rm tmp.rulebase
 reset_rules
-add_rule 'rule=:%net:descent:'$srcdir'/child.rulebase:%'
+add_rule 'rule=:A%net:descent:'$srcdir'/child.rulebase:%'
 reset_rules 'child'
 add_rule 'rule=:%ip_addr:ipv4% %tail:rest%' 'child'
-execute '10.20.30.40 foo'
+execute 'A10.20.30.40 foo'
 assert_output_json_eq '{ "net": { "tail": "foo", "ip_addr": "10.20.30.40" } }'
 
 #named tail-field not populated
+echo tail-field not populated
 reset_rules
 add_rule 'rule=:%net:descent:'$srcdir'/child.rulebase:foo% foo'
 reset_rules 'child'
@@ -71,6 +74,7 @@ execute '10.20.30.40 foo'
 assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "" }'
 
 #named tail-field not populated
+echo tail-field not populated
 reset_rules
 add_rule 'rule=:%net:descent:'$srcdir'/child.rulebase:foo% foo'
 reset_rules 'child'
