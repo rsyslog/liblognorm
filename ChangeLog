@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
 Version 1.1.2, 2015-03-??
+- permit newline inside parser definition
 - new parser "cisco-interface-spec"
 - new parser "json" to process json parts of the message
 - new parser "mac48" to process mac layer addresses

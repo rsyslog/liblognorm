@@ -11,6 +11,8 @@ user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
 user_test_LDFLAGS = -no-install
 
 TESTS_SHELLSCRIPTS = \
+	parser_whitespace.sh \
+	parser_LF.sh \
 	field_hexnumber.sh \
 	field_mac48.sh \
 	field_name_value.sh \
