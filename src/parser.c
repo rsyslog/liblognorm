@@ -1748,7 +1748,7 @@ PARSER(Rest)
 PARSER(OpQuotedString)
 	const char *c;
 	size_t i;
-	char *cstr;
+	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1782,10 +1782,10 @@ PARSER(OpQuotedString)
 	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	}
 	CHKN(*value = json_object_new_string(cstr));
-	free(cstr);
 
 	r = 0; /* success */
 done:
+	free(cstr);
 	return r;
 }
 
@@ -1799,7 +1799,7 @@ done:
 PARSER(QuotedString)
 	const char *c;
 	size_t i;
-	char *cstr;
+	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1825,9 +1825,9 @@ PARSER(QuotedString)
 	/* create JSON value to save quoted string contents */
 	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	CHKN(*value = json_object_new_string(cstr));
-	free(cstr);
 	r = 0; /* success */
 done:
+	free(cstr);
 	return r;
 }
 
