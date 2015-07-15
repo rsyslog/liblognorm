@@ -2832,6 +2832,8 @@ cefParseExtensions(const char *const __restrict__ str,
 	size_t i = *offs;
 	size_t iName, lenName;
 	size_t iValue, lenValue;
+	char *name = NULL;
+	char *value = NULL;
 	
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ')
@@ -2850,11 +2852,9 @@ cefParseExtensions(const char *const __restrict__ str,
 		++i; /* skip past value */
 
 		if(jroot != NULL) {
-			char *name;
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, str+iName, lenName);
 			name[lenName] = '\0';
-			char *value;
 			CHKN(value = malloc(sizeof(char) * (lenValue + 1)));
 			/* copy value but escape it */
 			size_t iDst = 0;
@@ -2880,12 +2880,14 @@ cefParseExtensions(const char *const __restrict__ str,
 			json_object *json;
 			CHKN(json = json_object_new_string(value));
 			json_object_object_add(jroot, name, json);
-			free(name);
-			free(value);
+			free(name); name = NULL;
+			free(value); value = NULL;
 		}
 	}
 
 done:
+	free(name);
+	free(value);
 	return r;
 }
 
@@ -3041,6 +3043,8 @@ PARSER(CheckpointLEA)
 	size_t iName, lenName;
 	size_t iValue, lenValue;
 	int foundFields = 0;
+	char *name = NULL;
+	char *val = NULL;
 
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ') /* skip leading SP */
@@ -3074,11 +3078,9 @@ PARSER(CheckpointLEA)
 		++i; /* skip ';' */
 
 		if(value != NULL) {
-			char *name;
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, str+iName, lenName);
 			name[lenName] = '\0';
-			char *val;
 			CHKN(val = malloc(sizeof(char) * (lenValue + 1)));
 			memcpy(val, str+iValue, lenValue);
 			val[lenValue] = '\0';
@@ -3087,8 +3089,8 @@ PARSER(CheckpointLEA)
 			json_object *json;
 			CHKN(json = json_object_new_string(val));
 			json_object_object_add(*value, name, json);
-			free(name);
-			free(val);
+			free(name); name = NULL;
+			free(val); val = NULL;
 		}
 	}
 
@@ -3097,6 +3099,8 @@ PARSER(CheckpointLEA)
 	r = 0; /* success */
 
 done:
+	free(name);
+	free(val);
 	if(r != 0 && value != NULL && *value != NULL) {
 		json_object_put(*value);
 		value = NULL;
