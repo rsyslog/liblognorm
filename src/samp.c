@@ -443,7 +443,7 @@ done:
 static inline int
 getLineType(const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
 {
-	int r;
+	int r = -1;
 	es_size_t i;
 
 	*str = es_newStr(16);

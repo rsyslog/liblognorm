@@ -74,7 +74,7 @@ void complain(const char *errmsg)
 static inline void
 outputEvent(struct json_object *json)
 {
-	char *cstr;
+	char *cstr = NULL;
 	es_str_t *str = NULL;
 
 	switch(outfmt) {

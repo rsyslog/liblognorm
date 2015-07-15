@@ -197,7 +197,6 @@ PARSER(RFC5424Date)
 	int second;
 	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
 	__attribute__((unused)) int secfracPrecision;
-	__attribute__((unused)) char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	size_t len;
@@ -256,11 +255,7 @@ PARSER(RFC5424Date)
 	if(*pszTS == 'Z') {
 		--len;
 		pszTS++; /* eat Z */
-		OffsetMode = 'Z';
-		OffsetHour = 0;
-		OffsetMinute = 0;
 	} else if((*pszTS == '+') || (*pszTS == '-')) {
-		OffsetMode = *pszTS;
 		--len;
 		pszTS++;
 
@@ -1920,6 +1915,7 @@ PARSER(CiscoInterfaceSpec)
 	 */
 	int bHaveInterface = 0;
 	size_t idxInterface;
+	size_t lenInterface;
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
@@ -1934,10 +1930,10 @@ PARSER(CiscoInterfaceSpec)
 				break;
 			++i;
 		}
+		lenInterface = i - idxInterface;
 		bHaveInterface = 1;
 	}
 	if(i == strLen) goto done;
-	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
