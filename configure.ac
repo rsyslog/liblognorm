@@ -8,6 +8,8 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_SRCDIR([src/lognorm.c])
 AC_CONFIG_HEADER([config.h])
 
+AC_USE_SYSTEM_EXTENSIONS
+
 # Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -37,7 +39,7 @@ AC_TYPE_SIZE_T
 AC_FUNC_MALLOC
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
-#AC_CHECK_FUNCS([])
+AC_CHECK_FUNCS([strdup strndup strtok_r])
 
 LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/src"
 LIBLOGNORM_LIBS="\$(top_builddir)/src/liblognorm.la"
