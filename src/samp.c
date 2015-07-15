@@ -397,7 +397,7 @@ done:	return r;
 static inline int
 addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 {
-	int r;
+	int r = -1;
 	struct ln_ptree* subtree;
 	es_str_t *str = NULL;
 	es_size_t i;
