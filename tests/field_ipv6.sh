@@ -1,6 +1,8 @@
 # added 2015-06-23 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "IPv6 parser"
+. ./exec.sh
+
+test_def $0 "IPv6 parser"
 add_rule 'rule=:%f:ipv6%'
 
 # examples from RFC4291, sect. 2.2

@@ -1,6 +1,8 @@
 # added 2015-03-12 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "duration syntax"
+. ./exec.sh
+
+test_def $0 "duration syntax"
 add_rule 'rule=:duration %field:duration% bytes'
 add_rule 'rule=:duration %field:duration%'
 

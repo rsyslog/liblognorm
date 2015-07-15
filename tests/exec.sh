@@ -1,10 +1,5 @@
-test_file=$(basename $1)
-test_name=$(echo $test_file | sed -e 's/\..*//g')
-
-echo ===============================================================================
-echo "[${test_file}]: test for ${2}"
-
 set -e
+
 if [ "x$debug" == "xon" ]; then #get core-dump on crash
     ulimit -c unlimited
 fi
@@ -12,6 +7,14 @@ fi
 cmd=../src/ln_test
 
 . ./options.sh
+
+test_def() {
+    test_file=$(basename $1)
+    test_name=$(echo $test_file | sed -e 's/\..*//g')
+
+    echo ===============================================================================
+    echo "[${test_file}]: test for ${2}"
+}
 
 execute() {
     if [ "x$debug" == "xon" ]; then

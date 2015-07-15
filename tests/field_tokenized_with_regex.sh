@@ -2,7 +2,9 @@
 # This file is part of the liblognorm project, released under ASL 2.0
 
 #test that tokenized disabled regex if parent context has it disabled
-. ./exec.sh $0 "tokenized field with regex based field"
+. ./exec.sh
+
+test_def $0 "tokenized field with regex based field"
 add_rule 'rule=:%parts:tokenized:,:regex:[^, ]+% %text:rest%'
 execute '123,abc,456,def foo bar'
 assert_output_contains '"unparsed-data": "123,abc,456,def foo bar"'
@@ -10,7 +12,9 @@ assert_output_contains '"originalmsg": "123,abc,456,def foo bar"'
 
 #and then enables it when parent context has it enabled
 export ln_opts='-oallowRegex'
-. ./exec.sh $0 "tokenized field with regex based field"
+. ./exec.sh
+
+test_def $0 "tokenized field with regex based field"
 add_rule 'rule=:%parts:tokenized:,:regex:[^, ]+% %text:rest%'
 execute '123,abc,456,def foo bar'
 assert_output_contains '"parts": [ "123", "abc", "456", "def" ]'

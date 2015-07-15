@@ -1,6 +1,8 @@
 # added 2014-11-26 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "recursive parsing field"
+. ./exec.sh
+
+test_def $0 "recursive parsing field"
 
 #tail recursion with default tail field
 add_rule 'rule=:%word:word% %next:recursive%'

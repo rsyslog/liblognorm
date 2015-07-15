@@ -1,6 +1,8 @@
 # added 2015-03-12 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "whitespace parser"
+. ./exec.sh
+
+test_def $0 "whitespace parser"
 # the "word" parser unfortunatly treats everything except
 # a SP as being in the word. So a HT inside a word is
 # permitted, which does not work well with what we

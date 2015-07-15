@@ -2,7 +2,9 @@
 # This checks if whitespace inside parser definitions is properly treated
 # This file is part of the liblognorm project, released under ASL 2.0
 
-. ./exec.sh $0 "LF in parser definition"
+. ./exec.sh
+
+test_def $0 "LF in parser definition"
 add_rule 'rule=:here is a number %
                 num:hexnumber
                 % in hex form'

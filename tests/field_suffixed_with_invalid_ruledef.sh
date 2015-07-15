@@ -1,6 +1,8 @@
 # added 2015-02-26 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "field with one of many possible suffixes, but invalid ruledef"
+. ./exec.sh
+
+test_def $0 "field with one of many possible suffixes, but invalid ruledef"
 
 add_rule 'rule=:reclaimed %eden_free:suffixe:,:b,kb,mb,gb:number% eden'
 execute 'reclaimed 559mb eden'

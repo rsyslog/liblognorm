@@ -1,6 +1,8 @@
 # added 2015-02-26 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "float with invalid field-declaration"
+. ./exec.sh
+
+test_def $0 "float with invalid field-declaration"
 
 add_rule 'rule=:%no:flo% foo'
 execute '10.0 foo'
