@@ -819,6 +819,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 				inParser = (inParser) ? 0 : 1;
 			buf[i++] = c;
 			if(i >= sizeof(buf)) {
+				ln_errprintf(ctx, 0, "line %d is too long", linenbr);
 				ln_dbgprintf(ctx, "line %d is too long", linenbr);
 				goto done;
 			}

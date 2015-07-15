@@ -62,6 +62,41 @@ ln_dbgprintf(ln_ctx ctx, char *fmt, ...)
 done:	return;
 }
 
+/**
+ * Generate error message and call the caller provided callback.
+ * eno is the OS errno. If 0 (OK), it is not output. If non-zero
+ * it will be output (and in later versions also with descriptive
+ * text).
+ *
+ * Will first check if a user callback is registered. If not, returns
+ * immediately.
+ */
+void
+ln_errprintf(const ln_ctx ctx, const int eno, const char *fmt, ...)
+{
+	va_list ap;
+	char buf[8*1024];
+	size_t lenBuf;
+
+	if(ctx->errmsgCB == NULL)
+		goto done;
+	
+	va_start(ap, fmt);
+	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
+	va_end(ap);
+	if(lenBuf >= sizeof(buf)) {
+		/* prevent buffer overrruns and garbagge display */
+		buf[sizeof(buf) - 5] = '.';
+		buf[sizeof(buf) - 4] = '.';
+		buf[sizeof(buf) - 3] = '.';
+		buf[sizeof(buf) - 2] = '\n';
+		buf[sizeof(buf) - 1] = '\0';
+		lenBuf = sizeof(buf) - 1;
+	}
+
+	ctx->errmsgCB(ctx->dbgCookie, buf, lenBuf);
+done:	return;
+}
 
 void
 ln_enableDebug(ln_ctx ctx, int i)
