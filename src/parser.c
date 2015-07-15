@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
+#include <sys/types.h>
 #include <string.h>
 
 #include "json_compatibility.h"
@@ -2161,8 +2162,6 @@ done:
 }
 
 
-
-
 /* helper to IPv4 address parser, checks the next set of numbers.
  * Syntax 1 to 3 digits, value together not larger than 255.
  * @param[in] str parse buffer
@@ -2223,6 +2222,112 @@ PARSER(IPv4)
 	if(i == strLen || c[i++] != '.') goto done;
 	/* byte 4 - we do NOT need any char behind it! */
 	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+
+	/* if we reach this point, we found a valid IP address */
+	*parsed = i - *offs;
+
+	r = 0; /* success */
+done:
+	return r;
+}
+
+
+/* skip past the IPv6 address block, parse pointer is set to 
+ * first char after the block. Returns an error if already at end
+ * of string.
+ * @param[in] str parse buffer
+ * @param[in/out] offs offset into buffer, updated if successful
+ * @return 0 if OK, 1 otherwise
+ */
+static int
+skipIPv6AddrBlock(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs)
+{
+	int j;
+	if(*offs == strLen)
+		return 1;
+
+	for(j = 0 ; j < 4  && *offs+j < strLen && isxdigit(str[*offs+j]) ; ++j)
+		/*just skip*/ ;
+
+	*offs += j;
+	return 0;
+}
+
+/**
+ * Parser for IPv6 addresses.
+ * Bases on RFC4291 Section 2.2. The address must be followed
+ * by whitespace or end-of-string, else it is not considered
+ * a valid address. This prevents false positives.
+ */
+PARSER(IPv6)
+	const char *c;
+	size_t i;
+	size_t beginBlock; /* last block begin in case we need IPv4 parsing */
+	int hasIPv4 = 0;
+	int nBlocks = 0; /* how many blocks did we already have? */
+	int bHad0Abbrev = 0; /* :: already used? */
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	i = *offs;
+	if(i + 2 > strLen) {
+		/* IPv6 addr requires at least 2 characters ("::") */
+		goto done;
+	}
+	c = str;
+
+	/* check that first block is non-empty */
+	if(! ( isxdigit(c[i]) || (c[i] == ':' && c[i+1] == ':') ) )
+		goto done;
+
+	/* try for all potential blocks plus one more (so we see errors!) */
+	for(int j = 0 ; j < 9 ; ++j) {
+		beginBlock = i;
+		if(skipIPv6AddrBlock(str, strLen, &i) != 0) goto done;
+		nBlocks++;
+		if(i == strLen) goto chk_ok;
+		if(isspace(c[i])) goto chk_ok;
+		if(c[i] == '.'){ /* IPv4 processing! */
+			hasIPv4 = 1;
+			break;
+		}
+		if(c[i] != ':') goto done;
+		i++; /* "eat" ':' */
+		if(i == strLen) goto chk_ok;
+		/* check for :: */
+		if(bHad0Abbrev) {
+			if(c[i] == ':') goto done;
+		} else {
+			if(c[i] == ':') {
+				bHad0Abbrev = 1;
+				++i;
+				if(i == strLen) goto chk_ok;
+			}
+		}
+	}
+
+	if(hasIPv4) {
+		size_t ipv4_parsed;
+		--nBlocks;
+		/* prevent pure IPv4 address to be recognized */
+		if(beginBlock == *offs) goto done;
+		i = beginBlock;
+		if(ln_parseIPv4(str, strLen, &i, node, &ipv4_parsed, NULL) != 0)
+			goto done;
+		i += ipv4_parsed;
+	}
+
+chk_ok:	/* we are finished parsing, check if things are ok */
+	if(nBlocks > 8) goto done;
+	if(bHad0Abbrev && nBlocks >= 8) goto done;
+	/* now check if trailing block is missing. Note that i is already
+	 * on next character, so we need to go two back. Two are always
+	 * present, else we would not reach this code here.
+	 */
+	if(c[i-1] == ':' && c[i-2] != ':') goto done;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
@@ -2593,7 +2698,7 @@ PARSER(MAC48)
 	size_t i = *offs;
 	char delim;
 
-	if(strLen < i + 17 || /* this motif has exactly 11 characters */
+	if(strLen < i + 17 || /* this motif has exactly 17 characters */
 	   !isxdigit(str[i]) ||
 	   !isxdigit(str[i+1])
 	   )
@@ -2633,6 +2738,371 @@ PARSER(MAC48)
 	}
 
 done:
-fflush(stderr);
+	return r;
+}
+
+
+/* This parses the extension value and updates the index
+ * to point to the end of it.
+ */
+static int
+cefParseExtensionValue(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *__restrict__ iEndVal)
+{
+	int r = 0;
+	size_t i = *iEndVal;
+	size_t iLastWordBegin;
+	/* first find next unquoted equal sign and record begin of
+	 * last word in front of it - this is the actual end of the
+	 * current name/value pair and the begin of the next one.
+	 */
+	int hadSP = 0;
+	int inEscape = 0;
+	for(iLastWordBegin = 0 ; i < strLen ; ++i) {
+		if(inEscape) {
+			if(str[i] != '=' &&
+			   str[i] != '\\' &&
+			   str[i] != 'r' &&
+			   str[i] != 'n')
+			FAIL(LN_WRONGPARSER);
+			inEscape = 0;
+		} else {
+			if(str[i] == '=') {
+				break;
+			} else if(str[i] == '\\') {
+				inEscape = 1;
+			} else if(str[i] == ' ') {
+				hadSP = 1;
+			} else {
+				if(hadSP) {
+					iLastWordBegin = i;
+					hadSP = 0;
+				}
+			}
+		}
+	}
+
+	/* Note: iLastWordBegin can never be at offset zero, because
+	 * the CEF header starts there!
+	 */
+	if(i < strLen) {
+		*iEndVal = (iLastWordBegin == 0) ? i : iLastWordBegin - 1;
+	} else {
+		*iEndVal = i;
+	}
+done:
+	return r;
+}
+
+/* must be positioned on first char of name, returns index
+ * of end of name.
+ * Note: ArcSight violates the CEF spec ifself: they generate
+ * leading underscores in their extension names, which are
+ * definetly not alphanumeric. We still accept them...
+ * They also seem to use dots.
+ */
+static int
+cefParseName(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ i)
+{
+	int r = 0;
+	while(*i < strLen && str[*i] != '=') {
+		if(!(isalnum(str[*i]) || str[*i] == '_' || str[*i] == '.'))
+			FAIL(LN_WRONGPARSER);
+		++(*i);
+	}
+done:
+	return r;
+}
+
+/* parse CEF extensions. They are basically name=value
+ * pairs with the ugly exception that values may contain
+ * spaces but need NOT to be quoted. Thankfully, at least
+ * names are specified as being alphanumeric without spaces
+ * in them. So we must add a lookahead parser to check if
+ * a word is a name (and thus the begin of a new pair) or
+ * not. This is done by subroutines.
+ */
+static int
+cefParseExtensions(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs,
+	json_object *const __restrict__ jroot)
+{
+	int r = 0;
+	size_t i = *offs;
+	size_t iName, lenName;
+	size_t iValue, lenValue;
+	
+	while(i < strLen) {
+		while(i < strLen && str[i] == ' ')
+			++i;
+		iName = i;
+		CHKR(cefParseName(str, strLen, &i));
+		if(i+1 >= strLen || str[i] != '=')
+			FAIL(LN_WRONGPARSER);
+		lenName = i - iName;
+		++i; /* skip '=' */
+
+		iValue = i;
+		CHKR(cefParseExtensionValue(str, strLen, &i));
+		lenValue = i - iValue;
+
+		++i; /* skip past value */
+
+		if(jroot != NULL) {
+			char *name;
+			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
+			memcpy(name, str+iName, lenName);
+			name[lenName] = '\0';
+			char *value;
+			CHKN(value = malloc(sizeof(char) * (lenValue + 1)));
+			/* copy value but escape it */
+			size_t iDst = 0;
+			for(size_t iSrc = 0 ; iSrc < lenValue ; ++iSrc) {
+				if(str[iValue+iSrc] == '\\') {
+					++iSrc; /* we know the next char must exist! */
+					switch(str[iValue+iSrc]) {
+					case '=':	value[iDst] = '=';
+							break;
+					case 'n':	value[iDst] = '\n';
+							break;
+					case 'r':	value[iDst] = '\r';
+							break;
+					case '\\':	value[iDst] = '\\';
+							break;
+					}
+				} else {
+					value[iDst] = str[iValue+iSrc];
+				}
+				++iDst;
+			}
+			value[iDst] = '\0';
+			json_object *json;
+			CHKN(json = json_object_new_string(value));
+			json_object_object_add(jroot, name, json);
+			free(name);
+			free(value);
+		}
+	}
+
+done:
+	return r;
+}
+
+/* gets a CEF header field. Must be positioned on the
+ * first char after the '|' in front of field.
+ * Note that '|' may be escaped as "\|", which also means
+ * we need to supprot "\\" (see CEF spec for details).
+ * We return the string in *val, if val is non-null. In
+ * that case we allocate memory that the caller must free.
+ * This is necessary because there are potentially escape
+ * sequences inside the string.
+ */
+static int
+cefGetHdrField(const char *const __restrict__ str,
+	const size_t strLen,
+	size_t *const __restrict__ offs,
+	char **val)
+{
+	int r = 0;
+	size_t i = *offs;
+	assert(str[i] != '|');
+	while(i < strLen && str[i] != '|') {
+		if(str[i] == '\\') {
+			++i; /* skip esc char */
+			if(str[i] != '\\' && str[i] != '|')
+				FAIL(LN_WRONGPARSER);
+		}
+		++i; /* scan to next delimiter */
+	}
+
+	if(str[i] != '|')
+		FAIL(LN_WRONGPARSER);
+
+	const size_t iBegin = *offs;
+	/* success, persist */
+	*offs = i + 1;
+
+	if(val == NULL) {
+		r = 0;
+		goto done;
+	}
+	
+	const size_t len = i - iBegin;
+	CHKN(*val = malloc(len + 1));
+	size_t iDst = 0;
+	for(size_t iSrc = 0 ; iSrc < len ; ++iSrc) {
+		if(str[iBegin+iSrc] == '\\')
+			++iSrc; /* we already checked above that this is OK! */
+		(*val)[iDst++] = str[iBegin+iSrc];
+	}
+	(*val)[iDst] = 0;
+	r = 0;
+done:
+	return r;
+}
+
+/**
+ * Parser for ArcSight Common Event Format (CEF) version 0.
+ * added 2015-05-05 by rgerhards, v1.1.2
+ */
+PARSER(CEF)
+	size_t i = *offs;
+	char *vendor = NULL;
+	char *product = NULL;
+	char *version = NULL;
+	char *sigID = NULL;
+	char *name = NULL;
+	char *severity = NULL;
+
+	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
+	if(strLen < i + 17 ||
+	   str[i]   != 'C' ||
+	   str[i+1] != 'E' ||
+	   str[i+2] != 'F' ||
+	   str[i+3] != ':' ||
+	   str[i+4] != '0' ||
+	   str[i+5] != '|'
+	   )	FAIL(LN_WRONGPARSER);
+	
+	i += 6; /* position on '|' */
+
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &vendor));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &product));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &version));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &sigID));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &name));
+	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &severity));
+	++i; /* skip over terminal '|' */
+
+	/* OK, we now know we have a good header. Now, we need
+	 * to process extensions.
+	 * This time, we do NOT pre-process the extension, but rather
+	 * persist them directly to JSON. This is contrary to other
+	 * parsers, but as the CEF header is pretty unique, this time
+	 * it is exteremely unlike we will get a no-match during
+	 * extension processing. Even if so, nothing bad happens, as
+	 * the extracted data is discarded. But the regular case saves
+	 * us processing time and complexity. The only time when we
+	 * cannot directly process it is when the caller asks us not
+	 * to persist the data. So this must be handled differently.
+	 */
+	 size_t iBeginExtensions = i;
+	 CHKR(cefParseExtensions(str, strLen, &i, NULL));
+
+	/* success, persist */
+	*parsed = *offs - i;
+	r = 0; /* success */
+
+	if(value != NULL) {
+		CHKN(*value = json_object_new_object());
+		json_object *json;
+		CHKN(json = json_object_new_string(vendor));
+		json_object_object_add(*value, "DeviceVendor", json);
+		CHKN(json = json_object_new_string(product));
+		json_object_object_add(*value, "DeviceProduct", json);
+		CHKN(json = json_object_new_string(version));
+		json_object_object_add(*value, "DeviceVersion", json);
+		CHKN(json = json_object_new_string(sigID));
+		json_object_object_add(*value, "SignatureID", json);
+		CHKN(json = json_object_new_string(name));
+		json_object_object_add(*value, "Name", json);
+		CHKN(json = json_object_new_string(severity));
+		json_object_object_add(*value, "Severity", json);
+
+		json_object *jext;
+		CHKN(jext = json_object_new_object());
+		json_object_object_add(*value, "Extensions", jext);
+
+		i = iBeginExtensions;
+		cefParseExtensions(str, strLen, &i, jext);
+	}
+
+done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(*value);
+		value = NULL;
+	}
+	free(vendor);
+	free(product);
+	free(version);
+	free(sigID);
+	free(name);
+	free(severity);
+	return r;
+}
+
+/**
+ * Parser for Checkpoint LEA on-disk format.
+ * added 2015-06-18 by rgerhards, v1.1.2
+ */
+PARSER(CheckpointLEA)
+	size_t i = *offs;
+	size_t iName, lenName;
+	size_t iValue, lenValue;
+	int foundFields = 0;
+
+	while(i < strLen) {
+		while(i < strLen && str[i] == ' ') /* skip leading SP */
+			++i;
+		if(i == strLen) { /* OK if just trailing space */
+			if(foundFields == 0)
+				FAIL(LN_WRONGPARSER);
+			break; /* we are done with the loop, all processed */
+		} else {
+			++foundFields;
+		}
+		iName = i;
+		/* TODO: do a stricter check? ... but we don't have a spec */
+		while(i < strLen && str[i] != ':') {
+			++i;
+		}
+		if(i+1 >= strLen || str[i] != ':')
+			FAIL(LN_WRONGPARSER);
+		lenName = i - iName;
+		++i; /* skip ':' */
+
+		while(i < strLen && str[i] == ' ') /* skip leading SP */
+			++i;
+		iValue = i;
+		while(i < strLen && str[i] != ';') {
+			++i;
+		}
+		if(i+1 > strLen || str[i] != ';')
+			FAIL(LN_WRONGPARSER);
+		lenValue = i - iValue;
+		++i; /* skip ';' */
+
+		if(value != NULL) {
+			char *name;
+			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
+			memcpy(name, str+iName, lenName);
+			name[lenName] = '\0';
+			char *val;
+			CHKN(val = malloc(sizeof(char) * (lenValue + 1)));
+			memcpy(val, str+iValue, lenValue);
+			val[lenValue] = '\0';
+			if(*value == NULL)
+				CHKN(*value = json_object_new_object());
+			json_object *json;
+			CHKN(json = json_object_new_string(val));
+			json_object_object_add(*value, name, json);
+			free(name);
+			free(val);
+		}
+	}
+
+	/* success, persist */
+	*parsed = *offs - i;
+	r = 0; /* success */
+
+done:
+	if(r != 0 && value != NULL && *value != NULL) {
+		json_object_put(*value);
+		value = NULL;
+	}
 	return r;
 }

@@ -331,6 +331,23 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 
     %ip-src:ipv4%
 
+ipv6
+####
+
+IPv6 address, in textual notation as specified in RFC4291.
+All formats specified in section 2.2 are supported, including
+embedded IPv4 address (e.g. "::13.1.68.3"). Note that a 
+**pure** IPv4 address ("13.1.68.3") is **not** valid and as
+such not recognized.
+
+To avoid false positives, there must be either a whitespace
+character after the IPv6 address or the end of string must be
+reached.
+
+::
+
+    %ip-src:ipv6%
+
 mac48
 #####
 
@@ -344,6 +361,63 @@ from: http://en.wikipedia.org/wiki/MAC_address
 ::
 
     %mac:mac48%
+
+cef
+###
+
+This parses ArcSight Comment Event Format (CEF) as described in 
+the "Implementing ArcSight CEF" manual revision 20 (2013-06-15).
+
+It matches a format that closely follows the spec. The header fields
+are extracted into the field name container, all extension are
+extracted into a container called "Extensions" beneath it.
+
+Example
+.......
+
+Rule::
+
+    rule=:%f:cef'
+
+Data::
+
+    CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a value cc=field 3
+
+Result::
+
+    {
+      "f": {
+        "DeviceVendor": "Vendor",
+        "DeviceProduct": "Product",
+        "DeviceVersion": "Version",
+        "SignatureID": "Signature ID",
+        "Name": "some name",
+        "Severity": "Severity",
+        "Extensions": {
+          "aa": "field1",
+          "bb": "this is a value",
+          "cc": "field 3"
+        }
+      }
+    }
+
+checkpoint-lea
+##############
+
+This supports the LEA on-disk format. Unfortunately, the format
+is underdocumented, the Checkpoint docs we could get hold of just
+describe the API and provide a field dictionary. In a nutshell, what
+we do is extract field names up to the colon and values up to the
+semicolon. No escaping rules are known to us, so we assume none
+exists (and as such no semicolon can be part of a value).
+
+If someone has a definitive reference or a sample set to contribute
+to the project, please let us know and we will check if we need to
+add additional transformations.
+
+::
+
+    %fields:checkpoint-lea%
 
 cisco-interface-spec
 ####################

@@ -636,8 +636,9 @@ done:
  *
  * @param[in] tree current tree to process
  * @param[in] string string to be matched against (the to-be-normalized data)
+ * @param[in] strLen length of the to-be-matched string
  * @param[in] offs start position in input data
- * @param[in/out] event handle to event that is being created during normalization
+ * @param[in/out] json ... that is being created during normalization
  * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
  * @return number of characters left unparsed by following the subtree, negative if
@@ -668,6 +669,7 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 		goto done;
 	}
 
+ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 	c = str;
 	cpfix = prefixBase(tree);
 	node = tree->froot;
@@ -732,8 +734,9 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 			ln_dbgprintf(tree->ctx, "parser returns %d, parsed %zu", localR, parsed);
 			if(localR == 0) {
 				/* potential hit, need to verify */
-				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
+				ln_dbgprintf(tree->ctx, "%zu: potential hit, trying subtree %p", offs, node->subtree);
 				left = ln_normalizeRec(node->subtree, str, strLen, i + parsed, json, endNode);
+				ln_dbgprintf(tree->ctx, "%zu: subtree returns %d", offs, r);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
@@ -764,8 +767,9 @@ ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t of
 					/* Free the value if it was created */
 					json_object_put(value);
 				}
-				if(left < r)
+				if(left > 0 && left < r)
 					r = left;
+				ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d, r now %d", offs, left, r);
 			}
 		}
 		node = node->next;
@@ -784,11 +788,13 @@ ln_dbgprintf(tree->ctx, "%zu no field, trying subtree char '%c': %p", offs, cc, 
 ln_dbgprintf(tree->ctx, "%zu no field, offset already beyond end", offs);
 }
 	/* now let's see if we have a literal */
-	if(tree->subtree[(int)str[offs]] != NULL) {
-		left = ln_normalizeRec(tree->subtree[(int)str[offs]],
+	if(tree->subtree[(unsigned char)str[offs]] != NULL) {
+		left = ln_normalizeRec(tree->subtree[(unsigned char)str[offs]],
 				       str, strLen, offs + 1, json, endNode);
+ln_dbgprintf(tree->ctx, "%zu got left %d, r %d", offs, left, r);
 		if(left < r)
 			r = left;
+ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 	}
 
 	if(r == 0 && (*endNode)->flags.isTerminal)
@@ -802,38 +808,30 @@ ln_dbgprintf(tree->ctx, "%zu no field, offset already beyond end", offs);
 		value = NULL;
 		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
 		left = ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
-		if(left == 0 && (*endNode)->flags.isTerminal) {
-			ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
-			if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
-				/* Store the value here; create json if not already created */
-				if (value == NULL) { 
-					CHKN(cstr = strndup(str + i, parsed));
-					value = json_object_new_string(cstr);
-					free(cstr);
-				}
-				if (value == NULL) {
-					ln_dbgprintf(tree->ctx, "unable to create json");
-					goto done;
-				}
-				namestr = ln_es_str2cstr(&restMotifNode->name);
-				json_object_object_add(json, namestr, value);
-			} else {
-				if (value != NULL) {
-					/* Free the unneeded value */
-					json_object_put(value);
-				}
+		assert(left == 0); /* with rest, we have this invariant */
+		assert((*endNode)->flags.isTerminal); /* this one also */
+		ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
+		if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
+			/* Store the value here; create json if not already created */
+			if (value == NULL) { 
+				CHKN(cstr = strndup(str + i, parsed));
+				value = json_object_new_string(cstr);
+				free(cstr);
 			}
-			r = 0;
-			goto done;
+			if (value == NULL) {
+				ln_dbgprintf(tree->ctx, "unable to create json");
+				goto done;
+			}
+			namestr = ln_es_str2cstr(&restMotifNode->name);
+			json_object_object_add(json, namestr, value);
+		} else {
+			if (value != NULL) {
+				/* Free the unneeded value */
+				json_object_put(value);
+			}
 		}
-		ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d",
-				offs, left);
-		if (value != NULL) {
-			/* Free the value if it was created */
-			json_object_put(value);
-		}
-		if(left < r)
-			r = left;
+		r = 0;
+		goto done;
 	}
 done:
 	ln_dbgprintf(tree->ctx, "%zu returns %d", offs, r);

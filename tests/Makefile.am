@@ -19,7 +19,10 @@ TESTS_SHELLSCRIPTS = \
 	field_rest.sh \
 	field_json.sh \
 	field_cee-syslog.sh \
+	field_ipv6.sh \
 	field_v2-iptables.sh \
+	field_cef.sh \
+	field_checkpoint-lea.sh \
 	field_duration.sh \
 	field_cisco-interface-spec.sh \
 	field_tokenized.sh \
