@@ -1,6 +1,6 @@
 # added 2014-12-11 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "value interpreting field"
+. ./exec.sh $0 "value interpreting field"
 
 add_rule 'rule=:%session_count:interpret:int:word% sessions established'
 execute '64 sessions established'

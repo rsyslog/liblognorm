@@ -1,6 +1,6 @@
 # added 2014-12-08 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "tokenized field with recursive field matching tokens"
+. ./exec.sh $0 "tokenized field with recursive field matching tokens"
 
 #recursive field inside tokenized field with default tail field
 add_rule 'rule=:%subnet_addr:ipv4%/%subnet_mask:number%%tail:rest%'

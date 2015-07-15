@@ -1,6 +1,6 @@
 # added 2015-04-30 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "v2-iptables field"
+. ./exec.sh $0 "v2-iptables field"
 add_rule 'rule=:iptables output denied: %field:v2-iptables%'
 
 # first, a real-world case

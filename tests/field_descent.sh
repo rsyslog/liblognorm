@@ -1,6 +1,6 @@
 # added 2014-12-11 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "descent based parsing field"
+. ./exec.sh $0 "descent based parsing field"
 
 #descent with default tail field
 add_rule 'rule=:blocked on %device:word% %net:descent:'$srcdir'/child.rulebase%at %tm:date-rfc5424%'

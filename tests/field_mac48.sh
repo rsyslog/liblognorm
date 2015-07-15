@@ -1,6 +1,6 @@
 # added 2015-05-05 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "dmac48 syntax"
+. ./exec.sh $0 "dmac48 syntax"
 add_rule 'rule=:%field:mac48%'
 
 execute 'f0:f6:1c:5f:cc:a2'

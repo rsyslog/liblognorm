@@ -1,6 +1,6 @@
 # added 2014-11-17 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "tokenized field"
+. ./exec.sh $0 "tokenized field"
 
 add_rule 'rule=:%arr:tokenized: , :word% %more:rest%'
 execute '123 , abc , 456 , def ijk789'

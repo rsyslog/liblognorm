@@ -11,9 +11,9 @@ fi
 
 cmd=../src/ln_test
 
-source ./options.sh
+. ./options.sh
 
-function execute() {
+execute() {
     if [ "x$debug" == "xon" ]; then
 	echo "======rulebase======="
 	cat tmp.rulebase
@@ -28,15 +28,15 @@ function execute() {
     fi
 }
 
-function assert_output_contains() {
+assert_output_contains() {
     cat test.out | grep -F "$1"
 }
 
-function assert_output_json_eq() {
+assert_output_json_eq() {
     ./json_eq "$1" "$(cat test.out)"
 }
 
-function rulebase_file_name() {
+rulebase_file_name() {
     if [ "x$1" == "x" ]; then
 	echo tmp.rulebase
     else
@@ -44,12 +44,12 @@ function rulebase_file_name() {
     fi
 }
 
-function reset_rules() {
+reset_rules() {
     local rb_file=$(rulebase_file_name $1)
     rm -f $rb_file
 }
 
-function add_rule() {
+add_rule() {
     local rb_file=$(rulebase_file_name $2)
     echo $1 >> $rb_file
 }

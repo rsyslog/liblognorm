@@ -1,6 +1,6 @@
 # added 2015-03-01 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "JSON field"
+. ./exec.sh $0 "JSON field"
 add_rule 'rule=:%field:json%'
 
 execute '{"f1": "1", "f2": 2}'

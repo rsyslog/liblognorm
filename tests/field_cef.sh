@@ -1,6 +1,6 @@
 # added 2015-05-05 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "CEF parser"
+. ./exec.sh $0 "CEF parser"
 add_rule 'rule=:%f:cef%'
 
 # fabricated tests to test specific functionality
