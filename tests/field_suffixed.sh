@@ -1,6 +1,6 @@
 # added 2015-02-25 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "field with one of many possible suffixes"
+. ./exec.sh $0 "field with one of many possible suffixes"
 
 add_rule 'rule=:gc reclaimed %eden_free:suffixed:,:b,kb,mb,gb:number% eden [surviver: %surviver_used:suffixed:;:kb;mb;gb;b:number%/%surviver_size:suffixed:|:b|kb|mb|gb:float%]'
 execute 'gc reclaimed 559mb eden [surviver: 95b/30.2mb]'

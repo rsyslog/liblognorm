@@ -23,6 +23,9 @@ Version 1.1.2, 2015-03-??
 - bugfix: misadressing on some constant values
   see also https://github.com/rsyslog/liblognorm/pull/67
   Thanks to github user ontholerian for the patch
+- bugfix: add missing function prototypes
+  This could potentially lead to problems on some platforms,
+  especially those with 64 bit pointers.
 ----------------------------------------------------------------------
 Version 1.1.1, 2015-03-09
 - fixed library version numbering

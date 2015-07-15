@@ -1,6 +1,6 @@
 # added 2014-12-15 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "descent based parsing field, with invalid ruledef"
+. ./exec.sh $0 "descent based parsing field, with invalid ruledef"
 
 #invalid parent field name
 add_rule 'rule=:%net:desce%'

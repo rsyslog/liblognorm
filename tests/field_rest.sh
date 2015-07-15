@@ -2,7 +2,7 @@
 # "rest" will not interfere with more specific rules.
 # added 2015-04-27
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "rest matches"
+. ./exec.sh $0 "rest matches"
 
 #tail recursion with default tail field
 add_rule 'rule=:%iface:char-to:\x3a%\x3a%ip:ipv4%/%port:number% (%label2:char-to:)%)'

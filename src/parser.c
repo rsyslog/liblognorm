@@ -30,6 +30,7 @@
 #include <ctype.h>
 #include <sys/types.h>
 #include <string.h>
+#include <strings.h>
 
 #include "json_compatibility.h"
 #include "liblognorm.h"
