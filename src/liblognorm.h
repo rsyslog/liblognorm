@@ -71,6 +71,8 @@
 #define LN_BADPARSERSTATE -500
 #define LN_WRONGPARSER -1000
 
+#define LN_RB_LINE_TOO_LONG -1001
+
 /**
  * The library context descriptor.
  * This is used to permit multiple independent instances of the

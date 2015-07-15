@@ -142,6 +142,9 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	node->parser_data_destructor = NULL;
 	CHKN(node->name = es_newStr(16));
 
+	/* skip leading whitespace in field name */
+	while(i < lenBuf && isspace(buf[i]))
+		++i;
 	while(i < lenBuf && buf[i] != ':') {
 		CHKR(es_addChar(&node->name, buf[i++]));
 	}
@@ -164,13 +167,23 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	}
 	++i; /* skip ':' */
 
-	/* parse and process type
-	 * Note: if we have a CEE dictionary, this part can be optional!
-	 */
+	/* parse and process type (trailing whitespace must be trimmed) */
 	es_emptyStr(*str);
-	while(i < lenBuf && buf[i] != ':' && buf[i] != '%') {
+ 	size_t j = i;
+	/* scan for terminator */
+	while(j < lenBuf && buf[j] != ':' && buf[j] != '%')
+		++j;
+	/* now trim trailing space backwards */
+	size_t next = j;
+	--j;
+	while(j >= i && isspace(buf[j]))
+		--j;
+	/* now copy */
+	while(i <= j) {
 		CHKR(es_addChar(str, buf[i++]));
 	}
+	/* finally move i to consumed position */
+	i = next;
 
 	if(i == lenBuf) {
 		FAIL(LN_INVLDFDESCR);
@@ -809,32 +822,43 @@ struct ln_samp *
 ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 {
 	struct ln_samp *samp = NULL;
-	int done = 0;
 	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
-	es_size_t lenBuf;
 
-	/* we ignore empty lines and lines that begin with "#" */
+	int linenbr = 1;
+	size_t i = 0;
+	int inParser = 0;
+	int done = 0;
 	while(!done) {
-		if(feof(repo->fp)) {
+		int c = fgetc(repo->fp);
+		if(c == EOF) {
 			*isEof = 1;
 			goto done;
-		}
-
-		buf[0] = '\0'; /* fgets does not empty its buffer! */
-		if (fgets(buf, sizeof(buf), repo->fp) != NULL) {
-            lenBuf = strlen(buf);
-            if(lenBuf == 0 || buf[0] == '#' || buf[0] == '\n')
-                continue;
-            if(buf[lenBuf - 1] == '\n') {
-                buf[lenBuf - 1] = '\0';
-                lenBuf--;
-            }
-            done = 1; /* we found a valid line */
+		} else if(c == '\n') {
+			++linenbr;
+			if(!inParser && i != 0)
+				done = 1;
+		} else if(c == '#' && i == 0) {
+			/* note: comments are only supported at beginning of line! */
+			/* skip to end of line */
+			do {
+				c = fgetc(repo->fp);
+			} while(c != EOF && c != '\n');
+			++linenbr;
+			i = 0; /* back to beginning */
+		} else {
+			if(c == '%')
+				inParser = (inParser) ? 0 : 1;
+			buf[i++] = c;
+			if(i >= sizeof(buf)) {
+				ln_dbgprintf(ctx, "line %d is too long", linenbr);
+				goto done;
+			}
 		}
 	}
+	buf[i] = '\0';
 
 	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
-	ln_processSamp(ctx, buf, lenBuf);
+	ln_processSamp(ctx, buf, i);
 
 done:
 	return samp;

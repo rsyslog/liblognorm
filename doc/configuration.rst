@@ -34,9 +34,11 @@ To keep your rulebase tidy, you can use commentaries. Start a commentary
 with "#" like in many other configurations. It should look like this::
 
     # The following prefix and rules are for firewall logs
+    
+Note that the comment character MUST be in the first column of the line.
 
 Empty lines are just skipped, they can be inserted for readability.
-    
+
 Rules
 -----
 
@@ -89,6 +91,31 @@ description are "%" and ":". For example, this will match anything up to
 (but not including) a colon::
 
     %variable:char-to:\x3a%
+
+Whitespace, including LF, is permitted inside a field definition after
+the opening precent sign and before the closing one. This can be used to
+make complex rules more readable. So the example rule from the overview
+section above could be rewritten as::
+
+    rule=:%
+          date:date-rfc3164
+          % %
+	  host:word
+	  % %
+	  tag:char-to:\x3a
+	  %: no longer listening on %
+	  ip:ipv4
+	  %#%
+	  port:number
+	  %'
+
+When doing this, note well that whitespace IS important inside the
+literal text. So e.g. in the second example line above "% %" we require
+a single SP as literal text. Note that any combination of your liking is
+valid, so it could also be written as::
+
+    rule=:%date:date-rfc3164% %host:word% % tag:char-to:\x3a
+          %: no longer listening on %  ip:ipv4  %#%  port:number  %'
 
 Additional information is dependent on the field type; only some field 
 types need additional information.
