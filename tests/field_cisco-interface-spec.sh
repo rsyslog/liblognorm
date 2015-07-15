@@ -1,6 +1,6 @@
 # added 2015-04-13 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "cisco-interface-spec syntax"
 add_rule 'rule=:begin %field:cisco-interface-spec% end'
@@ -38,3 +38,7 @@ execute 'begin outside:192.168.1.13/50179(192.168.1.13/50179)(LOCAL\some.user) e
 # note: the expected result looks a bit strange. This is the case because we
 # cannot (yet?) detect that "(192.168.1.13/50179)" is not a valid user name.
 assert_output_json_eq '{ "originalmsg": "begin outside:192.168.1.13\/50179(192.168.1.13\/50179)(LOCAL\\some.user) end", "unparsed-data": "(LOCAL\\some.user) end" }'
+
+
+cleanup_tmp_files
+

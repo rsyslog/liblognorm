@@ -2,7 +2,7 @@
 # "rest" will not interfere with more specific rules.
 # added 2015-04-27
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "rest matches"
 
@@ -36,3 +36,7 @@ assert_output_json_eq '{ "originalmsg": "Outside 10.20.30.40\/35 40.30.20.10\/35
 
 execute 'Outside:10.20.30.40/aa 40.30.20.10/35'
 assert_output_json_eq '{ "originalmsg": "Outside:10.20.30.40\/aa 40.30.20.10\/35", "unparsed-data": "aa 40.30.20.10\/35" }'
+
+
+cleanup_tmp_files
+

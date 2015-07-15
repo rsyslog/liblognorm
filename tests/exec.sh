@@ -57,4 +57,8 @@ add_rule() {
     echo $1 >> $rb_file
 }
 
+cleanup_tmp_files() {
+    rm -f test.out *.rulebase 
+}
+
 reset_rules

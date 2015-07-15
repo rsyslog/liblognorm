@@ -1,6 +1,6 @@
 # added 2014-12-11 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "value interpreting field, with invalid ruledef"
 
@@ -52,4 +52,8 @@ reset_rules
 add_rule 'rule=:%session_count:inter:int:word% sessions established'
 execute '64 sessions established'
 assert_output_json_eq '{ "originalmsg": "64 sessions established", "unparsed-data": "64 sessions established" }'
+
+
+
+cleanup_tmp_files
 

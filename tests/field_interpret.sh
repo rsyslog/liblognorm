@@ -1,6 +1,6 @@
 # added 2014-12-11 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "value interpreting field"
 
@@ -50,3 +50,7 @@ reset_rules
 add_rule 'rule=:gc pause: %pause_time:interpret:float:float%ms'
 execute 'gc pause: 12.3ms'
 assert_output_json_eq '{"pause_time": 12.3}'
+
+
+cleanup_tmp_files
+

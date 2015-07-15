@@ -1,6 +1,6 @@
 # added 2015-06-23 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "IPv6 parser"
 add_rule 'rule=:%f:ipv6%'
@@ -50,3 +50,7 @@ assert_output_json_eq '{ "originalmsg": "0:0:0:0:0:0:0:", "unparsed-data": "0:0:
 
 execute '13.1.68.3' # pure IPv4 address
 assert_output_json_eq '{ "originalmsg": "13.1.68.3", "unparsed-data": "13.1.68.3" }'
+
+
+cleanup_tmp_files
+

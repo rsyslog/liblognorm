@@ -1,6 +1,6 @@
 # added 2015-05-05 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh
+. $srcdir/exec.sh
 
 test_def $0 "dmac48 syntax"
 add_rule 'rule=:%field:mac48%'
@@ -18,3 +18,7 @@ assert_output_json_eq '{ "originalmsg": "f0-f6:1c:5f:cc-a2", "unparsed-data": "f
 
 execute 'f0:f6:1c:xf:cc:a2'
 assert_output_json_eq '{ "originalmsg": "f0:f6:1c:xf:cc:a2", "unparsed-data": "f0:f6:1c:xf:cc:a2" }'
+
+
+cleanup_tmp_files
+
