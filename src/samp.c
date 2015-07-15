@@ -259,7 +259,7 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
         node->parser_data_destructor = suffixed_parser_data_destructor;
     } else {
 		cstr = es_str2cstr(*str, NULL);
-		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
+		ln_errprintf(ctx, 0, "invalid field type '%s'", cstr);
 		free(cstr);
 		FAIL(LN_INVLDFDESCR);
 	}
