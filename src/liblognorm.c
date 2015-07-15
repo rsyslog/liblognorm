@@ -144,19 +144,19 @@ int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
-	struct ln_sampRepos *repo;
+	FILE *repo;
 	struct ln_samp *samp;
 	int isEof = 0;
 
 	CHECK_CTX;
 	if(file == NULL) ERR_ABORT;
-	if((repo = ln_sampOpen(ctx, file)) == NULL) ERR_ABORT;
+	if((repo = fopen(file, "r")) == NULL) ERR_ABORT;
 	while(!isEof) {
 		if((samp = ln_sampRead(ctx, repo, &isEof)) == NULL) {
 			/* TODO: what exactly to do? */
 		}
 	}
-	ln_sampClose(ctx, repo);
+	fclose(repo);
 
 done:
 	return r;

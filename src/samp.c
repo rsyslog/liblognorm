@@ -37,35 +37,6 @@
 #include "internal.h"
 #include "parser.h"
 
-struct ln_sampRepos*
-ln_sampOpen(ln_ctx __attribute((unused)) ctx, const char *name)
-{
-	struct ln_sampRepos *repo = NULL;
-	FILE *fp;
-
-	if((fp = fopen(name, "r")) == NULL)
-		goto done;
-
-	if((repo = calloc(1, sizeof(struct ln_sampRepos))) == NULL) {
-		fclose(fp);
-		goto done;
-	}
-
-	repo->fp = fp;
-
-done:
-	return repo;
-}
-
-
-void
-ln_sampClose(ln_ctx __attribute((unused)) ctx, struct ln_sampRepos *repo)
-{
-	if(repo->fp != NULL)
-		fclose(repo->fp);
-	free(repo);
-}
-
 
 /**
  * Construct a sample object.
@@ -817,7 +788,7 @@ done:
 
 
 struct ln_samp *
-ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
+ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
 {
 	struct ln_samp *samp = NULL;
 	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
@@ -827,7 +798,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 	int inParser = 0;
 	int done = 0;
 	while(!done) {
-		int c = fgetc(repo->fp);
+		int c = fgetc(repo);
 		if(c == EOF) {
 			*isEof = 1;
 			goto done;
@@ -839,7 +810,7 @@ ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
 			/* note: comments are only supported at beginning of line! */
 			/* skip to end of line */
 			do {
-				c = fgetc(repo->fp);
+				c = fgetc(repo);
 			} while(c != EOF && c != '\n');
 			++linenbr;
 			i = 0; /* back to beginning */
