@@ -123,11 +123,14 @@ typedef struct pcons_args_s pcons_args_t;
 
 static void free_pcons_args(pcons_args_t** dat_p) {
 	pcons_args_t *dat = *dat_p;
+	*dat_p = NULL;
+	if (! dat) {
+	  return;
+	}
 	while((--(dat->argc)) >= 0) {
 		if (dat->argv[dat->argc] != NULL) free(dat->argv[dat->argc]);
 	}
 	free(dat);
-	*dat_p = NULL;
 }
 
 static pcons_args_t* pcons_args(es_str_t *args, int expected_argc) {
@@ -1251,7 +1254,7 @@ PARSER(Regex)
 
 	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
 	if (pData != NULL) {
-		ovector = calloc(pData->max_groups, sizeof(int) * 3);
+		ovector = calloc(pData->max_groups, sizeof(unsigned int) * 3);
 		if (ovector == NULL) FAIL(LN_NOMEM);
 
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
@@ -1627,8 +1630,11 @@ static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_field
 		pData->nsuffix++;
 	}
 
+	if (pData->nsuffix == 0) {
+		FAIL(LN_INVLDFDESCR);
+	}
 	CHKN(pData->suffix_offsets = calloc(pData->nsuffix, sizeof(int)));
-    CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
+	CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
 	CHKN(pData->suffixes_str = pcons_arg_copy(args, 1, NULL));
 
 	tok_input = pData->suffixes_str;
@@ -1653,6 +1659,7 @@ done:
 		else if (tokenizer == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'", name);
 		else if (uncopied_suffixes_str == NULL)  ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
 		else if (suffixes_str == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (pData->nsuffix == 0)  ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
 		else if (pData->suffix_offsets == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: '%s'", name);
 		else if (pData->suffix_lengths == NULL)
