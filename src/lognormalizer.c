@@ -56,6 +56,13 @@ static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg 
 static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
 
 void
+errCallBack(void __attribute__((unused)) *cookie, const char *msg,
+	    size_t __attribute__((unused)) lenMsg)
+{
+	fprintf(stderr, "liblognorm error: %s\n", msg);
+}
+
+void
 dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
@@ -281,12 +288,16 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
+	ln_setErrMsgCB(ctx, errCallBack, NULL);
 	if(verbose) {
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
 	}
 
-	ln_loadSamples(ctx, repository);
+	if(ln_loadSamples(ctx, repository)) {
+		fprintf(stderr, "fatal error: cannot load rulebase\n");
+		exit(1);
+	}
 
 	if(verbose > 0)
 		fprintf(stderr, "number of tree nodes: %d\n", ctx->nNodes);

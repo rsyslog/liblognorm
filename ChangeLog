@@ -20,6 +20,13 @@ Version 1.1.2, 2015-03-??
   really is no compatibility to preserve.
   see also:
   http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
+- new API to support error callbacks 
+  This permits callers to forward messages in regard to e.g. wrong rule
+  bases to their users, which is very useful and actually missing in the
+  previous code base. So far, we only have few error messages.
+  However, we will review the code and add more. The important part is
+  that callers can begin to use the new API and thus will benefit when
+  we add more error messages.
 - testbench is now enabled by default
 - bugfix: misadressing on some constant values
   see also https://github.com/rsyslog/liblognorm/pull/67
