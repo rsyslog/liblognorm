@@ -1164,7 +1164,7 @@ static ln_fieldList_t* parse_tokenized_content_field(ln_ctx ctx, const char* fie
 	CHKR(es_addBuf(&descr, field_descr, field_descr_len));
 	CHKR(es_addChar(&descr, '%'));
 	es_size_t offset = 0;
-	CHKN(node = ln_parseFieldDescr(ctx, descr, &offset, &tmp, &r));
+	//TODO: think how to handle this with the new system CHKN(node = ln_parseFieldDescr(ctx, descr, &offset, &tmp, &r));
 	if (offset != es_strlen(descr)) FAIL(LN_BADPARSERSTATE);
 done:
 	if (r != 0) {
@@ -1182,6 +1182,7 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	pcons_args_t *args = NULL;
 	tokenized_parser_data_t *pData = NULL;
 	const char *field_descr = NULL;
+
 	ln_fieldList_t* field = NULL;
 	const char *tok = NULL;
 

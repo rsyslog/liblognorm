@@ -5,3 +5,6 @@
   and thereafter read-only. If urgently needed, we could change the code
   so that the unoptimized form is kept (memory intense) and a re-compile
   happens after each addition (time intense).
+- the plain old iptables parser is no longer supported. Sorry for that,
+  but keeping it would have caused violation of layers. It can be
+  replaced by the new one

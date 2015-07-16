@@ -23,6 +23,7 @@ lib_LTLIBRARIES = liblognorm.la
 
 liblognorm_la_SOURCES = \
 	liblognorm.c \
+	pdag.c \
 	ptree.c \
 	annot.c \
 	samp.c \
@@ -41,11 +42,11 @@ EXTRA_DIST = \
 	internal.h \
 	liblognorm.h \
 	lognorm.h \
-	ptree.h \
+	pdag.h \
 	annot.h \
 	samp.h \
 	enc.h \
 	parser.h \
 	json_compatibility.h
 
-include_HEADERS = liblognorm.h samp.h lognorm.h ptree.h annot.h enc.h parser.h lognorm-features.h
+include_HEADERS = liblognorm.h samp.h lognorm.h pdag.h annot.h enc.h parser.h lognorm-features.h

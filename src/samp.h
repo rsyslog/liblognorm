@@ -96,7 +96,7 @@ ln_sampFree(ln_ctx ctx, struct ln_samp *samp);
  * @param[out] return code (0 means success)
  * @return newly created node, which can be added to sample tree.
  */
-ln_fieldList_t*
+ln_parser_t*
 ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs,
 				   es_str_t **str, int* ret);
 

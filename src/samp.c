@@ -36,6 +36,7 @@
 #include "samp.h"
 #include "internal.h"
 #include "parser.h"
+#include "pdag.h"
 
 
 /**
@@ -60,6 +61,43 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 	free(samp);
 }
 
+/**
+ * Construct a parser node entry.
+ * @return parser node ptr or NULL (on error)
+ */
+ln_parser_t*
+ln_newParser(ln_ctx ctx, const char *const name, const prsid_t parserid, es_str_t *extraData)
+{
+	// TODO: needs to be extended when we begin to work with fields
+	ln_parser_t *node;
+
+	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
+		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
+		goto done;
+	}
+	node->node = NULL;
+	node->prio = 0;
+	node->data = extraData;
+	node->raw_data = (node->data == NULL) ? NULL : es_strdup(node->data);
+	node->parser_data = NULL;
+	node->name = strdup(name);
+	node->prsid = parserid;
+done:
+	return node;
+}
+
+/**
+ *  Construct a new literal parser.
+ */
+ln_parser_t *
+ln_newLiteralParser(ln_ctx ctx, char lit)
+{
+	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, NULL);
+	char buf[] = "x";
+	buf[0] = lit;
+	parser->parser_data = strdup(buf);
+	return parser;
+}
 
 /**
  * Extract a field description from a sample.
@@ -77,63 +115,71 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
  * @returns 0 on success, something else otherwise
  */
 static inline int
-addFieldDescr(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
+addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 	        es_size_t *bufOffs, es_str_t **str)
 {
 	int r;
-	ln_fieldList_t *node = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
-	assert(subtree != NULL);
+	ln_dbgprintf(ctx, "new offs %d", *bufOffs);
+	ln_parser_t *parser = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
+	ln_dbgprintf(ctx, "return parseFieldDescr %d, new offs %d", r, *bufOffs);
+	CHKR(r);
+	assert(subdag != NULL);
 
-	if (node != NULL) CHKR(ln_addFDescrToPTree(subtree, node));
+struct ln_pdag *dag = *pdag;
+	//if (node != NULL) CHKR(ln_addFDescrToPDAG(subdag, node));
+	CHKR(ln_pdagAddParser(pdag, parser));
+ln_dbgprintf((*pdag)->ctx, "---------------------------------------");
+ln_displayPDAG(dag, 0);
+ln_dbgprintf((*pdag)->ctx, "=======================================");
 done:
 	return r;
 }
 
-ln_fieldList_t*
+ln_parser_t*
 ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **str, int* ret)
 {
 	int r = 0;
-	ln_fieldList_t *node;
 	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
 	unsigned char *buf;
 	es_size_t lenBuf;
-	void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
+	// TODO: maybe later void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
+	char name[MAX_FIELDNAME_LEN];
+	size_t iDst;
+	ln_parser_t *parser = NULL;
 
 	buf = es_getBufAddr(rule);
 	lenBuf = es_strlen(rule);
 	assert(buf[i] == '%');
 	++i;	/* "eat" ':' */
-	CHKN(node = calloc(1, sizeof(ln_fieldList_t)));
-	node->subtree = NULL;
-	node->next = NULL;
-	node->data = NULL;
-	node->raw_data = NULL;
-	node->parser_data = NULL;
-	node->parser_data_destructor = NULL;
-	CHKN(node->name = es_newStr(16));
 
 	/* skip leading whitespace in field name */
 	while(i < lenBuf && isspace(buf[i]))
 		++i;
-	while(i < lenBuf && buf[i] != ':') {
-		CHKR(es_addChar(&node->name, buf[i++]));
+	for(  iDst = 0
+	    ; iDst < (MAX_FIELDNAME_LEN - 1) && i < lenBuf && buf[i] != ':'
+	    ; ++iDst) {
+		name[iDst] = buf[i++];
+	}
+	name[iDst] = '\0';
+	if(iDst == (MAX_FIELDNAME_LEN - 1)) {
+		ln_errprintf(ctx, 0, "field name too long in: %s", buf+(*bufOffs));
+		FAIL(LN_INVLDFDESCR);
+	}
+	if(i == lenBuf) {
+		ln_errprintf(ctx, 0, "field definition wrong in: %s", buf+(*bufOffs));
+		FAIL(LN_INVLDFDESCR);
 	}
 
-	if(es_strlen(node->name) == 0) {
+	if(iDst == 0) {
 		FAIL(LN_INVLDFDESCR);
 	}
 
 	if(ctx->debug) {
-		cstr = es_str2cstr(node->name, NULL);
-		ln_dbgprintf(ctx, "parsed field: '%s'", cstr);
-		free(cstr);
+		ln_dbgprintf(ctx, "parsed field: '%s'", name);
 	}
 
 	if(buf[i] != ':') {
-		/* may be valid later if we have a loaded CEE dictionary
-		 * and the name is present inside it.
-		 */
 		FAIL(LN_INVLDFDESCR);
 	}
 	++i; /* skip ':' */
@@ -160,150 +206,60 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		FAIL(LN_INVLDFDESCR);
 	}
 
-	node->isIPTables = 0; /* first assume no special parser is used */
-	if(!es_strconstcmp(*str, "date-rfc3164")) {
-		node->parser = ln_parseRFC3164Date;
-	} else if(!es_strconstcmp(*str, "date-rfc5424")) {
-		node->parser = ln_parseRFC5424Date;
-	} else if(!es_strconstcmp(*str, "number")) {
-		node->parser = ln_parseNumber;
-	} else if(!es_strconstcmp(*str, "float")) {
-		node->parser = ln_parseFloat;
-	} else if(!es_strconstcmp(*str, "hexnumber")) {
-		node->parser = ln_parseHexNumber;
-	} else if(!es_strconstcmp(*str, "kernel-timestamp")) {
-		node->parser = ln_parseKernelTimestamp;
-	} else if(!es_strconstcmp(*str, "whitespace")) {
-		node->parser = ln_parseWhitespace;
-	} else if(!es_strconstcmp(*str, "ipv4")) {
-		node->parser = ln_parseIPv4;
-	} else if(!es_strconstcmp(*str, "ipv6")) {
-		node->parser = ln_parseIPv6;
-	} else if(!es_strconstcmp(*str, "word")) {
-		node->parser = ln_parseWord;
-	} else if(!es_strconstcmp(*str, "alpha")) {
-		node->parser = ln_parseAlpha;
-	} else if(!es_strconstcmp(*str, "rest")) {
-		node->parser = ln_parseRest;
-	} else if(!es_strconstcmp(*str, "op-quoted-string")) {
-		node->parser = ln_parseOpQuotedString;
-	} else if(!es_strconstcmp(*str, "quoted-string")) {
-		node->parser = ln_parseQuotedString;
-	} else if(!es_strconstcmp(*str, "date-iso")) {
-		node->parser = ln_parseISODate;
-	} else if(!es_strconstcmp(*str, "time-24hr")) {
-		node->parser = ln_parseTime24hr;
-	} else if(!es_strconstcmp(*str, "time-12hr")) {
-		node->parser = ln_parseTime12hr;
-	} else if(!es_strconstcmp(*str, "duration")) {
-		node->parser = ln_parseDuration;
-	} else if(!es_strconstcmp(*str, "cisco-interface-spec")) {
-		node->parser = ln_parseCiscoInterfaceSpec;
-	} else if(!es_strconstcmp(*str, "name-value-list")) {
-		node->parser = ln_parseNameValue;
-	} else if(!es_strconstcmp(*str, "json")) {
-		node->parser = ln_parseJSON;
-	} else if(!es_strconstcmp(*str, "cee-syslog")) {
-		node->parser = ln_parseCEESyslog;
-	} else if(!es_strconstcmp(*str, "mac48")) {
-		node->parser = ln_parseMAC48;
-	} else if(!es_strconstcmp(*str, "name-value-list")) {
-		node->parser = ln_parseNameValue;
-	} else if(!es_strconstcmp(*str, "cef")) {
-		node->parser = ln_parseCEF;
-	} else if(!es_strconstcmp(*str, "checkpoint-lea")) {
-		node->parser = ln_parseCheckpointLEA;
-	} else if(!es_strconstcmp(*str, "v2-iptables")) {
-		node->parser = ln_parsev2IPTables;
-	} else if(!es_strconstcmp(*str, "iptables")) {
-		node->parser = NULL;
-		node->isIPTables = 1;
-	} else if(!es_strconstcmp(*str, "string-to")) {
-		/* TODO: check extra data!!!! (very important) */
-		node->parser = ln_parseStringTo;
-	} else if(!es_strconstcmp(*str, "char-to")) {
-		/* TODO: check extra data!!!! (very important) */
-		node->parser = ln_parseCharTo;
-	} else if(!es_strconstcmp(*str, "char-sep")) {
-		/* TODO: check extra data!!!! (very important) */
-		node->parser = ln_parseCharSeparated;
-	} else if(!es_strconstcmp(*str, "tokenized")) {
-		node->parser = ln_parseTokenized;
-		constructor_fn = tokenized_parser_data_constructor;
-		node->parser_data_destructor = tokenized_parser_data_destructor;
-	}
-#ifdef FEATURE_REGEXP
-	else if(!es_strconstcmp(*str, "regex")) {
-		node->parser = ln_parseRegex;
-		constructor_fn = regex_parser_data_constructor;
-		node->parser_data_destructor = regex_parser_data_destructor;
-	}
-#endif
-    else if (!es_strconstcmp(*str, "recursive")) {
-        node->parser = ln_parseRecursive;
-        constructor_fn = recursive_parser_data_constructor;
-        node->parser_data_destructor = recursive_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "descent")) {
-        node->parser = ln_parseRecursive;
-        constructor_fn = descent_parser_data_constructor;
-        node->parser_data_destructor = recursive_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "interpret")) {
-        node->parser = ln_parseInterpret;
-        constructor_fn = interpret_parser_data_constructor;
-        node->parser_data_destructor = interpret_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "suffixed")) {
-        node->parser = ln_parseSuffixed;
-        constructor_fn = suffixed_parser_data_constructor;
-        node->parser_data_destructor = suffixed_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "named_suffixed")) {
-        node->parser = ln_parseSuffixed;
-        constructor_fn = named_suffixed_parser_data_constructor;
-        node->parser_data_destructor = suffixed_parser_data_destructor;
-    } else {
-		cstr = es_str2cstr(*str, NULL);
+	cstr = es_str2cstr(*str, NULL);
+	ln_dbgprintf(ctx, "field type '%s', i %d", cstr, i);
+	const prsid_t prsid = ln_parserName2ID(cstr);
+    	if(prsid == PRS_INVALID) {
 		ln_errprintf(ctx, 0, "invalid field type '%s'", cstr);
 		free(cstr);
 		FAIL(LN_INVLDFDESCR);
 	}
+	free(cstr);
 
+	es_str_t *edata = NULL;
 	if(buf[i] == '%') {
 		i++;
 	} else {
 		/* parse extra data */
-		CHKN(node->data = es_newStr(8));
+		CHKN(edata = es_newStr(8));
 		i++;
 		while(i < lenBuf) {
 			if(buf[i] == '%') {
 				++i;
 				break; /* end of field */
 			}
-			CHKR(es_addChar(&node->data, buf[i++]));
+			CHKR(es_addChar(&edata, buf[i++]));
 		}
-		node->raw_data = es_strdup(node->data);
-		es_unescapeStr(node->data);
+		// TODO: later: node->raw_data = es_strdup(edata);
+		es_unescapeStr(edata);
 		if(ctx->debug) {
-			cstr = es_str2cstr(node->data, NULL);
+			cstr = es_str2cstr(edata, NULL);
 			ln_dbgprintf(ctx, "parsed extra data: '%s'", cstr);
 			free(cstr);
 		}
 	}
 
-	if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
+	// TODO: maybe later: if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
 
+	parser = ln_newParser(ctx, name, prsid, edata);
 
 	*bufOffs = i;
 done:
-	if (r != 0) {
-		if (node->name != NULL) es_deleteStr(node->name);
-		free(node);
-		node = NULL;
-	}
 	*ret = r;
-	return node;
+	return parser;
 }
 
 /**
  * Parse a Literal string out of the template and add it to the tree.
+ * This function is used to create the unoptimized tree. So we do
+ * one node for each character. These will be compacted by the optimizer
+ * in a later stage. The advantage is that we do not need to care about
+ * splitting the tree. As such the processing is fairly simple:
+ *
+ *   for each character in literal (left-to-right):
+ *      create literal parser object o
+ *      add new DAG node o, advance to it
+ *
  * @param[in] ctx the context
  * @param[in/out] subtree on entry, current subtree, on exist newest
  *    		deepest subtree
@@ -311,22 +267,20 @@ done:
  * @param[in/out] bufOffs parse pointer, up to which offset is parsed
  * 		(is updated so that it points to first char after consumed
  * 		string on exit).
- * @param[out] str literal extracted (is empty, when no litral could be found)
+ * @param    str a work buffer, provided to prevent creation of a new object
  * @return 0 on success, something else otherwise
  */
 static inline int
-parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
-	     es_size_t *bufOffs, es_str_t **str)
+parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
+	     es_size_t *const __restrict__ bufOffs, es_str_t **str)
 {
 	int r = 0;
-	es_size_t i = *bufOffs;
-	unsigned char *buf;
-	es_size_t lenBuf;
+	size_t i = *bufOffs;
+	unsigned char *buf = es_getBufAddr(rule);;
+	const size_t lenBuf = es_strlen(rule);;
+	const char *cstr = NULL;
 
 	es_emptyStr(*str);
-	buf = es_getBufAddr(rule);
-	lenBuf = es_strlen(rule);
-	/* extract maximum length literal */
 	while(i < lenBuf) {
 		if(buf[i] == '%') {
 			if(i+1 < lenBuf && buf[i+1] != '%') {
@@ -339,17 +293,31 @@ parseLiteral(ln_ctx ctx, struct ln_ptree **subtree, es_str_t *rule,
 	}
 
 	es_unescapeStr(*str);
+	cstr = es_str2cstr(*str, NULL);
 	if(ctx->debug) {
-		char *cstr = es_str2cstr(*str, NULL);
 		ln_dbgprintf(ctx, "parsed literal: '%s'", cstr);
-		free(cstr);
 	}
 
-	*subtree = ln_buildPTree(*subtree, *str, 0);
 	*bufOffs = i;
+
+ln_pdag *dag = *pdag;
+	/* we now add the string to the tree */
+	for(i = 0 ; cstr[i] != '\0' ; ++i) {
+		ln_parser_t *parser;
+		// TODO create parser, add to tree
+		ln_dbgprintf(ctx, "adding literal node: '%c'", cstr[i]);
+		parser = ln_newLiteralParser(ctx, cstr[i]);
+		CHKR(ln_pdagAddParser(pdag, parser));
+ln_dbgprintf(dag->ctx, "---------------------------------------");
+ln_displayPDAG(dag, 0);
+ln_dbgprintf(dag->ctx, "=======================================");
+	}
+
 	r = 0;
 
-done:	return r;
+done:
+	free((void*)cstr);
+	return r;
 }
 
 
@@ -371,11 +339,11 @@ static inline int
 addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 {
 	int r = -1;
-	struct ln_ptree* subtree;
+	struct ln_pdag* subtree;
 	es_str_t *str = NULL;
 	es_size_t i;
 
-	subtree = ctx->ptree;
+	subtree = ctx->pdag;
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
@@ -573,7 +541,7 @@ processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 	es_str_t *str;
 	struct json_object *tagBucket = NULL;
 
-	ln_dbgprintf(ctx, "sample line to add: '%s'\n", buf+offs);
+	ln_dbgprintf(ctx, "rule line to add: '%s'", buf+offs);
 	CHKR(processTags(ctx, buf, lenBuf, &offs, &tagBucket));
 
 	if(offs == lenBuf) {
@@ -793,7 +761,7 @@ struct ln_samp *
 ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
 {
 	struct ln_samp *samp = NULL;
-	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
+	char buf[64*1024]; /**< max size of rule - TODO: make configurable */
 
 	int linenbr = 1;
 	size_t i = 0;
@@ -828,8 +796,11 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 	}
 	buf[i] = '\0';
 
-	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
+	ln_dbgprintf(ctx, "read rule base line: '%s'", buf);
 	ln_processSamp(ctx, buf, i);
+ln_dbgprintf(ctx, "--FINAL--------------------------------");
+ln_displayPDAG(ctx->pdag, 0);
+ln_dbgprintf(ctx, "=======================================");
 
 done:
 	return samp;

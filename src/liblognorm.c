@@ -72,16 +72,16 @@ ln_initCtx(void)
 	ctx->allowRegex = 0;
 
 	/* we add an root for the empty word, this simplifies parse
-	 * tree handling.
+	 * dag handling.
 	 */
-	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
+	if((ctx->pdag = ln_newPDAG(ctx)) == NULL) {
 		free(ctx);
 		ctx = NULL;
 		goto done;
 	}
 	/* same for annotation set */
 	if((ctx->pas = ln_newAnnotSet(ctx)) == NULL) {
-		ln_deletePTree(ctx->ptree);
+		ln_deletePDAG(ctx->pdag);
 		free(ctx);
 		ctx = NULL;
 		goto done;
@@ -105,8 +105,8 @@ ln_exitCtx(ln_ctx ctx)
 	CHECK_CTX;
 
 	ctx->objID = LN_ObjID_None; /* prevent double free */
-	if(ctx->ptree != NULL)
-		ln_deletePTree(ctx->ptree);
+	if(ctx->pdag != NULL)
+		ln_deletePDAG(ctx->pdag);
 	if(ctx->rulePrefix != NULL)
 		es_deleteStr(ctx->rulePrefix);
 	if(ctx->pas != NULL)

@@ -28,8 +28,11 @@
 #define	LIBLOGNORM_LOGNORM_HINCLUDED
 #include <stdlib.h>	/* we need size_t */
 #include "liblognorm.h"
-#include "ptree.h"
+#include "pdag.h"
 #include "annot.h"
+
+/* some limits */
+#define MAX_FIELDNAME_LEN 1024
 
 #define LN_ObjID_None 0xFEFE0001
 #define LN_ObjID_CTX 0xFEFE0001
@@ -42,7 +45,8 @@ struct ln_ctx_s {
 	void (*errmsgCB)(void *cookie, const char *msg, size_t lenMsg);
 		/**< user-provided error message callback */
 	void *errmsgCookie; /**< cookie to be passed to error message callback */
-	ln_ptree *ptree; /**< parse tree being used by this context */
+	ln_pdag *pdag; /**< parse dag being used by this context */
+struct ln_ptree *ptree; // TODO: remove, just left in to help us compile tools for testing in early stages
 	ln_annotSet *pas; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */
 	unsigned char debug; /**< boolean: are we in debug mode? */
