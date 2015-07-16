@@ -1,6 +1,8 @@
 # added 2014-12-11 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "value interpreting field"
+. $srcdir/exec.sh
+
+test_def $0 "value interpreting field"
 
 add_rule 'rule=:%session_count:interpret:int:word% sessions established'
 execute '64 sessions established'
@@ -48,3 +50,7 @@ reset_rules
 add_rule 'rule=:gc pause: %pause_time:interpret:float:float%ms'
 execute 'gc pause: 12.3ms'
 assert_output_json_eq '{"pause_time": 12.3}'
+
+
+cleanup_tmp_files
+

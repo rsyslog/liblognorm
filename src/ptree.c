@@ -807,7 +807,10 @@ ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 		ln_dbgprintf(tree->ctx, "rule has rest motif, forcing match via it\n");
 		value = NULL;
 		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
-		left = ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
+#		ifndef NDEBUG
+		left = /* we only need this for the assert below */
+#		endif
+		       ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
 		assert(left == 0); /* with rest, we have this invariant */
 		assert((*endNode)->flags.isTerminal); /* this one also */
 		ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);

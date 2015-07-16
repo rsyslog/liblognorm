@@ -1,6 +1,8 @@
 # added 2015-04-25 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "name/value parser"
+. $srcdir/exec.sh
+
+test_def $0 "name/value parser"
 add_rule 'rule=:%f:name-value-list%'
 
 execute 'name=value'
@@ -24,3 +26,7 @@ assert_output_json_eq ' {"originalmsg": "name", "unparsed-data": "name" }'
 
 execute 'noname1 name2=value2 name3=value3 '
 assert_output_json_eq '{ "originalmsg": "noname1 name2=value2 name3=value3 ", "unparsed-data": "noname1 name2=value2 name3=value3 " }'
+
+
+cleanup_tmp_files
+

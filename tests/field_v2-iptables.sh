@@ -1,6 +1,8 @@
 # added 2015-04-30 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "v2-iptables field"
+. $srcdir/exec.sh
+
+test_def $0 "v2-iptables field"
 add_rule 'rule=:iptables output denied: %field:v2-iptables%'
 
 # first, a real-world case
@@ -56,3 +58,7 @@ assert_output_json_eq '{ "originalmsg": "iptables: IN=  OUT=outvalue", "unparsed
 
 execute 'iptables: IN  OUT=outvalue'
 assert_output_json_eq '{ "originalmsg": "iptables: IN  OUT=outvalue", "unparsed-data": "IN  OUT=outvalue" }'
+
+
+cleanup_tmp_files
+

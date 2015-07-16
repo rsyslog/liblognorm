@@ -1,6 +1,8 @@
 # added 2015-03-01 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "JSON field"
+. $srcdir/exec.sh
+
+test_def $0 "JSON field"
 add_rule 'rule=:%field:json%'
 
 execute '{"f1": "1", "f2": 2}'
@@ -55,3 +57,7 @@ add_rule 'rule=:%field:json%'
 # https://github.com/json-c/json-c/issues/181
 execute '15:00'
 assert_output_json_eq '{ "originalmsg": "15:00", "unparsed-data": "15:00" }'
+
+
+cleanup_tmp_files
+

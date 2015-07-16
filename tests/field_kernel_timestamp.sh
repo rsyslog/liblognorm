@@ -1,6 +1,8 @@
 # added 2015-03-12 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "kernel timestamp parser"
+. $srcdir/exec.sh
+
+test_def $0 "kernel timestamp parser"
 add_rule 'rule=:begin %timestamp:kernel-timestamp% end'
 execute 'begin [12345.123456] end'
 assert_output_json_eq '{ "timestamp": "[12345.123456]"}'
@@ -41,3 +43,7 @@ assert_output_json_eq '{ "originalmsg": "(123456789012.123456]", "unparsed-data"
 
 execute '[123456789012.123456'
 assert_output_json_eq '{ "originalmsg": "[123456789012.123456", "unparsed-data": "[123456789012.123456" }'
+
+
+cleanup_tmp_files
+

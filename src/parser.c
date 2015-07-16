@@ -123,11 +123,14 @@ typedef struct pcons_args_s pcons_args_t;
 
 static void free_pcons_args(pcons_args_t** dat_p) {
 	pcons_args_t *dat = *dat_p;
+	*dat_p = NULL;
+	if (! dat) {
+	  return;
+	}
 	while((--(dat->argc)) >= 0) {
 		if (dat->argv[dat->argc] != NULL) free(dat->argv[dat->argc]);
 	}
 	free(dat);
-	*dat_p = NULL;
 }
 
 static pcons_args_t* pcons_args(es_str_t *args, int expected_argc) {
@@ -197,7 +200,6 @@ PARSER(RFC5424Date)
 	int second;
 	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
 	__attribute__((unused)) int secfracPrecision;
-	__attribute__((unused)) char OffsetMode;	/* UTC offset + or - */
 	char OffsetHour;	/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	size_t len;
@@ -256,11 +258,7 @@ PARSER(RFC5424Date)
 	if(*pszTS == 'Z') {
 		--len;
 		pszTS++; /* eat Z */
-		OffsetMode = 'Z';
-		OffsetHour = 0;
-		OffsetMinute = 0;
 	} else if((*pszTS == '+') || (*pszTS == '-')) {
-		OffsetMode = *pszTS;
 		--len;
 		pszTS++;
 
@@ -1256,7 +1254,7 @@ PARSER(Regex)
 
 	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
 	if (pData != NULL) {
-		ovector = calloc(pData->max_groups, sizeof(int) * 3);
+		ovector = calloc(pData->max_groups, sizeof(unsigned int) * 3);
 		if (ovector == NULL) FAIL(LN_NOMEM);
 
 		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
@@ -1632,8 +1630,11 @@ static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_field
 		pData->nsuffix++;
 	}
 
+	if (pData->nsuffix == 0) {
+		FAIL(LN_INVLDFDESCR);
+	}
 	CHKN(pData->suffix_offsets = calloc(pData->nsuffix, sizeof(int)));
-    CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
+	CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
 	CHKN(pData->suffixes_str = pcons_arg_copy(args, 1, NULL));
 
 	tok_input = pData->suffixes_str;
@@ -1658,6 +1659,7 @@ done:
 		else if (tokenizer == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'", name);
 		else if (uncopied_suffixes_str == NULL)  ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
 		else if (suffixes_str == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (pData->nsuffix == 0)  ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
 		else if (pData->suffix_offsets == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: '%s'", name);
 		else if (pData->suffix_lengths == NULL)
@@ -1753,7 +1755,7 @@ PARSER(Rest)
 PARSER(OpQuotedString)
 	const char *c;
 	size_t i;
-	char *cstr;
+	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1787,10 +1789,10 @@ PARSER(OpQuotedString)
 	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	}
 	CHKN(*value = json_object_new_string(cstr));
-	free(cstr);
 
 	r = 0; /* success */
 done:
+	free(cstr);
 	return r;
 }
 
@@ -1804,7 +1806,7 @@ done:
 PARSER(QuotedString)
 	const char *c;
 	size_t i;
-	char *cstr;
+	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1830,9 +1832,9 @@ PARSER(QuotedString)
 	/* create JSON value to save quoted string contents */
 	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	CHKN(*value = json_object_new_string(cstr));
-	free(cstr);
 	r = 0; /* success */
 done:
+	free(cstr);
 	return r;
 }
 
@@ -1920,6 +1922,7 @@ PARSER(CiscoInterfaceSpec)
 	 */
 	int bHaveInterface = 0;
 	size_t idxInterface;
+	size_t lenInterface;
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
@@ -1934,10 +1937,10 @@ PARSER(CiscoInterfaceSpec)
 				break;
 			++i;
 		}
+		lenInterface = i - idxInterface;
 		bHaveInterface = 1;
 	}
 	if(i == strLen) goto done;
-	const int lenInterface = i - idxInterface;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
@@ -2836,6 +2839,8 @@ cefParseExtensions(const char *const __restrict__ str,
 	size_t i = *offs;
 	size_t iName, lenName;
 	size_t iValue, lenValue;
+	char *name = NULL;
+	char *value = NULL;
 	
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ')
@@ -2854,11 +2859,9 @@ cefParseExtensions(const char *const __restrict__ str,
 		++i; /* skip past value */
 
 		if(jroot != NULL) {
-			char *name;
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, str+iName, lenName);
 			name[lenName] = '\0';
-			char *value;
 			CHKN(value = malloc(sizeof(char) * (lenValue + 1)));
 			/* copy value but escape it */
 			size_t iDst = 0;
@@ -2884,12 +2887,14 @@ cefParseExtensions(const char *const __restrict__ str,
 			json_object *json;
 			CHKN(json = json_object_new_string(value));
 			json_object_object_add(jroot, name, json);
-			free(name);
-			free(value);
+			free(name); name = NULL;
+			free(value); value = NULL;
 		}
 	}
 
 done:
+	free(name);
+	free(value);
 	return r;
 }
 
@@ -3045,6 +3050,8 @@ PARSER(CheckpointLEA)
 	size_t iName, lenName;
 	size_t iValue, lenValue;
 	int foundFields = 0;
+	char *name = NULL;
+	char *val = NULL;
 
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ') /* skip leading SP */
@@ -3078,11 +3085,9 @@ PARSER(CheckpointLEA)
 		++i; /* skip ';' */
 
 		if(value != NULL) {
-			char *name;
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, str+iName, lenName);
 			name[lenName] = '\0';
-			char *val;
 			CHKN(val = malloc(sizeof(char) * (lenValue + 1)));
 			memcpy(val, str+iValue, lenValue);
 			val[lenValue] = '\0';
@@ -3091,8 +3096,8 @@ PARSER(CheckpointLEA)
 			json_object *json;
 			CHKN(json = json_object_new_string(val));
 			json_object_object_add(*value, name, json);
-			free(name);
-			free(val);
+			free(name); name = NULL;
+			free(val); val = NULL;
 		}
 	}
 
@@ -3101,6 +3106,8 @@ PARSER(CheckpointLEA)
 	r = 0; /* success */
 
 done:
+	free(name);
+	free(val);
 	if(r != 0 && value != NULL && *value != NULL) {
 		json_object_put(*value);
 		value = NULL;

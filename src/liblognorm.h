@@ -174,6 +174,16 @@ ln_setCtxOpts(ln_ctx ctx, int allow_regex);
  */
 int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie);
 
+/**
+ * Set a error message handler (callback).
+ *
+ * If set, this is used to emit error messages of interest to the user, e.g.
+ * on failures during rulebase load. It is suggested that a caller uses this
+ * feedback to aid its users in resolving issues.
+ * Its semantics are otherwise exactly the same like ln_setDebugCB().
+ */
+int ln_setErrMsgCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie);
+
 
 /**
  * enable or disable debug mode.

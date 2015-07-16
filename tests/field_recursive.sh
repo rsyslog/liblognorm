@@ -1,6 +1,8 @@
 # added 2014-11-26 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "recursive parsing field"
+. $srcdir/exec.sh
+
+test_def $0 "recursive parsing field"
 
 #tail recursion with default tail field
 add_rule 'rule=:%word:word% %next:recursive%'
@@ -51,4 +53,8 @@ execute 'blocked on gw-1 10.20.30.40 at 2014-12-08T08:53:33.05+05:30'
 assert_output_json_eq '{"device": "gw-1", "net": {"ip_addr": "10.20.30.40"}, "tm": "2014-12-08T08:53:33.05+05:30"}'
 execute 'blocked on gw-1 10.20.30.40/16 at 2014-12-08T08:53:33.05+05:30'
 assert_output_json_eq '{"device": "gw-1", "net": {"subnet_addr": "10.20.30.40", "mask": "16"}, "tm": "2014-12-08T08:53:33.05+05:30"}'
+
+
+
+cleanup_tmp_files
 

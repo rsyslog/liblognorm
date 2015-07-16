@@ -39,6 +39,9 @@ struct ln_ctx_s {
 	void (*dbgCB)(void *cookie, const char *msg, size_t lenMsg);
 		/**< user-provided debug output callback */
 	void *dbgCookie; /**< cookie to be passed to debug callback */
+	void (*errmsgCB)(void *cookie, const char *msg, size_t lenMsg);
+		/**< user-provided error message callback */
+	void *errmsgCookie; /**< cookie to be passed to error message callback */
 	ln_ptree *ptree; /**< parse tree being used by this context */
 	ln_annotSet *pas; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */
@@ -53,5 +56,6 @@ struct ln_ctx_s {
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));
+void ln_errprintf(ln_ctx ctx, const int eno, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 
 #endif /* #ifndef LIBLOGNORM_LOGNORM_HINCLUDED */

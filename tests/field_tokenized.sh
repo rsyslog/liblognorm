@@ -1,6 +1,8 @@
 # added 2014-11-17 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-. ./exec.sh $0 "tokenized field"
+. $srcdir/exec.sh
+
+test_def $0 "tokenized field"
 
 add_rule 'rule=:%arr:tokenized: , :word% %more:rest%'
 execute '123 , abc , 456 , def ijk789'
@@ -22,3 +24,7 @@ reset_rules
 add_rule 'rule=:%arr:tokenized:\x3a:number% %more:rest%'
 execute '123:456:789 ijk789'
 assert_output_json_eq '{"arr": [ "123", "456", "789" ], "more": "ijk789"}'
+
+
+cleanup_tmp_files
+
