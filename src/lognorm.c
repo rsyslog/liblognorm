@@ -69,7 +69,7 @@ ln_dbgprintf(ln_ctx ctx, char *fmt, ...)
 	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if(lenBuf >= sizeof(buf)) {
-		/* prevent buffer overrruns and garbagge display */
+		/* prevent buffer overruns and garbagge display */
 		buf[sizeof(buf) - 5] = '.';
 		buf[sizeof(buf) - 4] = '.';
 		buf[sizeof(buf) - 3] = '.';

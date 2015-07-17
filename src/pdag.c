@@ -32,7 +32,7 @@
  * order of parser IDs (also see comment in pdag.h).
  */
 static struct ln_parser_info parser_lookup_table[] = {
-	{ "literal", NULL, NULL }, /* PRS_LITERAL */
+	{ "literal", ln_parseLiteral, NULL }, /* PRS_LITERAL */
 	{ "date-rfc3164", ln_parseRFC3164Date, NULL },
 	{ "date-rfc5424", ln_parseRFC5424Date, NULL },
 	{ "number", ln_parseNumber, NULL },
@@ -224,7 +224,7 @@ ln_displayPDAG(struct ln_pdag *dag, int level)
 		if(dag->parsers->data == NULL)
 			ed = strdup("");
 		else
-			ed = es_str2cstr(dag->parsers->data, 1);
+			ed = es_str2cstr(dag->parsers->data, " ");
 		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s', ed '%s':", indent,
 			parserName(dag->parsers[i].prsid),
 			dag->parsers[i].name,
@@ -383,20 +383,22 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
 		i = offs;
 		value = NULL;
 		// TODO: remove special handling, implement parser
+#if 0
 		if(prs->prsid == PRS_LITERAL) {
 			ln_dbgprintf(dag->ctx, "literal compare '%c' vs '%c'", str[i], ((char*)prs->parser_data)[0]);
 			localR = (str[i] == ((char*)prs->parser_data)[0]) ? 0 : LN_WRONGPARSER;
 			i++; /* one char consumed */
 		} else {
+#endif
 			localR = parser_lookup_table[prs->prsid].parser(str, strLen,
 				&i, prs, &parsed, &value);
-		}
+		//}
 		ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
 		if(localR == 0) {
-			parsedTo = i;
+			parsedTo = i + parsed;
 			/* potential hit, need to verify */
 			ln_dbgprintf(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
-			r = ln_normalizeRec(prs->node, str, strLen, i + parsed, &parsedTo, json, endNode);
+			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, &parsedTo, json, endNode);
 			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d", offs, r);
 			if(r == 0 && (*endNode)->flags.isTerminal) {
 				ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);

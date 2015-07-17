@@ -97,6 +97,11 @@ int ln_parseAlpha(const char *str, size_t strlen, size_t *offs, const ln_parser_
 
 
 /** 
+ * Parse a specific literal. This one never stores data except if instructed to do so.
+ */
+int ln_parseLiteral(const char *str, size_t strlen, size_t *offs, const ln_parser_t *const node, size_t *parsed, struct json_object **value);
+
+/** 
  * Parse everything up to a specific character.
  */
 int ln_parseCharTo(const char *str, size_t strlen, size_t *offs, const ln_parser_t *const node, size_t *parsed, struct json_object **value);

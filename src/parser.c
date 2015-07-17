@@ -850,6 +850,47 @@ done:
 
 
 /**
+ * Parse a specific literal.
+ */
+PARSER(Literal)
+// TODO remove fprintf's - we leave them in because we'll proably need
+// them when we implement the optimizers path compaction.
+	const char *const lit = node->parser_data;
+	size_t i = *offs;
+	size_t j;
+
+	for(j = 0 ; lit[j] != '\0' && i < strLen ; ++j) {
+		if(lit[j] != str[i])
+			break;
+		++i;
+	}
+//fprintf(stderr, "lit check done lit[%zu]: %c\n", j, lit[j-1]);
+
+	*parsed = j; /* we must always return how far we parsed! */
+	if(lit[j] == '\0')
+		r = 0;
+		
+#if 0
+
+//fprintf(stderr, "literal to parse: '%s'\n", lit);
+	const size_t litLen = strlen(lit);
+	if(litLen+(*offs) > strLen)
+		goto done;
+	const int res = strncmp(str+*offs, lit, litLen);
+//fprintf(stderr, "literal: strncmp('%s','%s',%zu): %d\n", str+*offs, lit, litLen, res);
+	if(res != 0)
+		goto done;
+
+	/* success, persist */
+	*parsed = litLen;
+	r = 0;
+#endif
+//done:
+	return r;
+}
+
+
+/**
  * Parse everything up to a specific character, or up to the end of string.
  * The character must be the only char inside extra data passed to the parser.
  * It is a program error if strlen(ed) != 1.

@@ -46,7 +46,6 @@ struct ln_ctx_s {
 		/**< user-provided error message callback */
 	void *errmsgCookie; /**< cookie to be passed to error message callback */
 	ln_pdag *pdag; /**< parse dag being used by this context */
-struct ln_ptree *ptree; // TODO: remove, just left in to help us compile tools for testing in early stages
 	ln_annotSet *pas; /**< associated set of annotations */
 	unsigned nNodes; /**< number of nodes in our parse tree */
 	unsigned char debug; /**< boolean: are we in debug mode? */

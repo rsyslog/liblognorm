@@ -24,7 +24,6 @@ lib_LTLIBRARIES = liblognorm.la
 liblognorm_la_SOURCES = \
 	liblognorm.c \
 	pdag.c \
-	ptree.c \
 	annot.c \
 	samp.c \
 	lognorm.c \
