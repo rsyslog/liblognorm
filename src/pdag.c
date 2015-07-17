@@ -64,6 +64,12 @@ static struct ln_parser_info parser_lookup_table[] = {
 	{ "char-sep", ln_parseCharSeparated, NULL }
 };
 
+static inline const char *
+parserName(const prsid_t id)
+{
+	return parser_lookup_table[id].name;
+}
+
 prsid_t 
 ln_parserName2ID(const char *const __restrict__ name)
 {
@@ -164,7 +170,8 @@ ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
 	 */
 	int i;
 	for(i = 0 ; i < dag->nparsers ; ++i) {
-		if(dag->parsers[i].prsid == parser->prsid) {
+		if(   dag->parsers[i].prsid == parser->prsid
+		   && !strcmp(dag->parsers[i].name, parser->name)) {
 			// FIXME: work-around for literal parser with different
 			//        literals (see header TODO)
 			if(parser->prsid == PRS_LITERAL &&
@@ -209,17 +216,20 @@ ln_displayPDAG(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-	ln_dbgprintf(dag->ctx, "%ssubtree%s %p (children: %d parsers)",
-		     indent, dag->flags.isTerminal ? " TERM" : "", dag, dag->nparsers);
+	ln_dbgprintf(dag->ctx, "%ssubDAG%s %p (children: %d parsers)",
+		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers);
 
-	/* display parser subdags */
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
-		//char *cstr;
-		//cstr = es_str2cstr(node->name, NULL);
-		ln_dbgprintf(dag->ctx, "%sfield type %s: '%s':", indent,
-			parser_lookup_table[dag->parsers[i].prsid].name,
-			dag->parsers[i].parser_data);
-		//free(cstr);
+		char *ed;
+		if(dag->parsers->data == NULL)
+			ed = strdup("");
+		else
+			ed = es_str2cstr(dag->parsers->data, 1);
+		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s', ed '%s':", indent,
+			parserName(dag->parsers[i].prsid),
+			dag->parsers[i].name,
+			dag->parsers[i].parser_data, ed);
+		free(ed);
 		ln_displayPDAG(dag->parsers[i].node, level + 1);
 	}
 }
@@ -295,12 +305,11 @@ ln_genDotPDAGGraph(struct ln_pdag *dag, es_str_t **str)
 #endif
 
 
-#if 0
 /**
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *json)
+addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
@@ -323,7 +332,6 @@ done:
 	free(s);
 	return r;
 }
-#endif
 
 
 /**
@@ -335,205 +343,104 @@ done:
  * @param[in] string string to be matched against (the to-be-normalized data)
  * @param[in] strLen length of the to-be-matched string
  * @param[in] offs start position in input data
+ * @param[out] pPrasedTo ptr to position up to which the the parsing succed in max
  * @param[in/out] json ... that is being created during normalization
  * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
  * @return number of characters left unparsed by following the subdag, negative if
  *         the to-be-parsed message is shorter than the rule sample by this number of
  *         characters.
+ * TODO: can we use parameter block to prevent pushing params to the stack?
  */
-#if 0
 static int
-ln_normalizeRec(struct ln_pdag *dag, const char *str, size_t strLen, size_t offs, struct json_object *json,
-		struct ln_pdag **endNode)
+ln_normalizeRec(struct ln_pdag *dag,
+	const char *const str,
+	const size_t strLen,
+	const size_t offs,
+	size_t *const __restrict__ pParsedTo,
+	struct json_object *json,
+	struct ln_pdag **endNode)
 {
-	int r;
+	int r = LN_WRONGPARSER;
 	int localR;
 	size_t i;
-	int left;
-	ln_fieldList_t *node;
-	ln_fieldList_t *restMotifNode = NULL;
+	size_t iprs;
+	size_t parsedTo = *pParsedTo;
 	char *cstr;
-	const char *c;
-	unsigned char *cpfix;
-	unsigned ipfix;
-	size_t parsed;
-	char *namestr;
+	size_t parsed = 0;
 	struct json_object *value;
 	
-	if(offs >= strLen) {
-		*endNode = dag;
-		r = -dag->lenPrefix;
-		goto done;
-	}
-
-ln_dbgprintf(dag->ctx, "%zu: enter parser, tree %p", offs, tree);
-	c = str;
-	cpfix = prefixBase(dag);
-	node = dag->froot;
-	r = strLen - offs;
-	/* first we need to check if the common prefix matches (and consume input data while we do) */
-	ipfix = 0;
-	while(offs < strLen && ipfix < dag->lenPrefix) {
-		ln_dbgprintf(dag->ctx, "%zu: prefix compare '%c', '%c'", offs, c[offs], cpfix[ipfix]);
-		if(c[offs] != cpfix[ipfix]) {
-			r -= ipfix;
-			goto done;
-		}
-		++offs, ++ipfix;
-	}
-	
-	if(ipfix != dag->lenPrefix) {
-		/* incomplete prefix match --> to-be-normalized string too short */
-		r = ipfix - dag->lenPrefix;
-		goto done;
-	}
-
-	r -= ipfix;
-	ln_dbgprintf(dag->ctx, "%zu: prefix compare succeeded, still valid", offs);
+ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
+// TODO: parser priorities are desperately needed --> rest
 
 	/* now try the parsers */
-	while(node != NULL) {
+	for(iprs = 0 ; iprs < dag->nparsers ; ++iprs) {
+		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			cstr = es_str2cstr(node->name, NULL);
-			ln_dbgprintf(dag->ctx, "%zu:trying parser for field '%s': %p",
-					offs, cstr, node->parser);
-			free(cstr);
+			ln_dbgprintf(dag->ctx, "%zu:trying '%s' parser for field '%s'",
+					offs, parserName(prs->prsid), prs->name);
 		}
 		i = offs;
-		if(node->isIPTables) {
-			localR = ln_iptablesParser(dag, str, strLen, &i, json);
-			ln_dbgprintf(dag->ctx, "%zu iptables parser return, i=%zu",
-						offs, i);
-			if(localR == 0) {
-				/* potential hit, need to verify */
-				ln_dbgprintf(dag->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subdag, str, strLen, i, json, endNode);
-				if(left == 0 && (*endNode)->flags.isTerminal) {
-					ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
-					r = 0;
-					goto done;
-				}
-				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, left=%d",
-						offs, left);
-				if(left < r)
-					r = left;
-			}
-		} else if(node->parser == ln_parseRest) {
-			/* This is a quick and dirty adjustment to handle "rest" more intelligently.
-			 * It's just a tactical fix: in the longer term, we'll handle the whole
-			 * situation differently. However, it makes sense to fix this now, as this
-			 * solves some real-world problems immediately. -- rgerhards, 2015-04-15
-			 */
-			restMotifNode = node;
+		value = NULL;
+		// TODO: remove special handling, implement parser
+		if(prs->prsid == PRS_LITERAL) {
+			ln_dbgprintf(dag->ctx, "literal compare '%c' vs '%c'", str[i], ((char*)prs->parser_data)[0]);
+			localR = (str[i] == ((char*)prs->parser_data)[0]) ? 0 : LN_WRONGPARSER;
+			i++; /* one char consumed */
 		} else {
-			value = NULL;
-			localR = node->parser(str, strLen, &i, node, &parsed, &value);
-			ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
-			if(localR == 0) {
-				/* potential hit, need to verify */
-				ln_dbgprintf(dag->ctx, "%zu: potential hit, trying subtree %p", offs, node->subtree);
-				left = ln_normalizeRec(node->subdag, str, strLen, i + parsed, json, endNode);
-				ln_dbgprintf(dag->ctx, "%zu: subtree returns %d", offs, r);
-				if(left == 0 && (*endNode)->flags.isTerminal) {
-					ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
-					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
-						/* Store the value here; create json if not already created */
-						if (value == NULL) { 
-							CHKN(cstr = strndup(str + i, parsed));
-							value = json_object_new_string(cstr);
-							free(cstr);
-						}
-						if (value == NULL) {
-							ln_dbgprintf(dag->ctx, "unable to create json");
-							goto done;
-						}
-						namestr = ln_es_str2cstr(&node->name);
-						json_object_object_add(json, namestr, value);
-					} else {
-						if (value != NULL) {
-							/* Free the unneeded value */
-							json_object_put(value);
-						}
+			localR = parser_lookup_table[prs->prsid].parser(str, strLen,
+				&i, prs, &parsed, &value);
+		}
+		ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
+		if(localR == 0) {
+			parsedTo = i;
+			/* potential hit, need to verify */
+			ln_dbgprintf(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
+			r = ln_normalizeRec(prs->node, str, strLen, i + parsed, &parsedTo, json, endNode);
+			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d", offs, r);
+			if(r == 0 && (*endNode)->flags.isTerminal) {
+				ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
+				if(strcmp(prs->name, "-")) {
+					/* Store the value here; create json if not already created */
+					// TODO: ensure JSON is always created!
+					if (value == NULL) { 
+						CHKN(cstr = strndup(str + i, parsed));
+						value = json_object_new_string(cstr);
+						free(cstr);
 					}
-					r = 0;
-					goto done;
+					if (value == NULL) {
+						ln_dbgprintf(dag->ctx, "unable to create json");
+						goto done;
+					}
+					json_object_object_add(json, prs->name, value);
+				} else {
+					if (value != NULL) {
+						/* Free the unneeded value */
+						json_object_put(value);
+					}
 				}
-				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, left=%d",
-						offs, left);
-				if (value != NULL) {
-					/* Free the value if it was created */
-					json_object_put(value);
-				}
-				if(left > 0 && left < r)
-					r = left;
-				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, left=%d, r now %d", offs, left, r);
+				r = 0;
+				goto done;
+			}
+			ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
+					offs, parsedTo);
+			if (value != NULL) { /* Free the value if it was created */
+				json_object_put(value);
 			}
 		}
-		node = node->next;
+		/* did we have a longer parser --> then update */
+		if(parsedTo > *pParsedTo)
+			*pParsedTo = parsedTo;
+		ln_dbgprintf(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
 	}
 
+ln_dbgprintf(dag->ctx, "offs %zu, strLen %zu", offs, strLen);
 	if(offs == strLen) {
 		*endNode = dag;
 		r = 0;
 		goto done;
 	}
 
-if(offs < strLen) {
-unsigned char cc = str[offs];
-ln_dbgprintf(dag->ctx, "%zu no field, trying subtree char '%c': %p", offs, cc, tree->subtree[cc]);
-} else {
-ln_dbgprintf(dag->ctx, "%zu no field, offset already beyond end", offs);
-}
-	/* now let's see if we have a literal */
-	if(dag->subtree[(unsigned char)str[offs]] != NULL) {
-		left = ln_normalizeRec(dag->subtree[(unsigned char)str[offs]],
-				       str, strLen, offs + 1, json, endNode);
-ln_dbgprintf(dag->ctx, "%zu got left %d, r %d", offs, left, r);
-		if(left < r)
-			r = left;
-ln_dbgprintf(dag->ctx, "%zu got return %d", offs, r);
-	}
-
-	if(r == 0 && (*endNode)->flags.isTerminal)
-		goto done;
-
-	/* and finally give "rest" a try if it was present. Note that we MUST do this after
-	 * literal evaluation, otherwise "rest" can never be overriden by other rules.
-	 */
-	if(restMotifNode != NULL) {
-		ln_dbgprintf(dag->ctx, "rule has rest motif, forcing match via it\n");
-		value = NULL;
-		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
-#		ifndef NDEBUG
-		left = /* we only need this for the assert below */
-#		endif
-		       ln_normalizeRec(restMotifNode->subdag, str, strLen, i + parsed, json, endNode);
-		assert(left == 0); /* with rest, we have this invariant */
-		assert((*endNode)->flags.isTerminal); /* this one also */
-		ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
-		if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
-			/* Store the value here; create json if not already created */
-			if (value == NULL) { 
-				CHKN(cstr = strndup(str + i, parsed));
-				value = json_object_new_string(cstr);
-				free(cstr);
-			}
-			if (value == NULL) {
-				ln_dbgprintf(dag->ctx, "unable to create json");
-				goto done;
-			}
-			namestr = ln_es_str2cstr(&restMotifNode->name);
-			json_object_object_add(json, namestr, value);
-		} else {
-			if (value != NULL) {
-				/* Free the unneeded value */
-				json_object_put(value);
-			}
-		}
-		r = 0;
-		goto done;
-	}
 done:
 	ln_dbgprintf(dag->ctx, "%zu returns %d", offs, r);
 	return r;
@@ -541,36 +448,29 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
+ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
 {
 	int r;
-	int left;
 	struct ln_pdag *endNode = NULL;
+	size_t parsedTo = 0;
 
 	if(*json_p == NULL) {
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	left = ln_normalizeRec(ctx->pdag, str, strLen, 0, *json_p, &endNode);
+	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, &parsedTo, *json_p, &endNode);
 
 	if(ctx->debug) {
-		if(left == 0) {
-			ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p, "
+		if(r == 0) {
+			ln_dbgprintf(ctx, "final result for normalizer: parsedTo %zu, endNode %p, "
 				     "isTerminal %d, tagbucket %p",
-				     left, endNode, endNode->flags.isTerminal, endNode->tags);
+				     parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
 		} else {
-			ln_dbgprintf(ctx, "final result for normalizer: left %d, endNode %p",
-				     left, endNode);
+			ln_dbgprintf(ctx, "final result for normalizer: parsedTo %zu, endNode %p",
+				     parsedTo, endNode);
 		}
 	}
-	if(left != 0 || !endNode->flags.isTerminal) {
-		/* we could not successfully parse, some unparsed items left */
-		if(left < 0) {
-			addUnparsedField(str, strLen, strLen, *json_p);
-		} else {
-			addUnparsedField(str, strLen, strLen - left, *json_p);
-		}
-	} else {
+	if(r == 0 && endNode->flags.isTerminal) {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
 			/* add tags to an event */
@@ -578,10 +478,10 @@ ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **js
 			json_object_object_add(*json_p, "event.tags", endNode->tags);
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
+		r = 0;
+	} else {
+		addUnparsedField(str, strLen, parsedTo, *json_p);
 	}
-
-	r = 0;
 
 done:	return r;
 }
-#endif

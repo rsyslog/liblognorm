@@ -83,11 +83,14 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  * return 0 on success and LN_WRONGPARSER if this parser could
  *           not successfully parse (but all went well otherwise) and something
  *           else in case of an error.
+ *
+ * TODO: parser "node" must be handled differently, recommend to use 
+ * the modules data block.
  */
 #define PARSER(ParserName) \
 int ln_parse##ParserName(const char *const str, const size_t strLen, \
 	size_t *const offs,       \
-	__attribute__((unused)) const ln_fieldList_t *node,  \
+	__attribute__((unused)) const ln_parser_t *const node,  \
 	size_t *parsed,                                      \
 	__attribute__((unused)) struct json_object **value) \
 { \
@@ -114,6 +117,7 @@ done:
 #define FIELD_ARG_SEPERATOR ":"
 #define MAX_FIELD_ARGS 10
 
+#if 0
 struct pcons_args_s {
 	int argc;
 	char *argv[MAX_FIELD_ARGS];
@@ -185,6 +189,7 @@ static void pcons_unescape_arg(pcons_args_t *dat, int i) {
 		}
 	}
 }
+#endif
 
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
@@ -832,13 +837,13 @@ PARSER(CharTo)
 	while(i < strLen && c[i] != cTerm) 
 		i++;
 
+
 	if(i == *offs || i == strLen || c[i] != cTerm)
 		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
-
-	r = 0; /* success */
+	r = 0;
 done:
 	return r;
 }
@@ -876,6 +881,7 @@ PARSER(CharSeparated)
 	return r;
 }
 
+#if 0 // these parsers need much more work
 /**
  * Parse yet-to-be-matched portion of string by re-applying
  * top-level rules again. 
@@ -1002,6 +1008,7 @@ void recursive_parser_data_destructor(void** dataPtr) {
 		*dataPtr = NULL;
 	}
 };
+
 
 /**
  * Parse string tokenized by given char-sequence
@@ -1729,6 +1736,7 @@ void suffixed_parser_data_destructor(void** dataPtr) {
 		*dataPtr = NULL;
 	}
 }
+#endif
 
 /**
  * Just get everything till the end of string.
@@ -2842,7 +2850,7 @@ cefParseExtensions(const char *const __restrict__ str,
 	size_t iValue, lenValue;
 	char *name = NULL;
 	char *value = NULL;
-	
+
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ')
 			++i;
@@ -2892,6 +2900,8 @@ cefParseExtensions(const char *const __restrict__ str,
 			free(value); value = NULL;
 		}
 	}
+
+	*offs = strLen; /* this parser consume everything or fails */
 
 done:
 	free(name);
@@ -3001,7 +3011,7 @@ PARSER(CEF)
 	 CHKR(cefParseExtensions(str, strLen, &i, NULL));
 
 	/* success, persist */
-	*parsed = *offs - i;
+	*parsed = i - *offs;
 	r = 0; /* success */
 
 	if(value != NULL) {
@@ -3103,7 +3113,7 @@ PARSER(CheckpointLEA)
 	}
 
 	/* success, persist */
-	*parsed = *offs - i;
+	*parsed =  i - *offs;
 	r = 0; /* success */
 
 done:

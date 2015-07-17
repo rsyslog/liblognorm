@@ -79,7 +79,7 @@ struct ln_parser_s {
 
 struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
-	int (*parser)(const char*, size_t, size_t*, const ln_fieldList_t *,
+	int (*parser)(const char*, size_t, size_t*, const ln_parser_t *,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*parser_data_destructor)(void **); /** destroy opaque data that field-parser understands */
 };

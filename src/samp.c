@@ -333,36 +333,36 @@ done:
  *
  * format: literal1%field:type:extra-data%literal2
  *
- * @returns the new subtree root (or NULL in case of error)
+ * @returns the new dag root (or NULL in case of error)
  */
 static inline int
 addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 {
 	int r = -1;
-	struct ln_pdag* subtree;
+	struct ln_pdag* dag;
 	es_str_t *str = NULL;
 	es_size_t i;
 
-	subtree = ctx->pdag;
+	dag = ctx->pdag;
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
 		ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
-		CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
+		CHKR(parseLiteral(ctx, &dag, rule, &i, &str));
 		/* After the literal there can be field only*/
 		if (i < es_strlen(rule)) {
-			CHKR(addFieldDescr(ctx, &subtree, rule, &i, &str));
+			CHKR(addFieldDescr(ctx, &dag, rule, &i, &str));
 			if (i == es_strlen(rule)) {
 				/* finish the tree with empty literal to avoid false merging*/
-				CHKR(parseLiteral(ctx, &subtree, rule, &i, &str));
+				CHKR(parseLiteral(ctx, &dag, rule, &i, &str));
 			}
 		}
 	}
 
 	ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
-	subtree->flags.isTerminal = 1;
-	subtree->tags = tagBucket;
+	dag->flags.isTerminal = 1;
+	dag->tags = tagBucket;
 
 done:
 	if(str != NULL)

@@ -843,7 +843,7 @@ done:
 
 
 int
-ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
+DISABLED_ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
 {
 	int r;
 	int left;
