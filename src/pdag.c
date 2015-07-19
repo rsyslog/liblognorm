@@ -97,49 +97,55 @@ ln_newPDAG(ln_ctx ctx)
 done:	return dag;
 }
 
-#if 0
-void
-ln_deletePDAGNode(ln_parser_t *node)
+/* note: we must NOT free the parser itself, because
+ * it is stored inside a parser table (so no single
+ * alloc for the parser!).
+ */
+static void
+pdagDeletePrs(ln_parser_t *const __restrict__ prs)
 {
-	ln_deletePDAG(node->node);
-	es_deleteStr(node->name);
-	if(node->data != NULL)
-		es_deleteStr(node->data);
-	if(node->raw_data != NULL)
-		es_deleteStr(node->raw_data);
-	if(node->parser_data != NULL && node->parser_data_destructor != NULL)
-		node->parser_data_destructor(&(node->parser_data));
-	free(node);
-}
+	// TODO: be careful here: once we move to real DAG from tree, we
+	// cannot simply delete the next node! (refcount? something else?)
+fprintf(stderr, "deleting prs %p\n", prs);
+	if(prs->node != NULL)
+		ln_pdagDelete(prs->node);
+	free((void*)prs->name);
+	if(prs->data != NULL)
+		es_deleteStr(prs->data);
+	if(prs->raw_data != NULL)
+		es_deleteStr(prs->raw_data);
+	// TODO: delete parser_data, but we need the real way of handling
+	// it before doing so.
+	if(prs->prsid == PRS_LITERAL) // quick and dirty for the current only case!
+		free(prs->parser_data);
+#if 0
+	if(prs->parser_data != NULL && prs->parser_data_destructor != NULL)
+		prs->parser_data_destructor(&(prs->parser_data));
 #endif
+	//free(prs);
+}
 
 void
-ln_deletePDAG(struct ln_pdag *dag)
+ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 {
-	if(dag == NULL)
+	if(pdag == NULL)
 		goto done;
 
-	if(dag->tags != NULL)
-		json_object_put(dag->tags);
-#if 0
-	ln_fieldList_t *node, *nextnode;
-	size_t i;
+	if(pdag->tags != NULL)
+		json_object_put(pdag->tags);
 
-	for(node = dag->froot; node != NULL; node = nextnode) {
-		nextnode = node->next;
-		ln_deletePDAGNode(node);
+	for(int i = 0 ; i < pdag->nparsers ; ++i) {
+ln_dbgprintf(pdag->ctx, "process parser %d", i);
+ln_parser_t *prs = pdag->parsers+i;
+ln_dbgprintf(pdag->ctx, "deleting %p: nparsers %d, field %d type '%s', name '%s': '%s':",
+	prs, pdag->nparsers, i, parserName(prs->prsid), prs->name, prs->parser_data);
+
+		pdagDeletePrs(pdag->parsers+i);
+ln_dbgprintf(pdag->ctx, "deleted %p, i: %d", prs, i);
 	}
-
-	/* need to free a large prefix buffer? */
-	if(dag->lenPrefix > sizeof(tree->prefix))
-		free(dag->prefix.ptr);
-
-	for(i = 0 ; i < 256 ; ++i)
-		if(dag->subtree[i] != NULL)
-			ln_deletePDAG(dag->subtree[i]);
-#endif
-	free(dag);
-
+	ln_dbgprintf(pdag->ctx, "free parser table %p", pdag->parsers);
+	free(pdag->parsers);
+	free(pdag);
 done:	return;
 }
 
@@ -159,8 +165,9 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *const prs)
 		goto done;
 	// TODO: think about names if literal is actually to be parsed!
 	// check name == "-"?
-	/* ok, we have two literals in a row, lets compact the nodes */
+	// also check if isTerminal!
 
+	/* ok, we have two literals in a row, let's compact the nodes */
 	ln_parser_t *child_prs = prs->node->parsers;
 	ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
 	const size_t len = strlen((char*)prs->parser_data);
@@ -171,8 +178,11 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *const prs)
 ln_dbgprintf(ctx, "len %zu, newlit: %s", len, newlit);
 	memcpy((char*)prs->parser_data+len, child_prs->parser_data, child_len+1);
 ln_dbgprintf(ctx, "newlit: %s", newlit);
+	ln_pdag *const node_del = prs->node;
 	prs->node = child_prs->node;
-	// TODO: fix memory leak
+
+	child_prs->node = NULL; /* remove, else this would be destructed! */
+	ln_pdagDelete(node_del);
 done:
 	return r;
 }
@@ -237,6 +247,7 @@ ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
 			*pdag = dag->parsers[i].node;
 			r = 0;
 			ln_dbgprintf(dag->ctx, "merging with dag %p", *pdag);
+			pdagDeletePrs(parser); /* no need for data items */
 			goto done;
 		}
 	}
@@ -254,7 +265,9 @@ ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
 	*pdag = parser->node;
 	ln_dbgprintf(dag->ctx, "new subdag %p", *pdag);
 
-done:	return r;
+done:
+	free(parser);
+	return r;
 }
 
 

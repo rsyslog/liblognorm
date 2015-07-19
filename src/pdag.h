@@ -124,7 +124,7 @@ struct ln_pdag* ln_newPDAG(ln_ctx ctx);
  *
  * @param[in] DAG pointer to pdag to free
  */
-void ln_deletePDAG(struct ln_pdag *DAG);
+void ln_pdagDelete(struct ln_pdag *DAG);
 
 /**
  * Free a parse DAG node and destruct all members.
@@ -132,6 +132,7 @@ void ln_deletePDAG(struct ln_pdag *DAG);
  *
  * @param[in] node pointer to free
  */
+ // TODO: looks like we can delete this
 void ln_deletePDAGNode(ln_parser_t *node);
 
 /**

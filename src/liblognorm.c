@@ -81,7 +81,7 @@ ln_initCtx(void)
 	}
 	/* same for annotation set */
 	if((ctx->pas = ln_newAnnotSet(ctx)) == NULL) {
-		ln_deletePDAG(ctx->pdag);
+		ln_pdagDelete(ctx->pdag);
 		free(ctx);
 		ctx = NULL;
 		goto done;
@@ -104,9 +104,10 @@ ln_exitCtx(ln_ctx ctx)
 
 	CHECK_CTX;
 
+	ln_dbgprintf(ctx, "exitCtx %p", ctx);
 	ctx->objID = LN_ObjID_None; /* prevent double free */
 	if(ctx->pdag != NULL)
-		ln_deletePDAG(ctx->pdag);
+		ln_pdagDelete(ctx->pdag);
 	if(ctx->rulePrefix != NULL)
 		es_deleteStr(ctx->rulePrefix);
 	if(ctx->pas != NULL)
