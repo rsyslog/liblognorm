@@ -175,6 +175,7 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 	}
 	fclose(repo);
 
+	ln_pdagOptimize(ctx, ctx->pdag);
 done:
 	return r;
 }

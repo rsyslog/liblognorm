@@ -190,4 +190,5 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 
 
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
+int ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const pdag);
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */

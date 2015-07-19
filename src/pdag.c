@@ -145,6 +145,63 @@ done:	return;
 
 
 /**
+ * pdag optimizer step: literal path compaction
+ */
+static inline int
+optLitPathCompact(ln_ctx ctx, ln_parser_t *const prs)
+{
+	int r = 0;
+
+	if(!(   prs->prsid == PRS_LITERAL
+	     && prs->node->nparsers == 1
+	     && prs->node->parsers[0].prsid == PRS_LITERAL)
+	  )
+		goto done;
+	// TODO: think about names if literal is actually to be parsed!
+	// check name == "-"?
+	/* ok, we have two literals in a row, lets compact the nodes */
+
+	ln_parser_t *child_prs = prs->node->parsers;
+	ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
+	const size_t len = strlen((char*)prs->parser_data);
+	const size_t child_len = strlen((char*)child_prs->parser_data);
+	char *const newlit = realloc(prs->parser_data, len+child_len+1);
+	CHKN(newlit);
+	prs->parser_data = newlit;
+ln_dbgprintf(ctx, "len %zu, newlit: %s", len, newlit);
+	memcpy((char*)prs->parser_data+len, child_prs->parser_data, child_len+1);
+ln_dbgprintf(ctx, "newlit: %s", newlit);
+	prs->node = child_prs->node;
+	// TODO: fix memory leak
+done:
+	return r;
+}
+
+/**
+ * Optimize the pdag.
+ */
+int
+ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const dag)
+{
+	int r = 0;
+
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		ln_dbgprintf(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
+			prs->node, i, parserName(prs->prsid), prs->name, prs->parser_data);
+		
+		optLitPathCompact(ctx, prs);
+
+		ln_pdagOptimize(ctx, prs->node);
+	}
+   ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
+   ln_displayPDAG(dag, 0);
+   ln_dbgprintf(ctx, "=======================================");
+done:
+	return r;
+}
+
+/**
  * Check if the provided dag is a leaf. This means that it
  * does not contain any subdags.
  * @return 1 if it is a leaf, 0 otherwise
