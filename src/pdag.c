@@ -144,37 +144,40 @@ done:	return;
 
 /**
  * pdag optimizer step: literal path compaction
+ *
+ * We compress as much as possible and evalute the path down to
+ * the first non-compressable element.
  */
 static inline int
-optLitPathCompact(ln_ctx ctx, ln_parser_t *const prs)
+optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 {
 	int r = 0;
 
-	if(!(   prs->prsid == PRS_LITERAL
-	     && prs->node->nparsers == 1
-	     && prs->node->parsers[0].prsid == PRS_LITERAL)
-	  )
-		goto done;
-	// TODO: think about names if literal is actually to be parsed!
-	// check name == "-"?
-	// also check if isTerminal!
+	while(prs != NULL) {
+		if(!(   prs->prsid == PRS_LITERAL
+		     && prs->node->nparsers == 1
+		     && prs->node->parsers[0].prsid == PRS_LITERAL)
+		  )
+			goto done;
+		// TODO: think about names if literal is actually to be parsed!
+		// check name == "-"?
+		// also check if isTerminal!
 
-	/* ok, we have two literals in a row, let's compact the nodes */
-	ln_parser_t *child_prs = prs->node->parsers;
-	ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
-	const size_t len = strlen((char*)prs->parser_data);
-	const size_t child_len = strlen((char*)child_prs->parser_data);
-	char *const newlit = realloc(prs->parser_data, len+child_len+1);
-	CHKN(newlit);
-	prs->parser_data = newlit;
-ln_dbgprintf(ctx, "len %zu, newlit: %s", len, newlit);
-	memcpy((char*)prs->parser_data+len, child_prs->parser_data, child_len+1);
-ln_dbgprintf(ctx, "newlit: %s", newlit);
-	ln_pdag *const node_del = prs->node;
-	prs->node = child_prs->node;
+		/* ok, we have two literals in a row, let's compact the nodes */
+		ln_parser_t *child_prs = prs->node->parsers;
+		ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
+		const size_t len = strlen((char*)prs->parser_data);
+		const size_t child_len = strlen((char*)child_prs->parser_data);
+		char *const newlit = realloc(prs->parser_data, len+child_len+1);
+		CHKN(newlit);
+		prs->parser_data = newlit;
+		memcpy((char*)prs->parser_data+len, child_prs->parser_data, child_len+1);
+		ln_pdag *const node_del = prs->node;
+		prs->node = child_prs->node;
 
-	child_prs->node = NULL; /* remove, else this would be destructed! */
-	ln_pdagDelete(node_del);
+		child_prs->node = NULL; /* remove, else this would be destructed! */
+		ln_pdagDelete(node_del);
+	}
 done:
 	return r;
 }
