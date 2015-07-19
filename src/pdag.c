@@ -204,10 +204,9 @@ ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 
 		ln_pdagOptimize(ctx, prs->node);
 	}
-   ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
-   ln_displayPDAG(dag, 0);
-   ln_dbgprintf(ctx, "=======================================");
-done:
+ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
+ln_displayPDAG(dag, 0);
+ln_dbgprintf(ctx, "=======================================");
 	return r;
 }
 
@@ -452,17 +451,8 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
 		}
 		i = offs;
 		value = NULL;
-		// TODO: remove special handling, implement parser
-#if 0
-		if(prs->prsid == PRS_LITERAL) {
-			ln_dbgprintf(dag->ctx, "literal compare '%c' vs '%c'", str[i], ((char*)prs->parser_data)[0]);
-			localR = (str[i] == ((char*)prs->parser_data)[0]) ? 0 : LN_WRONGPARSER;
-			i++; /* one char consumed */
-		} else {
-#endif
-			localR = parser_lookup_table[prs->prsid].parser(str, strLen,
-				&i, prs, &parsed, &value);
-		//}
+		localR = parser_lookup_table[prs->prsid].parser(str, strLen,
+			&i, prs, &parsed, &value);
 		ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
 		if(localR == 0) {
 			parsedTo = i + parsed;
