@@ -189,7 +189,7 @@ genDOT()
 	es_str_t *str;
 
 	str = es_newStr(1024);
-	// TODO: re-add: ln_genDotPTreeGraph(ctx->ptree, &str);
+	ln_genDotPDAGGraph(ctx->pdag, &str);
 	fwrite(es_getBufAddr(str), 1, es_strlen(str), fpDOT);
 }
 
@@ -243,6 +243,7 @@ int main(int argc, char *argv[])
 					goto exit;
 				}
 			}
+			break;
 		case 'v':
 			verbose++;
 			break;

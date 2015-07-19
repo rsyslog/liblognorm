@@ -68,14 +68,12 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 static ln_parser_t*
 ln_newParser(ln_ctx ctx, const char *const name, const prsid_t parserid, es_str_t *extraData)
 {
-	// TODO: needs to be extended when we begin to work with fields
 	ln_parser_t *node;
 
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
 		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
 		goto done;
 	}
-ln_dbgprintf(ctx, "alloc new parser %p", node);
 	node->node = NULL;
 	node->prio = 0;
 	node->data = extraData;

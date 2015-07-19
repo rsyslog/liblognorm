@@ -106,7 +106,6 @@ pdagDeletePrs(ln_parser_t *const __restrict__ prs)
 {
 	// TODO: be careful here: once we move to real DAG from tree, we
 	// cannot simply delete the next node! (refcount? something else?)
-fprintf(stderr, "deleting prs %p\n", prs);
 	if(prs->node != NULL)
 		ln_pdagDelete(prs->node);
 	free((void*)prs->name);
@@ -135,15 +134,8 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		json_object_put(pdag->tags);
 
 	for(int i = 0 ; i < pdag->nparsers ; ++i) {
-ln_dbgprintf(pdag->ctx, "process parser %d", i);
-ln_parser_t *prs = pdag->parsers+i;
-ln_dbgprintf(pdag->ctx, "deleting %p: nparsers %d, field %d type '%s', name '%s': '%s':",
-	prs, pdag->nparsers, i, parserName(prs->prsid), prs->name, prs->parser_data);
-
 		pdagDeletePrs(pdag->parsers+i);
-ln_dbgprintf(pdag->ctx, "deleted %p, i: %d", prs, i);
 	}
-	ln_dbgprintf(pdag->ctx, "free parser table %p", pdag->parsers);
 	free(pdag->parsers);
 	free(pdag);
 done:	return;
@@ -304,15 +296,14 @@ ln_displayPDAG(struct ln_pdag *dag, int level)
 }
 
 
-#if 0
 /* the following is a quick hack, which should be moved to the
  * string class.
  */
-static inline void dotAddPtr(es_str_t **str, void *p
+static inline void dotAddPtr(es_str_t **str, void *p)
 {
 	char buf[64];
 	int i;
-	i = snprintf(buf, sizeof(buf), "%p", p);
+	i = snprintf(buf, sizeof(buf), "l%p", p);
 	es_addBuf(str, buf, i);
 }
 /**
@@ -321,45 +312,37 @@ static inline void dotAddPtr(es_str_t **str, void *p
 static void
 ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 {
-	int i;
-	ln_fieldList_t *node;
-
-
+	ln_dbgprintf(dag->ctx, "in dot: %p", dag);
 	dotAddPtr(str, dag);
-	es_addBufConstcstr(str, " [label=\"");
-	if(dag->lenPrefix > 0) {
-		es_addChar(str, '\'');
-		es_addBuf(str, (char*) prefixBase(dag), tree->lenPrefix);
-		es_addChar(str, '\'');
-	}
-	es_addBufConstcstr(str, "\"");
+	es_addBufConstcstr(str, " [ label=\"n\"");
+
 	if(isLeaf(dag)) {
 		es_addBufConstcstr(str, " style=\"bold\"");
 	}
 	es_addBufConstcstr(str, "]\n");
 
-	/* display char subdags */
-	for(i = 0 ; i < 256 ; ++i) {
-		if(dag->subtree[i] != NULL) {
-			dotAddPtr(str, dag);
-			es_addBufConstcstr(str, " -> ");
-			dotAddPtr(str, dag->subtree[i]);
-			es_addBufConstcstr(str, " [label=\"");
-			es_addChar(str, (char) i);
-			es_addBufConstcstr(str, "\"]\n");
-			ln_genDotPDAGGraphRec(dag->subtree[i], str);
-		}
-	}
-
 	/* display field subdags */
-	for(node = dag->froot ; node != NULL ; node = node->next ) {
+
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
 		dotAddPtr(str, dag);
 		es_addBufConstcstr(str, " -> ");
-		dotAddPtr(str, node->subdag);
+		dotAddPtr(str, prs->node);
 		es_addBufConstcstr(str, " [label=\"");
-		es_addStr(str, node->name);
-		es_addBufConstcstr(str, "\" style=\"dotted\"]\n");
-		ln_genDotPDAGGraphRec(node->subdag, str);
+		es_addBuf(str, parserName(prs->prsid), strlen(parserName(prs->prsid)));
+		es_addBufConstcstr(str, ":");
+		//es_addStr(str, node->name);
+		if(prs->prsid == PRS_LITERAL) {
+			for(const char *p = (const char*) prs->parser_data ; *p ; ++p) {
+				// TODO: handle! if(*p == '\\')
+					//es_addChar(str, '\\');
+				if(*p != '\\' && *p != '"')
+					es_addChar(str, *p);
+			}
+		}
+		es_addBufConstcstr(str, "\"");
+		es_addBufConstcstr(str, " style=\"dotted\"]\n");
+		ln_genDotPDAGGraphRec(prs->node, str);
 	}
 }
 
@@ -371,7 +354,6 @@ ln_genDotPDAGGraph(struct ln_pdag *dag, es_str_t **str)
 	ln_genDotPDAGGraphRec(dag, str);
 	es_addBufConstcstr(str, "}\n");
 }
-#endif
 
 
 /**
