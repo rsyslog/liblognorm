@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 1.1.2, 2015-03-??
+Version 1.1.2, 2015-07-20
 - permit newline inside parser definition
 - new parser "cisco-interface-spec"
 - new parser "json" to process json parts of the message
