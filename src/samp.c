@@ -83,16 +83,10 @@ addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 	int r;
 	ln_dbgprintf(ctx, "new offs %d", *bufOffs);
 	ln_parser_t *parser = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
-	ln_dbgprintf(ctx, "return parseFieldDescr %d, new offs %d", r, *bufOffs);
 	CHKR(r);
 	assert(subdag != NULL);
 
-struct ln_pdag *dag = *pdag;
-	//if (node != NULL) CHKR(ln_addFDescrToPDAG(subdag, node));
 	CHKR(ln_pdagAddParser(pdag, parser));
-ln_dbgprintf((*pdag)->ctx, "---------------------------------------");
-ln_displayPDAG(dag, 0);
-ln_dbgprintf((*pdag)->ctx, "=======================================");
 done:
 	return r;
 }
@@ -103,14 +97,14 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	int r = 0;
 	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
-	unsigned char *buf;
+	const char *buf;
 	es_size_t lenBuf;
-	// TODO: maybe later void* (*constructor_fn)(ln_fieldList_t *, ln_ctx) = NULL;
 	char name[MAX_FIELDNAME_LEN];
 	size_t iDst;
 	ln_parser_t *parser = NULL;
+	struct json_object *json = NULL;
 
-	buf = es_getBufAddr(rule);
+	buf = (const char*)es_getBufAddr(rule);
 	lenBuf = es_strlen(rule);
 	assert(buf[i] == '%');
 	++i;	/* "eat" ':' */
@@ -150,7 +144,7 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	es_emptyStr(*str);
  	size_t j = i;
 	/* scan for terminator */
-	while(j < lenBuf && buf[j] != ':' && buf[j] != '%')
+	while(j < lenBuf && buf[j] != ':' && buf[j] != '{' && buf[j] != '%')
 		++j;
 	/* now trim trailing space backwards */
 	size_t next = j;
@@ -178,6 +172,20 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	}
 	free(cstr);
 
+ln_dbgprintf(ctx, "after field type: '%s'", buf+i);
+	
+	if(buf[i] == '{') {
+		struct json_tokener *tokener = json_tokener_new();
+		json = json_tokener_parse_ex(tokener, buf+i, (int) (lenBuf - i));
+		if(json == NULL) {
+			ln_errprintf(ctx, 0, "invalid json in '%s'", buf+i);
+		}
+		ln_dbgprintf(ctx, "char_offset: %d", tokener->char_offset);
+		i += tokener->char_offset;
+		ln_dbgprintf(ctx, "remains: '%s'", buf + i);
+		json_tokener_free(tokener);
+	}
+
 	es_str_t *edata = NULL;
 	if(buf[i] == '%') {
 		i++;
@@ -192,7 +200,6 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 			}
 			CHKR(es_addChar(&edata, buf[i++]));
 		}
-		// TODO: later: node->raw_data = es_strdup(edata);
 		es_unescapeStr(edata);
 		if(ctx->debug) {
 			cstr = es_str2cstr(edata, NULL);
@@ -201,16 +208,16 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		}
 	}
 
-	// TODO: maybe later: if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
-
 	char *ed = NULL;
 	if(edata != NULL)
 		ed = es_str2cstr(edata, " ");
-	parser = ln_newParser(ctx, name, prsid, ed);
+	parser = ln_newParser(ctx, name, prsid, ed, json);
 	free(ed);
 
 	*bufOffs = i;
 done:
+	if(json != NULL)
+		json_object_put(json);
 	*ret = r;
 	return parser;
 }

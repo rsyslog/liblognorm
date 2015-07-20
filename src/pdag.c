@@ -94,7 +94,11 @@ ln_parserName2ID(const char *const __restrict__ name)
  * @return parser node ptr or NULL (on error)
  */
 ln_parser_t*
-ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, const char *const extraData)
+ln_newParser(ln_ctx ctx,
+	const char *const name,
+	const prsid_t prsid,
+	const char *const extraData,
+	json_object *const json)
 {
 	ln_parser_t *node;
 
@@ -108,7 +112,7 @@ ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, const char
 	node->prsid = prsid;
 
 	if(parser_lookup_table[prsid].construct != NULL) {
-		parser_lookup_table[prsid].construct(ctx, extraData, NULL, &node->parser_data);
+		parser_lookup_table[prsid].construct(ctx, extraData, json, &node->parser_data);
 	}
 done:
 	return node;
@@ -122,7 +126,7 @@ ln_newLiteralParser(ln_ctx ctx, char lit)
 {
 	char buf[] = "x";
 	buf[0] = lit;
-	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, buf);
+	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, buf, NULL);
 	return parser;
 }
 
@@ -196,7 +200,7 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 
 		/* ok, we have two literals in a row, let's compact the nodes */
 		ln_parser_t *child_prs = prs->node->parsers;
-		ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
+		ln_dbgprintf(ctx, "opt path compact: add %p to %p", child_prs, prs);
 		CHKR(ln_combineData_Literal(prs->parser_data, child_prs->parser_data));
 		ln_pdag *const node_del = prs->node;
 		prs->node = child_prs->node;
