@@ -63,6 +63,7 @@ static struct ln_parser_info parser_lookup_table[] = {
 	{ "char-to", ln_parseCharTo, NULL },
 	{ "char-sep", ln_parseCharSeparated, NULL }
 };
+#define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 
 static inline const char *
 parserName(const prsid_t id)
@@ -203,6 +204,80 @@ ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(dag, 0);
 ln_dbgprintf(ctx, "=======================================");
 	return r;
+}
+
+
+/* data structure for pdag statistics */
+struct pdag_stats {
+	int nodes;
+	int term_nodes;
+	int parsers;
+	int max_nparsers;
+	int nparsers_cnt[100];
+	int nparsers_100plus;
+	int *prs_cnt;
+};
+
+/**
+ * Recursive step of statistics gatherer.
+ */
+static int
+ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const stats)
+{
+	stats->nodes++;
+	if(dag->flags.isTerminal)
+		stats->term_nodes++;
+	if(dag->nparsers > stats->max_nparsers)
+		stats->max_nparsers = dag->nparsers;
+	if(dag->nparsers >= 100)
+		stats->nparsers_100plus++;
+	else
+		stats->nparsers_cnt[dag->nparsers]++;
+	stats->parsers += dag->nparsers;
+	int max_path = 0;
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		stats->prs_cnt[prs->prsid]++;
+		const int path_len = ln_pdagStatsRec(ctx, prs->node, stats);
+		if(path_len > max_path)
+			max_path = path_len;
+	}
+	return max_path + 1;
+}
+/**
+ * Gather pdag statistics.
+ *
+ * Data is sent to given file ptr.
+ */
+void
+ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
+{
+	struct pdag_stats *const stats = calloc(1, sizeof(struct pdag_stats));
+	stats->prs_cnt = calloc(NPARSERS, sizeof(int));
+	const int longest_path = ln_pdagStatsRec(ctx, dag, stats);
+
+	fprintf(fp, "nodes.............: %4d\n", stats->nodes);
+	fprintf(fp, "terminal nodes....: %4d\n", stats->term_nodes);
+	fprintf(fp, "parsers entries...: %4d\n", stats->parsers);
+	fprintf(fp, "longest path......: %4d\n", longest_path);
+
+	fprintf(fp, "Parser Type Counts:\n");
+	for(prsid_t i = 0 ; i < NPARSERS ; ++i) {
+		if(stats->prs_cnt[i] != 0)
+			fprintf(fp, "\t%20s: %d\n", parserName(i), stats->prs_cnt[i]);
+	}
+
+	int pp = 0;
+	fprintf(fp, "Parsers per Node:\n");
+	fprintf(fp, "\tmax:\t%4d\n", stats->max_nparsers);
+	for(int i = 0 ; i < 100 ; ++i) {
+		pp += stats->nparsers_cnt[i];
+		if(stats->nparsers_cnt[i] != 0)
+			fprintf(fp, "\t%d:\t%4d\n", i, stats->nparsers_cnt[i]);
+	}
+
+	free(stats->prs_cnt);
+	free(stats);
 }
 
 /**

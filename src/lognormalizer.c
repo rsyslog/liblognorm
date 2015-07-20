@@ -215,6 +215,7 @@ fprintf(stderr,
 	"    -v           Print debug. When used 3 times, prints parse tree\n"
 	"    -d           Print DOT file to stdout and exit\n"
 	"    -d<filename> Save DOT file to the filename\n"
+	"    -s<filename> Print parse dag statistics and exit\n"
 	"\n"
 	);
 }
@@ -224,6 +225,7 @@ int main(int argc, char *argv[])
 	int opt;
 	char *repository = NULL;
 	int ret = 0;
+	FILE *fpStats = NULL;
 
 	if((ctx = ln_initCtx()) == NULL) {
 		complain("Could not initialize liblognorm context");
@@ -231,14 +233,27 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:e:r:E:vpt:To:h")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:e:r:E:vpt:To:h")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
 				fpDOT = stdout;
 			} else {
 				if((fpDOT = fopen(optarg, "w")) == NULL) {
+					perror(optarg);
 					complain("Cannot open DOT file");
+					ret = 1;
+					goto exit;
+				}
+			}
+			break;
+		case 's': /* generate pdag statistic file */
+			if(!strcmp(optarg, "-")) {
+				fpStats = stdout;
+			} else {
+				if((fpStats = fopen(optarg, "w")) == NULL) {
+					perror(optarg);
+					complain("Cannot open parser statistics file");
 					ret = 1;
 					goto exit;
 				}
@@ -305,6 +320,12 @@ int main(int argc, char *argv[])
 
 	if(fpDOT != NULL) {
 		genDOT();
+		ret=1;
+		goto exit;
+	}
+
+	if(fpStats != NULL) {
+		ln_pdagStats(ctx, ctx->pdag, fpStats);
 		ret=1;
 		goto exit;
 	}

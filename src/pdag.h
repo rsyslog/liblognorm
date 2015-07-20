@@ -9,9 +9,9 @@
  */
 #ifndef LIBLOGNORM_PDAG_H_INCLUDED
 #define	LIBLOGNORM_PDAG_H_INCLUDED
+#include <stdio.h>
 #include <libestr.h>
 #include <stdint.h>
-#include <ptree.h> // TODO: remove
 
 #define ORIGINAL_MSG_KEY "originalmsg"
 #define UNPARSED_DATA_KEY "unparsed-data"
@@ -192,4 +192,5 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
 int ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const pdag);
+void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */
