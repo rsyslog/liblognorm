@@ -63,16 +63,14 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	return i;
 }
 
-/* parsers for the primitive types
+/* parser _parse interface
  *
  * All parsers receive 
  *
  * @param[in] str the to-be-parsed string
  * @param[in] strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
- * @param[in] node fieldlist with additional data; for simple
- *            parsers, this sets variable "ed", which just is
- *            string data.
+ * @param[in] pointer to parser data block
  * @param[out] parsed bytes
  * @param[out] value ptr to json object containing parsed data
  *             (can be unused, but if used *value MUST be NULL on entry)
@@ -83,19 +81,18 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  * return 0 on success and LN_WRONGPARSER if this parser could
  *           not successfully parse (but all went well otherwise) and something
  *           else in case of an error.
- *
- * TODO: parser "node" must be handled differently, recommend to use 
- * the modules data block.
  */
-#define PARSER(ParserName) \
-int ln_parse##ParserName(const char *const str, const size_t strLen, \
+#define PARSER_Parse(ParserName) \
+int ln_parse##ParserName( \
+	__attribute__((unused)) ln_ctx ctx, \
+	const char *const str, \
+	const size_t strLen, \
 	size_t *const offs,       \
-	__attribute__((unused)) const ln_parser_t *const node,  \
+	__attribute__((unused)) void *const pdata, \
 	size_t *parsed,                                      \
 	__attribute__((unused)) struct json_object **value) \
 { \
 	int r = LN_WRONGPARSER; \
-	__attribute__((unused)) es_str_t *ed = (node == NULL) ? NULL : node->data;  \
 	*parsed = 0;
 
 #define FAILParser \
@@ -109,92 +106,32 @@ done:
 	return r; \
 }
 
-
-/**
- * Utilities to allow constructors of complex parser's to
- *  easily process field-declaration arguments.
+/* parser constructor
+ * @param[in] ed extra data (legacy)
+ * @param[in] json config json items
+ * @param[out] data parser data block (to be allocated)
+ * At minimum, *data must be set to NULL
+ * @return error status (0 == OK)
  */
-#define FIELD_ARG_SEPERATOR ":"
-#define MAX_FIELD_ARGS 10
+#define PARSER_Construct(ParserName) \
+int ln_construct##ParserName( \
+	__attribute__((unused)) ln_ctx ctx, \
+	__attribute__((unused)) const char *const ed, \
+	__attribute__((unused)) json_object *const json, \
+	void **pdata)
 
-#if 0
-struct pcons_args_s {
-	int argc;
-	char *argv[MAX_FIELD_ARGS];
-};
+/* parser destructor
+ * @param[data] data parser data block (to be de-allocated)
+ */
+#define PARSER_Destruct(ParserName) \
+void ln_destruct##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
 
-typedef struct pcons_args_s pcons_args_t;
 
-static void free_pcons_args(pcons_args_t** dat_p) {
-	pcons_args_t *dat = *dat_p;
-	*dat_p = NULL;
-	if (! dat) {
-	  return;
-	}
-	while((--(dat->argc)) >= 0) {
-		if (dat->argv[dat->argc] != NULL) free(dat->argv[dat->argc]);
-	}
-	free(dat);
-}
-
-static pcons_args_t* pcons_args(es_str_t *args, int expected_argc) {
-	pcons_args_t *dat = NULL;
-	char* orig_str = NULL;
-	if ((dat = malloc(sizeof(pcons_args_t))) == NULL) goto fail;
-	dat->argc = 0;
-	if (args != NULL) {
-		orig_str = es_str2cstr(args, NULL);
-		char *str = orig_str;
-		while (dat->argc < MAX_FIELD_ARGS) {
-			int i = dat->argc++;
-			char *next = (dat->argc == expected_argc) ? NULL : strstr(str, FIELD_ARG_SEPERATOR);
-			if (next == NULL) {
-				if ((dat->argv[i] = strdup(str)) == NULL) goto fail;
-				break;
-			} else {
-				if ((dat->argv[i] = strndup(str, next - str)) == NULL) goto fail;
-				next++;
-			}
-			str = next;
-		}
-	}
-	goto done;
-fail:
-	if (dat != NULL) free_pcons_args(&dat);
-done:
-	if (orig_str != NULL) free(orig_str);
-	return dat;
-}
-
-static const char* pcons_arg(pcons_args_t *dat, int i, const char* dflt_val) {
-	if (i >= dat->argc) return dflt_val;
-	return dat->argv[i];
-}
-
-static char* pcons_arg_copy(pcons_args_t *dat, int i, const char* dflt_val) {
-	const char *str = pcons_arg(dat, i, dflt_val);
-	return (str == NULL) ? NULL : strdup(str);
-}
-
-static void pcons_unescape_arg(pcons_args_t *dat, int i) {
-	char *arg = (char*) pcons_arg(dat, i, NULL);
-	es_str_t *str = NULL;
-	if (arg != NULL) {
-		str = es_newStrFromCStr(arg, strlen(arg));
-		if (str != NULL) {
-			es_unescapeStr(str);
-			free(arg);
-			dat->argv[i] = es_str2cstr(str, NULL);
-			es_deleteStr(str);
-		}
-	}
-}
-#endif
 
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
  */
-PARSER(RFC5424Date)
+PARSER_Parse(RFC5424Date)
 	const unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int year;
@@ -299,7 +236,7 @@ done:
 /**
  * Parse a RFC3164 Date.
  */
-PARSER(RFC3164Date)
+PARSER_Parse(RFC3164Date)
 	const unsigned char *p;
 	size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
@@ -526,7 +463,7 @@ done:
  * Note that a number is an abstracted concept. We always represent it
  * as 64 bits (but may later change our mind if performance dictates so).
  */
-PARSER(Number)
+PARSER_Parse(Number)
 	const char *c;
 	size_t i;
 
@@ -550,7 +487,7 @@ done:
 /**
  * Parse a Real-number in floating-pt form.
  */
-PARSER(Float)
+PARSER_Parse(Float)
 	const char *c;
 	size_t i;
 
@@ -590,7 +527,7 @@ done:
  * whitespace. Note that if a non-hex character is deteced inside the number string,
  * this is NOT considered to be a number.
  */
-PARSER(HexNumber)
+PARSER_Parse(HexNumber)
 	const char *c;
 	size_t i = *offs;
 
@@ -625,7 +562,7 @@ done:
  * no timestamp.
  */
 #define LEN_KERNEL_TIMESTAMP 14
-PARSER(KernelTimestamp)
+PARSER_Parse(KernelTimestamp)
 	const char *c;
 	size_t i;
 
@@ -681,7 +618,7 @@ done:
  * This parser is also a forward-compatibility tool for the upcoming
  * slsa (simple log structure analyser) tool.
  */
-PARSER(Whitespace)
+PARSER_Parse(Whitespace)
 	const char *c;
 	size_t i = *offs;
 
@@ -707,7 +644,7 @@ done:
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
  */
-PARSER(Word)
+PARSER_Parse(Word)
 	const char *c;
 	size_t i;
 
@@ -733,21 +670,23 @@ done:
 }
 
 
+struct data_StringTo {
+	const char *toFind;
+	size_t len;
+};
 /**
  * Parse everything up to a specific string.
  * swisskid, 2015-01-21
  */
-PARSER(StringTo)
+PARSER_Parse(StringTo)
 	const char *c;
-	const char *toFind;
-	size_t i, j, k, m;
+	size_t i, j, m;
 	int chkstr;
+	struct data_StringTo *const data = (struct data_StringTo*) pdata;
+	const char *const toFind = data->toFind;
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	assert(ed != NULL);
-	k = es_strlen(ed) - 1;
-	toFind = es_str2cstr(ed, NULL);
 	c = str;
 	i = *offs;
 	chkstr = 0;
@@ -759,12 +698,12 @@ PARSER(StringTo)
 		/* Found the first letter, now find the rest of the string */
 		j = 0;
 		m = i;
-		while(m < strLen && j < k ) {
+		while(m < strLen && j < data->len ) {
 		    m++;
 		    j++;
 		    if(c[m] != toFind[j])
 			break;
-		    if (j == k) 
+		    if (j == data->len) 
 			chkstr = 1;
 		}
 	    }
@@ -780,12 +719,30 @@ done:
 	return r;
 }
 
+PARSER_Construct(StringTo)
+{
+	int r = 0;
+	struct data_StringTo *data = (struct data_StringTo*) calloc(1, sizeof(struct data_StringTo));
+
+	data->toFind = strdup(ed);
+	data->len = strlen(data->toFind);
+
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(StringTo)
+{
+	struct data_StringTo *data = (struct data_StringTo*) pdata;
+	free((void*)data->toFind);
+	free(pdata);
+}
+
 /**
  * Parse a alphabetic word.
  * A alpha word is composed of characters for which isalpha returns true.
  * The parser dones if there is no alpha character at all.
  */
-PARSER(Alpha)
+PARSER_Parse(Alpha)
 	const char *c;
 	size_t i;
 
@@ -811,6 +768,9 @@ done:
 }
 
 
+struct data_CharTo {
+	char cTerm;
+};
 /**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
@@ -820,23 +780,21 @@ done:
  * In those cases, the parsers declares itself as not being successful, in all
  * other cases a string is extracted.
  */
-PARSER(CharTo)
+PARSER_Parse(CharTo)
 	const char *c;
-	unsigned char cTerm;
 	size_t i;
+	struct data_CharTo *const data = (struct data_CharTo*) pdata;
+	const unsigned char cTerm = data->cTerm;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	assert(es_strlen(ed) == 1);
-	cTerm = *(es_getBufAddr(ed));
 	c = str;
 	i = *offs;
 
 	/* search end of word */
 	while(i < strLen && c[i] != cTerm) 
 		i++;
-
 
 	if(i == *offs || i == strLen || c[i] != cTerm)
 		goto done;
@@ -847,15 +805,30 @@ PARSER(CharTo)
 done:
 	return r;
 }
+PARSER_Construct(CharTo)
+{
+	int r = 0;
+	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
+	data->cTerm = *ed;
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(CharTo)
+{
+	free(pdata);
+}
 
 
+
+struct data_Literal {
+	const char *lit;
+};
 /**
  * Parse a specific literal.
  */
-PARSER(Literal)
-// TODO remove fprintf's - we leave them in because we'll proably need
-// them when we implement the optimizers path compaction.
-	const char *const lit = node->parser_data;
+PARSER_Parse(Literal)
+	struct data_Literal *const data = (struct data_Literal*) pdata;
+	const char *const lit = data->lit;
 	size_t i = *offs;
 	size_t j;
 
@@ -864,32 +837,51 @@ PARSER(Literal)
 			break;
 		++i;
 	}
-//fprintf(stderr, "lit check done lit[%zu]: %c\n", j, lit[j-1]);
 
 	*parsed = j; /* we must always return how far we parsed! */
 	if(lit[j] == '\0')
 		r = 0;
 		
-#if 0
-
-//fprintf(stderr, "literal to parse: '%s'\n", lit);
-	const size_t litLen = strlen(lit);
-	if(litLen+(*offs) > strLen)
-		goto done;
-	const int res = strncmp(str+*offs, lit, litLen);
-//fprintf(stderr, "literal: strncmp('%s','%s',%zu): %d\n", str+*offs, lit, litLen, res);
-	if(res != 0)
-		goto done;
-
-	/* success, persist */
-	*parsed = litLen;
-	r = 0;
-#endif
-//done:
 	return r;
+}
+PARSER_Construct(Literal)
+{
+	int r = 0;
+	struct data_Literal *data = (struct data_Literal*) calloc(1, sizeof(struct data_Literal));
+
+	data->lit = strdup(ed);
+
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(Literal)
+{
+	struct data_Literal *data = (struct data_Literal*) pdata;
+	free((void*)data->lit);
+	free(pdata);
+}
+/* for path compaction, we need a special handler to combine two
+ * literal data elements.
+ */
+int
+ln_combineData_Literal(void *const porg, void *const padd)
+{
+	struct data_Literal *const __restrict__ org = porg;
+	struct data_Literal *const __restrict__ add = padd;
+	int r = 0;
+	const size_t len = strlen(org->lit);
+	const size_t add_len = strlen(add->lit);
+	char *const newlit = (char*)realloc((void*)org->lit, len+add_len+1);
+	CHKN(newlit);
+	org->lit = newlit;
+	memcpy((char*)org->lit+len, add->lit, add_len+1);
+done:	return r;
 }
 
 
+struct data_CharSeparated {
+	char cTerm;
+};
 /**
  * Parse everything up to a specific character, or up to the end of string.
  * The character must be the only char inside extra data passed to the parser.
@@ -898,21 +890,19 @@ PARSER(Literal)
  * By nature of the parser, it is required that end of string or the separator
  * follows this field in rule.
  */
-PARSER(CharSeparated)
+PARSER_Parse(CharSeparated)
 	const char *c;
-	unsigned char cTerm;
+	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
 	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	assert(es_strlen(ed) == 1);
-	cTerm = *(es_getBufAddr(ed));
 	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
+	while(i < strLen && c[i] != data->cTerm) 
 		i++;
 
 	/* success, persist */
@@ -921,6 +911,21 @@ PARSER(CharSeparated)
 	r = 0; /* success */
 	return r;
 }
+PARSER_Construct(CharSeparated)
+{
+	int r = 0;
+	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
+
+	data->cTerm = *ed;
+
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(CharSeparated)
+{
+	free(pdata);
+}
+
 
 #if 0 // these parsers need much more work
 /**
@@ -935,7 +940,7 @@ struct recursive_parser_data_s {
 	int free_ctx;
 };
 
-PARSER(Recursive)
+PARSER_Parse(Recursive)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1071,7 +1076,7 @@ struct tokenized_parser_data_s {
 
 typedef struct tokenized_parser_data_s tokenized_parser_data_t;
 
-PARSER(Tokenized)
+PARSER_Parse(Tokenized)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1295,7 +1300,7 @@ struct regex_parser_data_s {
 	int max_groups;
 };
 
-PARSER(Regex)
+PARSER_Parse(Regex)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1480,7 +1485,7 @@ static int reinterpret_value(json_object **value, enum interpret_type to_type) {
 	return 1;
 }
 
-PARSER(Interpret)
+PARSER_Parse(Interpret)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1583,7 +1588,7 @@ struct suffixed_parser_data_s {
 	char* suffix_field_name;
 };
 
-PARSER(Suffixed) {
+PARSER_Parse(Suffixed) {
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1782,7 +1787,7 @@ void suffixed_parser_data_destructor(void** dataPtr) {
 /**
  * Just get everything till the end of string.
  */
-PARSER(Rest)
+PARSER_Parse(Rest)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1802,7 +1807,7 @@ PARSER(Rest)
  * quote character seen. The extracted string does NOT include the quote characters.
  * swisskid, 2015-01-21
  */
-PARSER(OpQuotedString)
+PARSER_Parse(OpQuotedString)
 	const char *c;
 	size_t i;
 	char *cstr = NULL;
@@ -1846,6 +1851,7 @@ done:
 	return r;
 }
 
+
 /**
  * Parse a quoted string. In this initial implementation, escaping of the quote
  * char is not supported. A quoted string is one start starts with a double quote,
@@ -1853,7 +1859,7 @@ done:
  * quote character seen. The extracted string does NOT include the quote characters.
  * rgerhards, 2011-01-14
  */
-PARSER(QuotedString)
+PARSER_Parse(QuotedString)
 	const char *c;
 	size_t i;
 	char *cstr = NULL;
@@ -1894,7 +1900,7 @@ done:
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-PARSER(ISODate)
+PARSER_Parse(ISODate)
 	const char *c;
 	size_t i;
 
@@ -1954,7 +1960,7 @@ done:
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
  */
-PARSER(CiscoInterfaceSpec)
+PARSER_Parse(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
 
@@ -1976,7 +1982,7 @@ PARSER(CiscoInterfaceSpec)
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
-	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) == 0) {
+	if(ln_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) == 0) {
 		bHaveIP = 1;
 		i += lenIP - 1; /* position on delimiter */
 	} else {
@@ -1996,14 +2002,14 @@ PARSER(CiscoInterfaceSpec)
 	/* we now utilize our other parser helpers */
 	if(!bHaveIP) {
 		idxIP = i;
-		if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
+		if(ln_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) != 0) goto done;
 		i += lenIP;
 	}
 	if(i == strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
 	const size_t idxPort = i;
 	size_t lenPort;
-	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto done;
+	if(ln_parseNumber(ctx, str, strLen, &i, NULL, &lenPort, NULL) != 0) goto done;
 	i += lenPort;
 	if(i == strLen) goto success;
 
@@ -2016,12 +2022,12 @@ PARSER(CiscoInterfaceSpec)
 	if(i+5 < strLen && c[i] == ' ' && c[i+1] == '(') {
 		size_t iTmp = i+2; /* skip over " (" */
 		idxIP2 = iTmp;
-		if(ln_parseIPv4(str, strLen, &iTmp, node, &lenIP2, NULL) == 0) {
+		if(ln_parseIPv4(ctx, str, strLen, &iTmp, NULL, &lenIP2, NULL) == 0) {
 			iTmp += lenIP2;
 			if(i < strLen || c[iTmp] == '/') {
 				++iTmp; /* skip slash */
 				idxPort2 = iTmp;
-				if(ln_parseNumber(str, strLen, &iTmp, node, &lenPort2, NULL) == 0) {
+				if(ln_parseNumber(ctx, str, strLen, &iTmp, NULL, &lenPort2, NULL) == 0) {
 					iTmp += lenPort2;
 					if(iTmp < strLen && c[iTmp] == ')') {
 						i = iTmp + 1; /* match, so use new index */
@@ -2094,7 +2100,7 @@ done:
  * is commonly done in Cisco software).
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  */
-PARSER(Duration)
+PARSER_Parse(Duration)
 	const char *c;
 	size_t i;
 
@@ -2136,7 +2142,7 @@ done:
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-PARSER(Time24hr)
+PARSER_Parse(Time24hr)
 	const char *c;
 	size_t i;
 
@@ -2179,7 +2185,7 @@ done:
  * TODO: the code below is a duplicate of 24hr parser - create common function?
  * rgerhards, 2011-01-14
  */
-PARSER(Time12hr)
+PARSER_Parse(Time12hr)
 	const char *c;
 	size_t i;
 
@@ -2251,7 +2257,7 @@ done:
 /**
  * Parser for IPv4 addresses.
  */
-PARSER(IPv4)
+PARSER_Parse(IPv4)
 	const char *c;
 	size_t i;
 
@@ -2315,7 +2321,7 @@ skipIPv6AddrBlock(const char *const __restrict__ str,
  * by whitespace or end-of-string, else it is not considered
  * a valid address. This prevents false positives.
  */
-PARSER(IPv6)
+PARSER_Parse(IPv6)
 	const char *c;
 	size_t i;
 	size_t beginBlock; /* last block begin in case we need IPv4 parsing */
@@ -2369,7 +2375,7 @@ PARSER(IPv6)
 		/* prevent pure IPv4 address to be recognized */
 		if(beginBlock == *offs) goto done;
 		i = beginBlock;
-		if(ln_parseIPv4(str, strLen, &i, node, &ipv4_parsed, NULL) != 0)
+		if(ln_parseIPv4(ctx, str, strLen, &i, NULL, &ipv4_parsed, NULL) != 0)
 			goto done;
 		i += ipv4_parsed;
 	}
@@ -2474,7 +2480,7 @@ done:
  * may be imposed in the future as we see additional need.
  * added 2015-04-30 rgerhards
  */
-PARSER(v2IPTables)
+PARSER_Parse(v2IPTables)
 	size_t i = *offs;
 	int nfields = 0;
 
@@ -2527,7 +2533,7 @@ done:
  * behaviour, and probably emulate it.
  * added 2015-04-28 by rgerhards, v1.1.2
  */
-PARSER(JSON)
+PARSER_Parse(JSON)
 	const size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 
@@ -2643,7 +2649,7 @@ done:
  * only.
  * added 2015-04-28 by rgerhards, v1.1.2
  */
-PARSER(CEESyslog)
+PARSER_Parse(CEESyslog)
 	size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 	struct json_object *json = NULL;
@@ -2704,7 +2710,7 @@ done:
  * have much more frequent mismatches than matches.
  * added 2015-04-25 rgerhards
  */
-PARSER(NameValue)
+PARSER_Parse(NameValue)
 	size_t i = *offs;
 
 	/* stage one */
@@ -2748,7 +2754,7 @@ done:
  * This parser must start on a hex digit.
  * added 2015-05-04 by rgerhards, v1.1.2
  */
-PARSER(MAC48)
+PARSER_Parse(MAC48)
 	size_t i = *offs;
 	char delim;
 
@@ -3007,7 +3013,7 @@ done:
  * Parser for ArcSight Common Event Format (CEF) version 0.
  * added 2015-05-05 by rgerhards, v1.1.2
  */
-PARSER(CEF)
+PARSER_Parse(CEF)
 	size_t i = *offs;
 	char *vendor = NULL;
 	char *product = NULL;
@@ -3097,7 +3103,7 @@ done:
  * Parser for Checkpoint LEA on-disk format.
  * added 2015-06-18 by rgerhards, v1.1.2
  */
-PARSER(CheckpointLEA)
+PARSER_Parse(CheckpointLEA)
 	size_t i = *offs;
 	size_t iName, lenName;
 	size_t iValue, lenValue;

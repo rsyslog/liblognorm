@@ -62,43 +62,6 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 }
 
 /**
- * Construct a parser node entry.
- * @return parser node ptr or NULL (on error)
- */
-static ln_parser_t*
-ln_newParser(ln_ctx ctx, const char *const name, const prsid_t parserid, es_str_t *extraData)
-{
-	ln_parser_t *node;
-
-	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
-		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
-		goto done;
-	}
-	node->node = NULL;
-	node->prio = 0;
-	node->data = extraData;
-	node->raw_data = (node->data == NULL) ? NULL : es_strdup(node->data);
-	node->parser_data = NULL;
-	node->name = strdup(name);
-	node->prsid = parserid;
-done:
-	return node;
-}
-
-/**
- *  Construct a new literal parser.
- */
-ln_parser_t *
-ln_newLiteralParser(ln_ctx ctx, char lit)
-{
-	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, NULL);
-	char buf[] = "x";
-	buf[0] = lit;
-	parser->parser_data = strdup(buf);
-	return parser;
-}
-
-/**
  * Extract a field description from a sample.
  * The field description is added to the tail of the current
  * subtree's field list. The parse buffer must be position on the
@@ -240,7 +203,11 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 
 	// TODO: maybe later: if (constructor_fn) node->parser_data = constructor_fn(node, ctx);
 
-	parser = ln_newParser(ctx, name, prsid, edata);
+	char *ed = NULL;
+	if(edata != NULL)
+		ed = es_str2cstr(edata, " ");
+	parser = ln_newParser(ctx, name, prsid, ed);
+	free(ed);
 
 	*bufOffs = i;
 done:
@@ -299,17 +266,12 @@ parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 
 	*bufOffs = i;
 
-ln_pdag *dag = *pdag;
 	/* we now add the string to the tree */
 	for(i = 0 ; cstr[i] != '\0' ; ++i) {
 		ln_parser_t *parser;
-		// TODO create parser, add to tree
 		ln_dbgprintf(ctx, "adding literal node: '%c'", cstr[i]);
 		parser = ln_newLiteralParser(ctx, cstr[i]);
 		CHKR(ln_pdagAddParser(pdag, parser));
-ln_dbgprintf(dag->ctx, "---------------------------------------");
-ln_displayPDAG(dag, 0);
-ln_dbgprintf(dag->ctx, "=======================================");
 	}
 
 	r = 0;

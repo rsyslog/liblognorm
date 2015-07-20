@@ -31,37 +31,41 @@
  * VERY IMPORTANT: the initialization must be done EXACTLY in the
  * order of parser IDs (also see comment in pdag.h).
  */
+#define PARSER_ENTRY_NO_DATA(identifier, parser) \
+{ identifier, NULL, ln_parse##parser, NULL }
+#define PARSER_ENTRY(identifier, parser) \
+{ identifier, ln_construct##parser, ln_parse##parser, ln_destruct##parser }
 static struct ln_parser_info parser_lookup_table[] = {
-	{ "literal", ln_parseLiteral, NULL }, /* PRS_LITERAL */
-	{ "date-rfc3164", ln_parseRFC3164Date, NULL },
-	{ "date-rfc5424", ln_parseRFC5424Date, NULL },
-	{ "number", ln_parseNumber, NULL },
-	{ "float", ln_parseFloat, NULL },
-	{ "hexnumber", ln_parseHexNumber, NULL },
-	{ "kernel-timestamp", ln_parseKernelTimestamp, NULL },
-	{ "whitespace", ln_parseWhitespace, NULL },
-	{ "ipv4", ln_parseIPv4, NULL },
-	{ "ipv6", ln_parseIPv6, NULL },
-	{ "word", ln_parseWord, NULL },
-	{ "alpha", ln_parseAlpha, NULL },
-	{ "rest", ln_parseRest, NULL },
-	{ "op-quoted-string", ln_parseOpQuotedString, NULL },
-	{ "quoted-string", ln_parseQuotedString, NULL },
-	{ "date-iso", ln_parseISODate, NULL },
-	{ "time-24hr", ln_parseTime24hr, NULL },
-	{ "time-12hr", ln_parseTime12hr, NULL },
-	{ "duration", ln_parseDuration, NULL },
-	{ "cisco-interface-spec", ln_parseCiscoInterfaceSpec, NULL },
-	{ "name-value-list", ln_parseNameValue, NULL },
-	{ "json", ln_parseJSON, NULL },
-	{ "cee-syslog", ln_parseCEESyslog, NULL },
-	{ "mac48", ln_parseMAC48, NULL },
-	{ "cef", ln_parseCEF, NULL },
-	{ "checkpoint-lea", ln_parseCheckpointLEA, NULL },
-	{ "v2-iptables", ln_parsev2IPTables, NULL },
-	{ "string-to", ln_parseStringTo, NULL },
-	{ "char-to", ln_parseCharTo, NULL },
-	{ "char-sep", ln_parseCharSeparated, NULL }
+	PARSER_ENTRY("literal", Literal),
+	PARSER_ENTRY_NO_DATA("date-rfc3164", RFC3164Date),
+	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date),
+	PARSER_ENTRY_NO_DATA("number", Number),
+	PARSER_ENTRY_NO_DATA("float", Float),
+	PARSER_ENTRY_NO_DATA("hexnumber", HexNumber),
+	PARSER_ENTRY_NO_DATA("kernel-timestamp", KernelTimestamp),
+	PARSER_ENTRY_NO_DATA("whitespace", Whitespace),
+	PARSER_ENTRY_NO_DATA("ipv4", IPv4),
+	PARSER_ENTRY_NO_DATA("ipv6", IPv6),
+	PARSER_ENTRY_NO_DATA("word", Word),
+	PARSER_ENTRY_NO_DATA("alpha", Alpha),
+	PARSER_ENTRY_NO_DATA("rest", Rest),
+	PARSER_ENTRY_NO_DATA("op-quoted-string", OpQuotedString),
+	PARSER_ENTRY_NO_DATA("quoted-string", QuotedString),
+	PARSER_ENTRY_NO_DATA("date-iso", ISODate),
+	PARSER_ENTRY_NO_DATA("time-24hr", Time24hr),
+	PARSER_ENTRY_NO_DATA("time-12hr", Time12hr),
+	PARSER_ENTRY_NO_DATA("duration", Duration),
+	PARSER_ENTRY_NO_DATA("cisco-interface-spec", CiscoInterfaceSpec),
+	PARSER_ENTRY_NO_DATA("name-value-list", NameValue),
+	PARSER_ENTRY_NO_DATA("json", JSON),
+	PARSER_ENTRY_NO_DATA("cee-syslog", CEESyslog),
+	PARSER_ENTRY_NO_DATA("mac48", MAC48),
+	PARSER_ENTRY_NO_DATA("cef", CEF),
+	PARSER_ENTRY_NO_DATA("checkpoint-lea", CheckpointLEA),
+	PARSER_ENTRY_NO_DATA("v2-iptables", v2IPTables),
+	PARSER_ENTRY("string-to", StringTo),
+	PARSER_ENTRY("char-to", CharTo),
+	PARSER_ENTRY("char-sep", CharSeparated)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 
@@ -85,6 +89,43 @@ ln_parserName2ID(const char *const __restrict__ name)
 }
 
 
+/**
+ * Construct a parser node entry.
+ * @return parser node ptr or NULL (on error)
+ */
+ln_parser_t*
+ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, const char *const extraData)
+{
+	ln_parser_t *node;
+
+	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
+		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
+		goto done;
+	}
+	node->node = NULL;
+	node->prio = 0;
+	node->name = strdup(name);
+	node->prsid = prsid;
+
+	if(parser_lookup_table[prsid].construct != NULL) {
+		parser_lookup_table[prsid].construct(ctx, extraData, NULL, &node->parser_data);
+	}
+done:
+	return node;
+}
+
+/**
+ *  Construct a new literal parser.
+ */
+ln_parser_t *
+ln_newLiteralParser(ln_ctx ctx, char lit)
+{
+	char buf[] = "x";
+	buf[0] = lit;
+	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, buf);
+	return parser;
+}
+
 struct ln_pdag*
 ln_newPDAG(ln_ctx ctx)
 {
@@ -103,26 +144,15 @@ done:	return dag;
  * alloc for the parser!).
  */
 static void
-pdagDeletePrs(ln_parser_t *const __restrict__ prs)
+pdagDeletePrs(ln_ctx ctx, ln_parser_t *const __restrict__ prs)
 {
 	// TODO: be careful here: once we move to real DAG from tree, we
 	// cannot simply delete the next node! (refcount? something else?)
 	if(prs->node != NULL)
 		ln_pdagDelete(prs->node);
 	free((void*)prs->name);
-	if(prs->data != NULL)
-		es_deleteStr(prs->data);
-	if(prs->raw_data != NULL)
-		es_deleteStr(prs->raw_data);
-	// TODO: delete parser_data, but we need the real way of handling
-	// it before doing so.
-	if(prs->prsid == PRS_LITERAL) // quick and dirty for the current only case!
-		free(prs->parser_data);
-#if 0
-	if(prs->parser_data != NULL && prs->parser_data_destructor != NULL)
-		prs->parser_data_destructor(&(prs->parser_data));
-#endif
-	//free(prs);
+	if(prs->parser_data != NULL)
+		parser_lookup_table[prs->prsid].destruct(ctx, prs->parser_data);
 }
 
 void
@@ -135,7 +165,7 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		json_object_put(pdag->tags);
 
 	for(int i = 0 ; i < pdag->nparsers ; ++i) {
-		pdagDeletePrs(pdag->parsers+i);
+		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
 	free(pdag);
@@ -167,12 +197,7 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 		/* ok, we have two literals in a row, let's compact the nodes */
 		ln_parser_t *child_prs = prs->node->parsers;
 		ln_dbgprintf(ctx, "opt path compact: add %p to %p\n", child_prs, prs);
-		const size_t len = strlen((char*)prs->parser_data);
-		const size_t child_len = strlen((char*)child_prs->parser_data);
-		char *const newlit = realloc(prs->parser_data, len+child_len+1);
-		CHKN(newlit);
-		prs->parser_data = newlit;
-		memcpy((char*)prs->parser_data+len, child_prs->parser_data, child_len+1);
+		CHKR(ln_combineData_Literal(prs->parser_data, child_prs->parser_data));
 		ln_pdag *const node_del = prs->node;
 		prs->node = child_prs->node;
 
@@ -316,7 +341,7 @@ ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
 			*pdag = dag->parsers[i].node;
 			r = 0;
 			ln_dbgprintf(dag->ctx, "merging with dag %p", *pdag);
-			pdagDeletePrs(parser); /* no need for data items */
+			pdagDeletePrs(dag->ctx, parser); /* no need for data items */
 			goto done;
 		}
 	}
@@ -330,9 +355,7 @@ ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
 	dag->nparsers++;
 
 	r = 0;
-	ln_dbgprintf(dag->ctx, "prev subdag %p", dag);
 	*pdag = parser->node;
-	ln_dbgprintf(dag->ctx, "new subdag %p", *pdag);
 
 done:
 	free(parser);
@@ -359,16 +382,10 @@ ln_displayPDAG(struct ln_pdag *dag, int level)
 		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers);
 
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
-		char *ed;
-		if(dag->parsers->data == NULL)
-			ed = strdup("");
-		else
-			ed = es_str2cstr(dag->parsers->data, " ");
-		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s', ed '%s':", indent,
+		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%p':", indent,
 			parserName(dag->parsers[i].prsid),
 			dag->parsers[i].name,
-			dag->parsers[i].parser_data, ed);
-		free(ed);
+			dag->parsers[i].parser_data);
 		ln_displayPDAG(dag->parsers[i].node, level + 1);
 	}
 }
@@ -511,8 +528,8 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
 		}
 		i = offs;
 		value = NULL;
-		localR = parser_lookup_table[prs->prsid].parser(str, strLen,
-			&i, prs, &parsed, &value);
+		localR = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
+			&i, prs->parser_data, &parsed, &value);
 		ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
 		if(localR == 0) {
 			parsedTo = i + parsed;

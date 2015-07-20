@@ -70,8 +70,6 @@ struct ln_parser_s {
 	prsid_t prsid;		/**< parser ID (for lookup table) */
 	ln_pdag *node;		/**< node to branch to if parser succeeded */
 	const char *name;	/**< field name */
-	es_str_t *data;		/**< extra data to be passed to parser */
-	es_str_t *raw_data;	/**< extra untouched (unescaping is not done) data available to be used by parser */ /* this is used for some legacy complex parsers like tokenize */
 	// TODO: think about moving legacy items out of the core data structure! (during optimizer?)
 	uint8_t prio;		/**< assigned priority */
 	void *parser_data;	/** opaque data that the field-parser understands */
@@ -79,9 +77,10 @@ struct ln_parser_s {
 
 struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
-	int (*parser)(const char*, size_t, size_t*, const ln_parser_t *,
+	int (*construct)(ln_ctx ctx, const char *ed, json_object *const json, void **);
+	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
-	void (*parser_data_destructor)(void **); /** destroy opaque data that field-parser understands */
+	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
 };
 
 
@@ -193,4 +192,6 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
 int ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const pdag);
 void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
+ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
+ln_parser_t* ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, const char *const extraData);
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */
