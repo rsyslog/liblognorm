@@ -33,9 +33,15 @@
 
 /* some limits */
 #define MAX_FIELDNAME_LEN 1024
+#define MAX_TYPENAME_LEN  1024
 
 #define LN_ObjID_None 0xFEFE0001
 #define LN_ObjID_CTX 0xFEFE0001
+
+struct ln_type_pdag {
+	const char *name;
+	ln_pdag *pdag;
+};
 
 struct ln_ctx_s {
 	unsigned objID;	/**< a magic number to prevent some memory addressing errors */
@@ -55,7 +61,9 @@ struct ln_ctx_s {
 			       * building.
 			       */
 	unsigned short allowRegex; /**< allow use of regex-based field-types
-								* (disabled by default for performance reasons) */
+				     * (disabled by default for performance reasons) */
+	struct ln_type_pdag *type_pdags; /**< array of our type pdags */
+	int nTypes;		 /**< number of type pdags */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

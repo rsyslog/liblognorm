@@ -325,12 +325,12 @@ int main(int argc, char *argv[])
 	}
 
 	if(fpStats != NULL) {
-		ln_pdagStats(ctx, ctx->pdag, fpStats);
+		ln_fullPdagStats(ctx, fpStats);
 		ret=1;
 		goto exit;
 	}
 
-	if(verbose > 2) ln_displayPDAG(ctx->pdag, 0);
+	if(verbose > 2) ln_displayPDAG(ctx);
 
 	normalize();
 

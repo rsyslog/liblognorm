@@ -72,7 +72,12 @@ static struct ln_parser_info parser_lookup_table[] = {
 static inline const char *
 parserName(const prsid_t id)
 {
-	return parser_lookup_table[id].name;
+	const char *name;
+	if(id == PRS_CUSTOM_TYPE)
+		name = "USER-DEFINED";
+	else
+		name = parser_lookup_table[id].name;
+	return name;
 }
 
 prsid_t 
@@ -97,6 +102,7 @@ ln_parser_t*
 ln_newParser(ln_ctx ctx,
 	const char *const name,
 	const prsid_t prsid,
+	struct ln_type_pdag *const custType,
 	const char *const extraData,
 	json_object *const json)
 {
@@ -110,9 +116,12 @@ ln_newParser(ln_ctx ctx,
 	node->prio = 0;
 	node->name = strdup(name);
 	node->prsid = prsid;
-
-	if(parser_lookup_table[prsid].construct != NULL) {
-		parser_lookup_table[prsid].construct(ctx, extraData, json, &node->parser_data);
+	if(prsid == PRS_CUSTOM_TYPE) {
+		node->custType = custType;
+	} else {
+		if(parser_lookup_table[prsid].construct != NULL) {
+			parser_lookup_table[prsid].construct(ctx, extraData, json, &node->parser_data);
+		}
 	}
 done:
 	return node;
@@ -126,7 +135,7 @@ ln_newLiteralParser(ln_ctx ctx, char lit)
 {
 	char buf[] = "x";
 	buf[0] = lit;
-	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, buf, NULL);
+	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, NULL, buf, NULL);
 	return parser;
 }
 
@@ -212,11 +221,8 @@ done:
 	return r;
 }
 
-/**
- * Optimize the pdag.
- */
-int
-ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const dag)
+static int
+ln_pdagComponentOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 {
 	int r = 0;
 
@@ -227,10 +233,28 @@ ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 		
 		optLitPathCompact(ctx, prs);
 
-		ln_pdagOptimize(ctx, prs->node);
+		ln_pdagComponentOptimize(ctx, prs->node);
 	}
+	return r;
+}
+/**
+ * Optimize the pdag.
+ * This includes all components.
+ */
+int
+ln_pdagOptimize(ln_ctx ctx)
+{
+	int r = 0;
+
+	for(int i = 0 ; i < ctx->nTypes ; ++i) {
+		ln_dbgprintf(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
+		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
+	}
+
+	ln_dbgprintf(ctx, "optimizing main pdag component\n");
+	ln_pdagComponentOptimize(ctx, ctx->pdag);
 ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
-ln_displayPDAG(dag, 0);
+ln_displayPDAG(ctx);
 ln_dbgprintf(ctx, "=======================================");
 	return r;
 }
@@ -273,8 +297,9 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 	}
 	return max_path + 1;
 }
+
 /**
- * Gather pdag statistics.
+ * Gather pdag statistics for a *specific* pdag.
  *
  * Data is sent to given file ptr.
  */
@@ -307,6 +332,34 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
 
 	free(stats->prs_cnt);
 	free(stats);
+}
+
+/**
+ * Gather and output pdag statistics for the full pdag (ctx)
+ * including all disconnected components (type defs).
+ *
+ * Data is sent to given file ptr.
+ */
+void
+ln_fullPdagStats(ln_ctx ctx, FILE *const fp)
+{
+	fprintf(fp, "User-Defined Types\n"
+	            "==================\n");
+	fprintf(fp, "number types: %d\n", ctx->nTypes);
+	for(int i = 0 ; i < ctx->nTypes ; ++i)
+		fprintf(fp, "type: %s\n", ctx->type_pdags[i].name);
+
+	for(int i = 0 ; i < ctx->nTypes ; ++i) {
+		fprintf(fp, "\n"
+			    "type PDAG: %s\n"
+		            "----------\n", ctx->type_pdags[i].name);
+		ln_pdagStats(ctx, ctx->type_pdags[i].pdag, fp);
+	}
+
+	fprintf(fp, "\n"
+		    "Main PDAG\n"
+	            "=========\n");
+	ln_pdagStats(ctx, ctx->pdag, fp);
 }
 
 /**
@@ -367,13 +420,8 @@ done:
 }
 
 
-/* developer debug aid, to be used for example as follows:
-   ln_dbgprintf(dag->ctx, "---------------------------------------");
-   ln_displayPDAG(dag, 0);
-   ln_dbgprintf(dag->ctx, "=======================================");
- */
 void
-ln_displayPDAG(struct ln_pdag *dag, int level)
+ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 {
 	char indent[2048];
 
@@ -390,8 +438,27 @@ ln_displayPDAG(struct ln_pdag *dag, int level)
 			parserName(dag->parsers[i].prsid),
 			dag->parsers[i].name,
 			dag->parsers[i].parser_data);
-		ln_displayPDAG(dag->parsers[i].node, level + 1);
+		ln_displayPDAGComponent(dag->parsers[i].node, level + 1);
 	}
+}
+
+
+
+/* developer debug aid, to be used for example as follows:
+   ln_dbgprintf(dag->ctx, "---------------------------------------");
+   ln_displayPDAG(dag);
+   ln_dbgprintf(dag->ctx, "=======================================");
+ */
+void
+ln_displayPDAG(ln_ctx ctx)
+{
+	for(int i = 0 ; i < ctx->nTypes ; ++i) {
+		ln_dbgprintf(ctx, "COMPONENT: %s", ctx->type_pdags[i].name);
+		ln_displayPDAGComponent(ctx->type_pdags[i].pdag, 0);
+	}
+
+	ln_dbgprintf(ctx, "MAIN COMPONENT:");
+	ln_displayPDAGComponent(ctx->pdag, 0);
 }
 
 
@@ -484,6 +551,79 @@ done:
 }
 
 
+// TODO: remove once all parsers properly generate JSON
+static int
+fixJSON(struct ln_pdag *dag,
+	const char *const str,
+	const size_t offs,
+	const size_t parsed,
+	struct json_object **value,
+	struct json_object *json,
+	const ln_parser_t *const prs)
+
+{
+	int r = LN_WRONGPARSER;
+	char *cstr;
+
+	if(strcmp(prs->name, "-")) {
+		/* Store the value here; create json if not already created */
+		if (*value == NULL) { 
+			CHKN(cstr = strndup(str + offs, parsed));
+			*value = json_object_new_string(cstr);
+			free(cstr);
+		}
+		if (*value == NULL) {
+			ln_dbgprintf(dag->ctx, "unable to create json");
+			goto done;
+		}
+		json_object_object_add(json, prs->name, *value);
+	} else {
+		if (*value != NULL) {
+			/* Free the unneeded value */
+			json_object_put(*value);
+		}
+	}
+	r = 0;
+done:
+	return r;
+}
+
+// TODO: streamline prototype when done with changes
+static int
+ln_normalizeRec(struct ln_pdag *dag,
+	const char *const str,
+	const size_t strLen,
+	const size_t offs,
+	const int bPartialMatch,
+	size_t *const __restrict__ pParsedTo,
+	struct json_object *json,
+	struct ln_pdag **endNode);
+
+static int
+tryParser(struct ln_pdag *dag,
+	const char *const str,
+	const size_t strLen,
+	size_t *offs,
+	size_t *const __restrict__ pParsed,
+	struct json_object **value,
+	const ln_parser_t *const prs)
+{
+	int r;
+	struct ln_pdag *endNode = NULL;
+	if(prs->prsid == PRS_CUSTOM_TYPE) {
+		if(*value == NULL)
+			*value = json_object_new_object();
+		ln_dbgprintf(dag->ctx, "calling custom parser '%s'", prs->custType->name);
+		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1, pParsed, *value, &endNode);
+		*pParsed -= *offs;
+		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s", prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
+	} else {
+		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
+			offs, prs->parser_data, pParsed, value);
+		ln_dbgprintf(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
+	}
+	return r;
+}
 /**
  * Recursive step of the normalizer. It walks the parse dag and calls itself
  * recursively when this is appropriate. It also implements backtracking in
@@ -507,6 +647,7 @@ ln_normalizeRec(struct ln_pdag *dag,
 	const char *const str,
 	const size_t strLen,
 	const size_t offs,
+	const int bPartialMatch,
 	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
 	struct ln_pdag **endNode)
@@ -516,59 +657,37 @@ ln_normalizeRec(struct ln_pdag *dag,
 	size_t i;
 	size_t iprs;
 	size_t parsedTo = *pParsedTo;
-	char *cstr;
 	size_t parsed = 0;
 	struct json_object *value;
 	
-ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
+ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 // TODO: parser priorities are desperately needed --> rest
 
 	/* now try the parsers */
-	for(iprs = 0 ; iprs < dag->nparsers ; ++iprs) {
+	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			ln_dbgprintf(dag->ctx, "%zu:trying '%s' parser for field '%s'",
-					offs, parserName(prs->prsid), prs->name);
+			ln_dbgprintf(dag->ctx, "%zu/%d:trying '%s' parser for field '%s'",
+					offs, bPartialMatch, parserName(prs->prsid), prs->name);
 		}
 		i = offs;
 		value = NULL;
-		localR = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
-			&i, prs->parser_data, &parsed, &value);
-		ln_dbgprintf(dag->ctx, "parser returns %d, parsed %zu", localR, parsed);
+		localR = tryParser(dag, str, strLen, &i, &parsed, &value, prs);
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
 			ln_dbgprintf(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
-			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, &parsedTo, json, endNode);
-			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d", offs, r);
-			if(r == 0 && (*endNode)->flags.isTerminal) {
+			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, bPartialMatch, &parsedTo, json, endNode);
+			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
+			if(r == 0) {
 				ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
-				if(strcmp(prs->name, "-")) {
-					/* Store the value here; create json if not already created */
-					// TODO: ensure JSON is always created!
-					if (value == NULL) { 
-						CHKN(cstr = strndup(str + i, parsed));
-						value = json_object_new_string(cstr);
-						free(cstr);
-					}
-					if (value == NULL) {
-						ln_dbgprintf(dag->ctx, "unable to create json");
-						goto done;
-					}
-					json_object_object_add(json, prs->name, value);
-				} else {
-					if (value != NULL) {
-						/* Free the unneeded value */
-						json_object_put(value);
-					}
+				CHKR(fixJSON(dag, str, i, parsed, &value, json, prs));
+			} else {
+				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
+						offs, parsedTo);
+				if (value != NULL) { /* Free the value if it was created */
+					json_object_put(value);
 				}
-				r = 0;
-				goto done;
-			}
-			ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
-					offs, parsedTo);
-			if (value != NULL) { /* Free the value if it was created */
-				json_object_put(value);
 			}
 		}
 		/* did we have a longer parser --> then update */
@@ -577,15 +696,15 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p", offs, dag);
 		ln_dbgprintf(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
 	}
 
-ln_dbgprintf(dag->ctx, "offs %zu, strLen %zu", offs, strLen);
-	if(offs == strLen) {
+ln_dbgprintf(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->flags.isTerminal);
+	if(dag->flags.isTerminal && (offs == strLen || bPartialMatch)) {
 		*endNode = dag;
 		r = 0;
 		goto done;
 	}
 
 done:
-	ln_dbgprintf(dag->ctx, "%zu returns %d", offs, r);
+	ln_dbgprintf(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
 	return r;
 }
 
@@ -601,7 +720,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, &parsedTo, *json_p, &endNode);
+	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, 0, &parsedTo, *json_p, &endNode);
 
 	if(ctx->debug) {
 		if(r == 0) {

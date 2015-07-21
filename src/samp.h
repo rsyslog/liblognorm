@@ -55,7 +55,7 @@ struct ln_samp {
  * @return Newly create object or NULL if an error occured.
  */
 struct ln_samp *
-ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf);
+ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf);
 
 
 /**

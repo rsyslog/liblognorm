@@ -20,6 +20,8 @@ typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;
 typedef uint8_t prsid_t;
 
+struct ln_type_pdag;
+
 /** 
  * parser IDs.
  *
@@ -28,6 +30,7 @@ typedef uint8_t prsid_t;
  * of the respective parser inside the parser lookup table.
  */
 #define PRS_LITERAL			0
+#if 0
 #define PRS_DATE_RFC3164		1
 #define PRS_DATE_RFC5424		2
 #define PRS_NUMBER			3
@@ -57,7 +60,9 @@ typedef uint8_t prsid_t;
 #define PRS_STRING_TO			27
 #define PRS_CHAR_TO			28
 #define PRS_CHAR_SEP			29
+#endif
 
+#define PRS_CUSTOM_TYPE			254
 #define PRS_INVALID			255
 /* NOTE: current max limit on parser ID is 255, because we use uint8_t
  * for the prsid_t type (which gains cache performance). If more parsers
@@ -69,8 +74,8 @@ typedef uint8_t prsid_t;
 struct ln_parser_s {
 	prsid_t prsid;		/**< parser ID (for lookup table) */
 	ln_pdag *node;		/**< node to branch to if parser succeeded */
+	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
 	const char *name;	/**< field name */
-	// TODO: think about moving legacy items out of the core data structure! (during optimizer?)
 	uint8_t prio;		/**< assigned priority */
 	void *parser_data;	/** opaque data that the field-parser understands */
 };
@@ -84,6 +89,17 @@ struct ln_parser_info {
 };
 
 
+
+#if 0 // TODO: remove again?
+/** 
+ * PDAG node types
+ */
+#define NODET_SEQ		0	/**< simple sequence */
+#define NODET_CALL		1	/**< call user-defined type */
+#define NODET_REPEAT_HEAD	2	/**< head of repeat sequence */
+#define NODET_REPEAT_TAIL	3	/**< tail of repeat sequence */
+#endif
+
 /* parse DAG object
  */
 struct ln_pdag {
@@ -93,12 +109,14 @@ struct ln_pdag {
 	struct {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence */
 	} flags;
-	struct json_object *tags;	/**< t	CHKmalloc(pNewBuf = (uchar*) realloc(pThis->pBuf, iNewSize * sizeof(uchar)));
-ags to assign to events of this type */
-
-	// TODO: remove these once we do no longer need ptree.[ch] for test builds
-	ln_pdag	**parentptr; /**< pointer to *us* *inside* the parent 
-				BUT this is NOT a pointer to the parent! */
+	struct json_object *tags;	/**< tags to assign to events of this type */
+#if 0 // TODO: remove again?
+	union {
+		struct {
+			ln_pdag *type;
+		} call;
+	} data;
+#endif
 };
 
 
@@ -151,9 +169,8 @@ int ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser);
  * of the provided pdag via multiple calls of the debug callback.
  *
  * @param DAG pdag to display
- * @param level recursion level, must be set to 0 on initial call
  */
-void ln_displayPDAG(struct ln_pdag *DAG, int level);
+void ln_displayPDAG(ln_ctx ctx);
 
 
 /**
@@ -190,8 +207,9 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 
 
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
-int ln_pdagOptimize(ln_ctx ctx, struct ln_pdag *const pdag);
+int ln_pdagOptimize(ln_ctx ctx);
 void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
+void ln_fullPdagStats(ln_ctx ctx, FILE *const fp);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
-ln_parser_t* ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, const char *const extraData, json_object *const);
+ln_parser_t* ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, struct ln_type_pdag *const custType, const char *const extraData, json_object *const);
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */

@@ -72,6 +72,7 @@
 #define LN_WRONGPARSER -1000
 
 #define LN_RB_LINE_TOO_LONG -1001
+#define LN_OVER_SIZE_LIMIT -1002
 
 /**
  * The library context descriptor.

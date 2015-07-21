@@ -61,6 +61,43 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 	free(samp);
 }
 
+/* find type pdag in table. If "bAdd" is seit, add it if not
+ * already present.
+ * Returns NULL on error, ptr to type pdag entry otherwise
+ */
+static inline struct ln_type_pdag *
+findTypePDAG(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
+{
+	struct ln_type_pdag *td = NULL;
+	int i;
+
+	for(i = 0 ; i < ctx->nTypes ; ++i) {
+		if(!strcmp(ctx->type_pdags[i].name, name))
+			td = ctx->type_pdags + i;
+			goto done;
+	}
+
+	if(!bAdd) {
+		ln_dbgprintf(ctx, "custom type '%s' not found", name);
+		goto done;
+	}
+
+	/* type does not yet exist -- create entry */
+	struct ln_type_pdag *newarr;
+	newarr = realloc(ctx->type_pdags, sizeof(struct ln_type_pdag) * (ctx->nTypes+1));
+	if(newarr == NULL) {
+		ln_dbgprintf(ctx, "findTypePDAG: alloc newarr failed");
+		goto done;
+	}
+	ctx->type_pdags = newarr;
+	td = ctx->type_pdags + ctx->nTypes;
+	++ctx->nTypes;
+	td->name = strdup(name);
+	td->pdag = ln_newPDAG(ctx);
+done:
+	return td;
+}
+
 /**
  * Extract a field description from a sample.
  * The field description is added to the tail of the current
@@ -97,12 +134,15 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	int r = 0;
 	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
+	char *ftype = NULL;
+	struct ln_type_pdag *custType;
 	const char *buf;
 	es_size_t lenBuf;
 	char name[MAX_FIELDNAME_LEN];
 	size_t iDst;
 	ln_parser_t *parser = NULL;
 	struct json_object *json = NULL;
+	prsid_t prsid;
 
 	buf = (const char*)es_getBufAddr(rule);
 	lenBuf = es_strlen(rule);
@@ -162,27 +202,30 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		FAIL(LN_INVLDFDESCR);
 	}
 
-	cstr = es_str2cstr(*str, NULL);
-	ln_dbgprintf(ctx, "field type '%s', i %d", cstr, i);
-	const prsid_t prsid = ln_parserName2ID(cstr);
-    	if(prsid == PRS_INVALID) {
-		ln_errprintf(ctx, 0, "invalid field type '%s'", cstr);
-		free(cstr);
-		FAIL(LN_INVLDFDESCR);
+	ftype = es_str2cstr(*str, NULL);
+	ln_dbgprintf(ctx, "field type '%s', i %d", ftype, i);
+	if(*ftype == '@') {
+		prsid = PRS_CUSTOM_TYPE;
+		custType = findTypePDAG(ctx, ftype, 0);
+		if(custType == NULL) {
+			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", ftype);
+			FAIL(LN_INVLDFDESCR);
+		}
+	} else {
+		prsid = ln_parserName2ID(ftype);
+		if(prsid == PRS_INVALID) {
+			ln_errprintf(ctx, 0, "invalid field type '%s'", ftype);
+			FAIL(LN_INVLDFDESCR);
+		}
 	}
-	free(cstr);
 
-ln_dbgprintf(ctx, "after field type: '%s'", buf+i);
-	
 	if(buf[i] == '{') {
 		struct json_tokener *tokener = json_tokener_new();
 		json = json_tokener_parse_ex(tokener, buf+i, (int) (lenBuf - i));
 		if(json == NULL) {
 			ln_errprintf(ctx, 0, "invalid json in '%s'", buf+i);
 		}
-		ln_dbgprintf(ctx, "char_offset: %d", tokener->char_offset);
 		i += tokener->char_offset;
-		ln_dbgprintf(ctx, "remains: '%s'", buf + i);
 		json_tokener_free(tokener);
 	}
 
@@ -211,11 +254,12 @@ ln_dbgprintf(ctx, "after field type: '%s'", buf+i);
 	char *ed = NULL;
 	if(edata != NULL)
 		ed = es_str2cstr(edata, " ");
-	parser = ln_newParser(ctx, name, prsid, ed, json);
+	parser = ln_newParser(ctx, name, prsid, custType, ed, json);
 	free(ed);
 
 	*bufOffs = i;
 done:
+	free(ftype);
 	if(json != NULL)
 		json_object_put(json);
 	*ret = r;
@@ -249,8 +293,8 @@ parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 {
 	int r = 0;
 	size_t i = *bufOffs;
-	unsigned char *buf = es_getBufAddr(rule);;
-	const size_t lenBuf = es_strlen(rule);;
+	unsigned char *buf = es_getBufAddr(rule);
+	const size_t lenBuf = es_strlen(rule);
 	const char *cstr = NULL;
 
 	es_emptyStr(*str);
@@ -304,14 +348,15 @@ done:
  * @returns the new dag root (or NULL in case of error)
  */
 static inline int
-addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
+addSampToTree(ln_ctx ctx,
+	es_str_t *rule,
+	ln_pdag *dag,
+	struct json_object *tagBucket)
 {
 	int r = -1;
-	struct ln_pdag* dag;
 	es_str_t *str = NULL;
 	es_size_t i;
 
-	dag = ctx->pdag;
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
@@ -350,10 +395,10 @@ done:
  * @returns 0 on success, something else otherwise
  */
 static inline int
-getLineType(const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
+getLineType(const char *buf, es_size_t lenBuf, size_t *offs, es_str_t **str)
 {
 	int r = -1;
-	es_size_t i;
+	size_t i;
 
 	*str = es_newStr(16);
 	for(i = 0 ; i < lenBuf && buf[i] != '=' ; ++i) {
@@ -493,8 +538,9 @@ done:	return r;
 }
 
 
+
 /**
- * Process a new rule and add it to tree.
+ * Process a new rule and add it to pdag.
  *
  * @param[in] ctx current context
  * @param[in] buf line buffer
@@ -513,8 +559,7 @@ processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 	CHKR(processTags(ctx, buf, lenBuf, &offs, &tagBucket));
 
 	if(offs == lenBuf) {
-		ln_dbgprintf(ctx, "error, actual message sample part is missing");
-		// TODO: provide some error indicator to app? We definitely must do (a callback?)
+		ln_errprintf(ctx, 0, "error: actual message sample part is missing");
 		goto done;
 	}
 	if(ctx->rulePrefix == NULL) {
@@ -523,7 +568,84 @@ processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 		CHKN(str = es_strdup(ctx->rulePrefix));
 	}
 	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
-	addSampToTree(ctx, str, tagBucket);
+	addSampToTree(ctx, str, ctx->pdag, tagBucket);
+	es_deleteStr(str);
+	r = 0;
+done:	return r;
+}
+
+
+static inline int
+getTypeName(ln_ctx ctx,
+	const char *const __restrict__ buf,
+	const size_t lenBuf,
+	size_t *const __restrict__ offs,
+	char *const __restrict__ dstbuf)
+{
+	int r = -1;
+	size_t iDst;
+	size_t i = *offs;
+	
+	if(buf[i] != '@') {
+		ln_errprintf(ctx, 0, "user-defined type name must "
+			"start with '@'");
+		goto done;
+	}
+	for(  iDst = 0
+	    ; i < lenBuf && buf[i] != ':' && iDst < MAX_TYPENAME_LEN - 1
+	    ; ++i, ++iDst) {
+		if(isspace(buf[i])) {
+			ln_errprintf(ctx, 0, "user-defined type name must "
+				"not contain whitespace");
+			goto done;
+		}
+		dstbuf[iDst] = buf[i];
+	}
+	dstbuf[iDst] = '\0';
+
+	if(i < lenBuf && buf[i] == ':') {
+		r = 0,
+		*offs = i+1; /* skip ":" */
+	}
+done:
+	return r;
+}
+
+/**
+ * Process a type definition and add it to the PDAG
+ * disconnected components. 
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer
+ * @param[in] len length of buffer
+ * @param[in] offs offset where rule starts
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+processType(ln_ctx ctx,
+	const char *const __restrict__ buf,
+	const size_t lenBuf,
+	size_t offs)
+{
+	int r = -1;
+	es_str_t *str;
+	char typename[MAX_TYPENAME_LEN];
+
+	ln_dbgprintf(ctx, "type line to add: '%s'", buf+offs);
+	CHKR(getTypeName(ctx, buf, lenBuf, &offs, typename));
+	ln_dbgprintf(ctx, "type name is '%s'", typename);
+
+	ln_dbgprintf(ctx, "type line to add: '%s'", buf+offs);
+	if(offs == lenBuf) {
+		ln_errprintf(ctx, 0, "error: actual message sample part is missing in type def");
+		goto done;
+	}
+	// TODO: optimize
+	CHKN(str = es_newStr(lenBuf));
+	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
+	struct ln_type_pdag *const td = findTypePDAG(ctx, typename, 1);
+	CHKN(td);
+	addSampToTree(ctx, str, td->pdag, NULL);
 	es_deleteStr(str);
 	r = 0;
 done:	return r;
@@ -691,14 +813,14 @@ done:	return r;
 }
 
 struct ln_samp *
-ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
+ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 {
 	struct ln_samp *samp = NULL;
-    es_str_t *typeStr = NULL;
-    es_size_t offs;
+	es_str_t *typeStr = NULL;
+	size_t offs;
 
-    if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
-        goto done;
+	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
+		goto done;
 
 	if(!es_strconstcmp(typeStr, "prefix")) {
 		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
@@ -706,13 +828,14 @@ ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 		if(extendPrefix(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "rule")) {
 		if(processRule(ctx, buf, lenBuf, offs) != 0) goto done;
+	} else if(!es_strconstcmp(typeStr, "type")) {
+		if(processType(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
 		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else {
-		/* TODO error reporting */
 		char *str;
 		str = es_str2cstr(typeStr, NULL);
-		ln_dbgprintf(ctx, "invalid record type detected: '%s'", str);
+		ln_errprintf(ctx, 0, "invalid record type detected: '%s'", str);
 		free(str);
 		goto done;
 	}
@@ -766,9 +889,6 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 
 	ln_dbgprintf(ctx, "read rule base line: '%s'", buf);
 	ln_processSamp(ctx, buf, i);
-ln_dbgprintf(ctx, "--FINAL--------------------------------");
-ln_displayPDAG(ctx->pdag, 0);
-ln_dbgprintf(ctx, "=======================================");
 
 done:
 	return samp;
