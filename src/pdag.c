@@ -562,13 +562,26 @@ fixJSON(struct ln_pdag *dag,
 	int r = LN_WRONGPARSER;
 
 	ln_dbgprintf(dag->ctx, "in  field name '%s', json: '%s', value: '%s'", prs->name, json_object_to_json_string(json), json_object_to_json_string(*value));
-	if(strcmp(prs->name, "-")) {
-		json_object_object_add(json, prs->name, *value);
-	} else {
+	if(!strcmp(prs->name, "-")) {
 		if (*value != NULL) {
 			/* Free the unneeded value */
 			json_object_put(*value);
 		}
+	} else if(!strcmp(prs->name, ".")) {
+		if(json_object_get_type(*value) == json_type_object) {
+			json_object_object_foreach(*value, key, val) {
+				ln_dbgprintf(dag->ctx, "key: %s, json: %s", key, json_object_to_json_string(val));
+				json_object_get(val);
+				json_object_object_add(json, key, val);
+			}
+			json_object_put(*value);
+		} else {
+			ln_dbgprintf(dag->ctx, "field name is '.', but json type is %s",
+				json_type_to_name(json_object_get_type(*value)));
+			json_object_object_add(json, prs->name, *value);
+		}
+	} else {
+		json_object_object_add(json, prs->name, *value);
 	}
 	ln_dbgprintf(dag->ctx, "out field name '%s', json: %s", prs->name, json_object_to_json_string(json));
 	r = 0;
@@ -601,6 +614,7 @@ tryParser(struct ln_pdag *dag,
 		if(*value == NULL)
 			*value = json_object_new_object();
 		ln_dbgprintf(dag->ctx, "calling custom parser '%s'", prs->custType->name);
+		//r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1, pParsed, json, &endNode);
 		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1, pParsed, *value, &endNode);
 		*pParsed -= *offs;
 		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s", prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
