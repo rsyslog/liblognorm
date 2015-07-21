@@ -554,28 +554,15 @@ done:
 // TODO: remove once all parsers properly generate JSON
 static int
 fixJSON(struct ln_pdag *dag,
-	const char *const str,
-	const size_t offs,
-	const size_t parsed,
 	struct json_object **value,
 	struct json_object *json,
 	const ln_parser_t *const prs)
 
 {
 	int r = LN_WRONGPARSER;
-	char *cstr;
 
+	ln_dbgprintf(dag->ctx, "in  field name '%s', json: '%s', value: '%s'", prs->name, json_object_to_json_string(json), json_object_to_json_string(*value));
 	if(strcmp(prs->name, "-")) {
-		/* Store the value here; create json if not already created */
-		if (*value == NULL) { 
-			CHKN(cstr = strndup(str + offs, parsed));
-			*value = json_object_new_string(cstr);
-			free(cstr);
-		}
-		if (*value == NULL) {
-			ln_dbgprintf(dag->ctx, "unable to create json");
-			goto done;
-		}
 		json_object_object_add(json, prs->name, *value);
 	} else {
 		if (*value != NULL) {
@@ -583,8 +570,8 @@ fixJSON(struct ln_pdag *dag,
 			json_object_put(*value);
 		}
 	}
+	ln_dbgprintf(dag->ctx, "out field name '%s', json: %s", prs->name, json_object_to_json_string(json));
 	r = 0;
-done:
 	return r;
 }
 
@@ -619,7 +606,7 @@ tryParser(struct ln_pdag *dag,
 		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s", prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
-			offs, prs->parser_data, pParsed, value);
+			offs, prs->parser_data, pParsed, strcmp(prs->name, "-") ? value : NULL);
 		ln_dbgprintf(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
 	return r;
@@ -681,7 +668,7 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
 			if(r == 0) {
 				ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
-				CHKR(fixJSON(dag, str, i, parsed, &value, json, prs));
+				CHKR(fixJSON(dag, &value, json, prs));
 			} else {
 				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
