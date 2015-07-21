@@ -91,7 +91,7 @@ int ln_parse##ParserName( \
 	size_t *const offs,       \
 	__attribute__((unused)) void *const pdata, \
 	size_t *parsed,                                      \
-	__attribute__((unused)) struct json_object **value) \
+	struct json_object **value) \
 { \
 	int r = LN_WRONGPARSER; \
 	*parsed = 0;
@@ -227,6 +227,12 @@ PARSER_Parse(RFC5424Date)
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
+
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 
 	r = 0; /* success */
 done:
@@ -452,7 +458,11 @@ PARSER_Parse(RFC3164Date)
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -479,7 +489,11 @@ PARSER_Parse(Number)
 	
 	/* success, persist */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -516,6 +530,11 @@ PARSER_Parse(Float)
 		
 	/* success, persist */
 	*parsed = i - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -565,7 +584,11 @@ PARSER_Parse(HexNumber)
 	
 	/* success, persist */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -653,6 +676,11 @@ PARSER_Parse(KernelTimestamp)
 
 	/* success, persist */
 	*parsed = i - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -683,6 +711,11 @@ PARSER_Parse(Whitespace)
 	for (i++ ; i < strLen && isspace(c[i]); i++);
 	/* success, persist */
 	*parsed = i - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -713,7 +746,11 @@ PARSER_Parse(Word)
 
 	/* success, persist */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -763,7 +800,11 @@ PARSER_Parse(StringTo)
 
 	/* success, persist */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -812,6 +853,11 @@ PARSER_Parse(Alpha)
 
 	/* success, persist */
 	*parsed = i - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -851,6 +897,11 @@ PARSER_Parse(CharTo)
 
 	/* success, persist */
 	*parsed = i - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0;
 done:
 	return r;
@@ -889,9 +940,14 @@ PARSER_Parse(Literal)
 	}
 
 	*parsed = j; /* we must always return how far we parsed! */
-	if(lit[j] == '\0')
+	if(lit[j] == '\0') {
+		if(value != NULL) {
+			char *cstr = strndup(str+ *offs, *parsed);
+			*value = json_object_new_string(cstr);
+			free(cstr);
+		}
 		r = 0;
-		
+	}
 	return r;
 }
 PARSER_Construct(Literal)
@@ -957,7 +1013,11 @@ PARSER_Parse(CharSeparated)
 
 	/* success, persist */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 	return r;
 }
@@ -989,6 +1049,11 @@ PARSER_Parse(Rest)
 	(void)str;
 	/* success, persist */
 	*parsed = strLen - *offs;
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0;
 	return r;
 }
@@ -1055,7 +1120,6 @@ done:
 PARSER_Parse(QuotedString)
 	const char *c;
 	size_t i;
-	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1079,11 +1143,13 @@ PARSER_Parse(QuotedString)
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
-	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
-	CHKN(*value = json_object_new_string(cstr));
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
-	free(cstr);
 	return r;
 }
 
@@ -1134,7 +1200,11 @@ PARSER_Parse(ISODate)
 
 	/* success, persist */
 	*parsed = 10;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -1324,7 +1394,11 @@ PARSER_Parse(Duration)
 
 	/* success, persist */
 	*parsed = (i + 5) - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -1366,7 +1440,11 @@ PARSER_Parse(Time24hr)
 
 	/* success, persist */
 	*parsed = 8;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -1408,7 +1486,11 @@ PARSER_Parse(Time12hr)
 
 	/* success, persist */
 	*parsed = 8;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -1478,7 +1560,11 @@ PARSER_Parse(IPv4)
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
@@ -1584,7 +1670,11 @@ chk_ok:	/* we are finished parsing, check if things are ok */
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
-
+	if(value != NULL) {
+		char *cstr = strndup(str+ *offs, *parsed);
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
 	r = 0; /* success */
 done:
 	return r;
