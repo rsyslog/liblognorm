@@ -14,6 +14,7 @@ TESTS_SHELLSCRIPTS = \
 	parser_whitespace.sh \
 	parser_LF.sh \
 	field_hexnumber.sh \
+	field_hexnumber_range.sh \
 	field_mac48.sh \
 	field_name_value.sh \
 	field_kernel_timestamp.sh \

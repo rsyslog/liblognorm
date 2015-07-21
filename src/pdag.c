@@ -41,7 +41,7 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date),
 	PARSER_ENTRY_NO_DATA("number", Number),
 	PARSER_ENTRY_NO_DATA("float", Float),
-	PARSER_ENTRY_NO_DATA("hexnumber", HexNumber),
+	PARSER_ENTRY("hexnumber", HexNumber),
 	PARSER_ENTRY_NO_DATA("kernel-timestamp", KernelTimestamp),
 	PARSER_ENTRY_NO_DATA("whitespace", Whitespace),
 	PARSER_ENTRY_NO_DATA("ipv4", IPv4),

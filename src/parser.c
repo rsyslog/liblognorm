@@ -31,6 +31,7 @@
 #include <sys/types.h>
 #include <string.h>
 #include <strings.h>
+#include <errno.h>
 
 #include "json_compatibility.h"
 #include "liblognorm.h"
@@ -521,6 +522,9 @@ done:
 }
 
 
+struct data_HexNumber {
+	uint64_t maxval;
+};
 /**
  * Parse a hex Number.
  * A hex number begins with 0x and contains only hex digits until the terminating
@@ -530,6 +534,8 @@ done:
 PARSER_Parse(HexNumber)
 	const char *c;
 	size_t i = *offs;
+	struct data_HexNumber *const data = (struct data_HexNumber*) pdata;
+	uint64_t maxval = data->maxval;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -539,9 +545,23 @@ PARSER_Parse(HexNumber)
 	if(c[i] != '0' || c[i+1] != 'x')
 		goto done;
 
-	for (i += 2 ; i < strLen && isxdigit(c[i]); i++);
+	uint64_t val = 0;
+	for (i += 2 ; i < strLen && isxdigit(c[i]); i++) {
+		const char digit = tolower(c[i]);
+		val *= 16;
+		if(digit >= 'a' && digit <= 'f')
+			val += digit - 'a' + 10;
+		else
+			val += digit - '0';
+	}
 	if (i == *offs || !isspace(c[i]))
 		goto done;
+	if(maxval > 0 && val > maxval) {
+		ln_dbgprintf(ctx, "hexnumber parser: val too large (max %" PRIu64
+			     ", actual %" PRIu64 ")",
+			     maxval, val);
+		goto done;
+	}
 	
 	/* success, persist */
 	*parsed = i - *offs;
@@ -549,6 +569,36 @@ PARSER_Parse(HexNumber)
 	r = 0; /* success */
 done:
 	return r;
+}
+PARSER_Construct(HexNumber)
+{
+	int r = 0;
+	struct data_HexNumber *data = (struct data_HexNumber*) calloc(1, sizeof(struct data_HexNumber));
+
+	if(json == NULL)
+		goto done;
+
+	json_object_object_foreach(json, key, val) {
+		if(!strcmp(key, "maxval")) {
+			errno = 0;
+			data->maxval = json_object_get_int64(val);
+			if(errno != 0) {
+				ln_errprintf(ctx, errno, "param 'maxval' must be integer but is: %s",
+					 json_object_to_json_string(val));
+			}
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
+				 json_object_to_json_string(val));
+		}
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(HexNumber)
+{
+	free(pdata);
 }
 
 
