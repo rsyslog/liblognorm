@@ -108,8 +108,10 @@ struct ln_pdag {
 	prsid_t nparsers;		/**< current table size (prsid_t slighly abused) */
 	struct {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence */
+		unsigned visited:1;	/**< work var for recursive procedures */
 	} flags;
 	struct json_object *tags;	/**< tags to assign to events of this type */
+	int refcnt;			/**< reference count for deleting tracking */
 #if 0 // TODO: remove again?
 	union {
 		struct {
@@ -160,7 +162,7 @@ void ln_deletePDAGNode(ln_parser_t *node);
  * @param[in] parser parser definition
  * @returns 0 on success, something else otherwise
  */
-int ln_pdagAddParser(struct ln_pdag **pdag, json_object *);
+int ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *);
 
 
 /**

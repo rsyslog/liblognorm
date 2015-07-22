@@ -130,93 +130,25 @@ done:
 	return td;
 }
 
-#if 0
-/**
- * Construct a parser node entry.
- * prscnf is destructed on exit
- * @return parser node ptr or NULL (on error)
+/* we clear some multiple times, but as long as we have no loops
+ * (dag!) we have no real issue.
  */
-ln_parser_t*
-ln_newParserInstance(ln_ctx ctx,
-	json_object *prscnf)
+static void
+ln_pdagComponentClearVisited(struct ln_pdag *const dag)
 {
-	ln_parser_t *node = NULL;
-	json_object *json;
-	const char *val;
-	prsid_t prsid;
-	struct ln_type_pdag *custType;
-	const char *name = NULL;
-	const char *extraData = NULL;
-
-	ln_dbgprintf(ctx, "in ln_newParser: %s", json_object_to_json_string(prscnf));
-	json = json_object_object_get(prscnf, "type");
-	if(json == NULL) {
-		ln_errprintf(ctx, 0, "parser type missing in config: %s",
-			json_object_to_json_string(prscnf));
-		goto done;
+	dag->flags.visited = 0;
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		ln_pdagComponentClearVisited(prs->node);
 	}
-	val = json_object_get_string(json);
-	if(*val == '@') {
-		prsid = PRS_CUSTOM_TYPE;
-		custType = ln_pdagFindType(ctx, val, 0);
-		if(custType == NULL) {
-			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", val);
-			goto done;
-		}
-	} else {
-		prsid = ln_parserName2ID(val);
-		if(prsid == PRS_INVALID) {
-			ln_errprintf(ctx, 0, "invalid field type '%s'", val);
-			goto done;
-		}
-	}
-
-	json = json_object_object_get(prscnf, "name");
-	if(json == NULL) {
-		ln_errprintf(ctx, 0, "parser name missing in config: %s",
-			json_object_to_json_string(prscnf));
-		goto done;
-	}
-	name = strdup(json_object_get_string(json));
-
-	json = json_object_object_get(prscnf, "extradata");
-	if(json == NULL) {
-		extraData = NULL;
-	} else {
-		extraData = strdup(json_object_get_string(json));
-	}
-
-	/* we need to remove already processed items from the config, so
-	 * that we can pass the remaining parameters to the parser.
-	 */
-	json_object_object_del(prscnf, "type");
-	json_object_object_del(prscnf, "name");
-	json_object_object_del(prscnf, "extradata");
-
-	/* got all data items */
-	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
-		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
-		goto done;
-	}
-
-	node->node = NULL;
-	node->prio = 0;
-	node->name = name;
-	node->prsid = prsid;
-	if(prsid == PRS_CUSTOM_TYPE) {
-		node->custType = custType;
-	} else {
-		if(parser_lookup_table[prsid].construct != NULL) {
-			parser_lookup_table[prsid].construct(ctx, extraData, prscnf, &node->parser_data);
-		}
-	}
-done:
-	ln_dbgprintf(ctx, "out ln_newParser [node %p]: %s", node, json_object_to_json_string(prscnf));
-	json_object_put(prscnf);
-	free((void*)extraData);
-	return node;
 }
-#endif
+static void
+ln_pdagClearVisited(ln_ctx ctx)
+{
+	for(int i = 0 ; i < ctx->nTypes ; ++i)
+		ln_pdagComponentClearVisited(ctx->type_pdags[i].pdag);
+	ln_pdagComponentClearVisited(ctx->pdag);
+}
 
 /**
  * Process a parser defintion. Note that a single defintion can potentially
@@ -337,6 +269,7 @@ ln_newPDAG(ln_ctx ctx)
 	if((dag = calloc(1, sizeof(struct ln_pdag))) == NULL)
 		goto done;
 	
+	dag->refcnt = 1;
 	dag->ctx = ctx;
 	ctx->nNodes++;
 done:	return dag;
@@ -362,6 +295,10 @@ void
 ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 {
 	if(pdag == NULL)
+		goto done;
+
+	--pdag->refcnt;
+	if(pdag->refcnt > 0)
 		goto done;
 
 	if(pdag->tags != NULL)
@@ -467,6 +404,9 @@ struct pdag_stats {
 static int
 ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const stats)
 {
+	if(dag->flags.visited)
+		return 0;
+	dag->flags.visited = 1;
 	stats->nodes++;
 	if(dag->flags.isTerminal)
 		stats->term_nodes++;
@@ -498,6 +438,7 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
 {
 	struct pdag_stats *const stats = calloc(1, sizeof(struct pdag_stats));
 	stats->prs_cnt = calloc(NPARSERS, sizeof(int));
+	ln_pdagClearVisited(ctx);
 	const int longest_path = ln_pdagStatsRec(ctx, dag, stats);
 
 	fprintf(fp, "nodes.............: %4d\n", stats->nodes);
@@ -567,46 +508,115 @@ isLeaf(struct ln_pdag *dag)
 // TODO: how to *exactly* handle detection of same parser type with
 //       different parameters. This is an important use case, especially
 //       when we get more generic parsers.
-int
-ln_pdagAddParser(struct ln_pdag **pdag, json_object *prscnf)
+/**
+ * Add a parser instance to the pdag at the current position.
+ *
+ * @param[in] ctx
+ * @param[in] prscnf json parser config *object* (no array!)
+ * @param[in] pdag current pdag position (to which parser is to be added)
+ * @param[in/out] nextnode contains point to the next node, either 
+ *            an existing one or one newly created.
+ *
+ * The nextnode parameter permits to use this function to create
+ * multiple parsers alternative parsers with a single run. To do so,
+ * set nextnode=NULL on first call. On successive calls, keep the
+ * value. If a value is present, we will not accept non-identical
+ * parsers which point to different nodes - this will result in an
+ * error.
+ *
+ * IMPORTANT: the caller is responsible to update its pdag pointer
+ *            to the nextnode value when he is done adding parsers.
+ *
+ * If a parser of the same type with identical data already exists,
+ * it is "resued", which means the function is effectively used to
+ * walk the path. This is used during parser construction to
+ * navigate to new parts of the pdag.
+ */
+static int
+ln_pdagAddParserInstance(ln_ctx ctx,
+	json_object *const __restrict__ prscnf,
+	struct ln_pdag *const __restrict__ pdag,
+	struct ln_pdag **nextnode)
 {
 	int r;
-	struct ln_pdag *const dag = *pdag;
-	ln_parser_t *const parser = ln_newParser((*pdag)->ctx, prscnf);
+	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
 	CHKN(parser);
-	ln_dbgprintf(dag->ctx, "pdag: %p, *pdag: %p, parser %p", pdag, *pdag, parser);
+	ln_dbgprintf(ctx, "pdag: %p, parser %p", pdag, parser);
 	/* check if we already have this parser, if so, merge
 	 */
 	int i;
-	for(i = 0 ; i < dag->nparsers ; ++i) {
-		if(   dag->parsers[i].prsid == parser->prsid
-		   && !strcmp(dag->parsers[i].name, parser->name)) {
+	for(i = 0 ; i < pdag->nparsers ; ++i) {
+		if(   pdag->parsers[i].prsid == parser->prsid
+		   && !strcmp(pdag->parsers[i].name, parser->name)) {
 			// FIXME: work-around for literal parser with different
 			//        literals (see header TODO)
+			// FIXME: if nextnode is set, check we can actually combine, 
+			//        else err out
 			if(parser->prsid == PRS_LITERAL &&
-			   ((char*)dag->parsers[i].parser_data)[0] != ((char*)parser->parser_data)[0])
+			   ((char*)pdag->parsers[i].parser_data)[0] != ((char*)parser->parser_data)[0])
 			   	continue;
-			*pdag = dag->parsers[i].node;
+			*nextnode = pdag->parsers[i].node;
 			r = 0;
-			ln_dbgprintf(dag->ctx, "merging with dag %p", *pdag);
-			pdagDeletePrs(dag->ctx, parser); /* no need for data items */
+			ln_dbgprintf(ctx, "merging with pdag %p", pdag);
+			pdagDeletePrs(ctx, parser); /* no need for data items */
 			goto done;
 		}
 	}
 	/* if we reach this point, we have a new parser type */
-	CHKN(parser->node = ln_newPDAG(dag->ctx)); /* we need a new node */
+	if(*nextnode == NULL) {
+		CHKN(*nextnode = ln_newPDAG(ctx)); /* we need a new node */
+	} else {
+		(*nextnode)->refcnt++;
+	}
+	parser->node = *nextnode;
 	ln_parser_t *const newtab
-		= realloc(dag->parsers, (dag->nparsers+1) * sizeof(ln_parser_t));
+		= realloc(pdag->parsers, (pdag->nparsers+1) * sizeof(ln_parser_t));
 	CHKN(newtab);
-	dag->parsers = newtab;
-	memcpy(dag->parsers+dag->nparsers, parser, sizeof(ln_parser_t));
-	dag->nparsers++;
+	pdag->parsers = newtab;
+	memcpy(pdag->parsers+pdag->nparsers, parser, sizeof(ln_parser_t));
+	pdag->nparsers++;
 
 	r = 0;
-	*pdag = parser->node;
 
 done:
 	free(parser);
+	return r;
+}
+
+/* add a json parser config object. Note that this object may contain
+ * multiple parser instances.
+ */
+int
+ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
+{
+	int r = LN_BADCONFIG;
+	struct ln_pdag *nextnode = NULL;
+	
+	ln_dbgprintf(ctx, "\n****************************************\npdagAddParser object type is %s", json_type_to_name(json_object_get_type(prscnf)));
+	if(json_object_get_type(prscnf) == json_type_object) {
+		CHKR(ln_pdagAddParserInstance(ctx, prscnf, *pdag, &nextnode));
+		goto success;
+	} else if(json_object_get_type(prscnf) != json_type_array) {
+		ln_dbgprintf(ctx, "bug: prscnf object of wrong type. Object: '%s'",
+			json_object_to_json_string(prscnf));
+		goto done;
+	}
+
+	/* if we reach this point, we have an array.
+	 * Keep in mind that these are alternative parsers, not a sequence.
+	 */
+	const int lenarr = json_object_array_length(prscnf);
+	for(int i = 0 ; i < lenarr ; ++i) {
+		struct json_object *const curr_prscnf =
+			json_object_array_get_idx(prscnf, i);
+		ln_dbgprintf(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
+		CHKR(ln_pdagAddParserInstance(ctx, curr_prscnf, *pdag, &nextnode));
+	}
+
+success:
+	*pdag = nextnode;
+	r = 0;
+done:
 	return r;
 }
 
@@ -663,13 +673,17 @@ static inline void dotAddPtr(es_str_t **str, void *p)
 	i = snprintf(buf, sizeof(buf), "l%p", p);
 	es_addBuf(str, buf, i);
 }
+struct data_Literal { const char *lit; }; // TODO remove when this hack is no longe needed
 /**
  * recursive handler for DOT graph generator.
  */
 static void
 ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 {
-	ln_dbgprintf(dag->ctx, "in dot: %p", dag);
+	ln_dbgprintf(dag->ctx, "in dot: %p, visited %d", dag, (int) dag->flags.visited);
+	if(dag->flags.visited)
+		return; /* already processed this subpart */
+	dag->flags.visited = 1;
 	dotAddPtr(str, dag);
 	es_addBufConstcstr(str, " [ label=\"n\"");
 
@@ -690,7 +704,7 @@ ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 		es_addBufConstcstr(str, ":");
 		//es_addStr(str, node->name);
 		if(prs->prsid == PRS_LITERAL) {
-			for(const char *p = (const char*) prs->parser_data ; *p ; ++p) {
+			for(const char *p = ((struct data_Literal*)prs->parser_data)->lit ; *p ; ++p) {
 				// TODO: handle! if(*p == '\\')
 					//es_addChar(str, '\\');
 				if(*p != '\\' && *p != '"')
@@ -707,6 +721,7 @@ ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 void
 ln_genDotPDAGGraph(struct ln_pdag *dag, es_str_t **str)
 {
+	ln_pdagClearVisited(dag->ctx);
 	es_addBufConstcstr(str, "digraph pdag {\n");
 	ln_genDotPDAGGraphRec(dag, str);
 	es_addBufConstcstr(str, "}\n");

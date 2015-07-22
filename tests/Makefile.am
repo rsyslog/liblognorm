@@ -14,6 +14,7 @@ TESTS_SHELLSCRIPTS = \
 	parser_whitespace.sh \
 	parser_LF.sh \
 	usrdef_simple.sh \
+	alternative_simple.sh \
 	field_hexnumber.sh \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \

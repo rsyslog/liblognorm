@@ -227,7 +227,7 @@ addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 	while(i < lenBuf && isspace(buf[i]))
 		++i;
 	/* check if we have new-style json config */
-	if(buf[i] == '{') {
+	if(buf[i] == '{' || buf[i] == '[') {
 		struct json_tokener *tokener = json_tokener_new();
 		prs_config = json_tokener_parse_ex(tokener, buf+i, (int) (lenBuf - i));
 		i += tokener->char_offset;
@@ -243,7 +243,7 @@ addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 		CHKR(ln_parseLegacyFieldDescr(ctx, buf, lenBuf, bufOffs, str, &prs_config));
 	}
 
-	CHKR(ln_pdagAddParser(pdag, prs_config));
+	CHKR(ln_pdagAddParser(ctx, pdag, prs_config));
 
 done:
 	free(ftype);
@@ -329,7 +329,7 @@ parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 		struct json_object *const prscnf = 
 			newLiteralParserJSONConf(cstr[i]);
 		CHKN(prscnf);
-		CHKR(ln_pdagAddParser(pdag, prscnf));
+		CHKR(ln_pdagAddParser(ctx, pdag, prscnf));
 	}
 
 	r = 0;
