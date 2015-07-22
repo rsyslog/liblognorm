@@ -124,8 +124,8 @@ ln_errprintf(const ln_ctx ctx, const int eno, const char *fmt, ...)
 		msg = buf;
 	}
 
-	ctx->errmsgCB(ctx->dbgCookie, buf, lenBuf);
-	ln_dbgprintf(ctx, "%s", finalbuf);
+	ctx->errmsgCB(ctx->dbgCookie, msg, lenBuf);
+	ln_dbgprintf(ctx, "%s", msg);
 done:	return;
 }
 
