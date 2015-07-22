@@ -174,16 +174,13 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 		CHKN(val = json_object_new_string(ed));
 		json_object_object_add(*prscnf, "extradata", val);
 	}
-ln_dbgprintf(ctx, "before prscnf: %s", json_object_to_json_string(*prscnf));
 	if(json != NULL) {
 		/* now we need to merge the json params into the main object */
 		json_object_object_foreach(json, key, v) {
-ln_dbgprintf(ctx, "merge key: %s, json: %s", key, json_object_to_json_string(val));
 			json_object_get(v);
 			json_object_object_add(*prscnf, key, v);
 		}
 	}
-ln_dbgprintf(ctx, "after prscnf: %s", json_object_to_json_string(*prscnf));
 
 	*bufOffs = i;
 done:
@@ -194,15 +191,31 @@ done:
 	return r;
 }
 
-ln_parser_t*
-ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, size_t *bufOffs, es_str_t **str, int* ret)
+/**
+ * Extract a field description from a sample.
+ * The field description is added to the tail of the current
+ * subtree's field list. The parse buffer must be position on the
+ * leading '%' that starts a field definition. It is a program error
+ * if this condition is not met.
+ *
+ * Note that we break up the object model and access ptree members
+ * directly. Let's consider us a friend of ptree. This is necessary
+ * to optimize the structure for a high-speed parsing process.
+ *
+ * @param[in] str a temporary work string. This is passed in to save the
+	CHKR(r);
+ * 		  creation overhead
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
+	        size_t *bufOffs, es_str_t **str)
 {
 	int r = 0;
 	es_size_t i = *bufOffs;
 	char *ftype = NULL;
 	const char *buf;
 	es_size_t lenBuf;
-	ln_parser_t *parser = NULL;
 	struct json_object *prs_config = NULL;
 
 	buf = (const char*)es_getBufAddr(rule);
@@ -230,44 +243,35 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, size_t *bufOffs, es_str_t **str, 
 		CHKR(ln_parseLegacyFieldDescr(ctx, buf, lenBuf, bufOffs, str, &prs_config));
 	}
 
-	parser = ln_newParser(ctx, prs_config);
+	CHKR(ln_pdagAddParser(pdag, prs_config));
 
 done:
 	free(ftype);
-	*ret = r;
-	return parser;
-}
-
-/**
- * Extract a field description from a sample.
- * The field description is added to the tail of the current
- * subtree's field list. The parse buffer must be position on the
- * leading '%' that starts a field definition. It is a program error
- * if this condition is not met.
- *
- * Note that we break up the object model and access ptree members
- * directly. Let's consider us a friend of ptree. This is necessary
- * to optimize the structure for a high-speed parsing process.
- *
- * @param[in] str a temporary work string. This is passed in to save the
- * 		  creation overhead
- * @returns 0 on success, something else otherwise
- */
-static inline int
-addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
-	        size_t *bufOffs, es_str_t **str)
-{
-	int r;
-	ln_dbgprintf(ctx, "new offs %zu", *bufOffs);
-	ln_parser_t *parser = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
-	CHKR(r);
-	assert(subdag != NULL);
-
-	CHKR(ln_pdagAddParser(pdag, parser));
-done:
 	return r;
 }
 
+
+/**
+ *  Construct a literal parser json definition.
+ */
+static inline struct json_object *
+newLiteralParserJSONConf(char lit)
+{
+	char buf[] = "x";
+	buf[0] = lit;
+	struct json_object *val;
+	struct json_object *prscnf = json_object_new_object();
+	val = json_object_new_string("-");
+	json_object_object_add(prscnf, "name", val);
+
+	val = json_object_new_string("literal");
+	json_object_object_add(prscnf, "type", val);
+
+	val = json_object_new_string(buf);
+	json_object_object_add(prscnf, "extradata", val);
+
+	return prscnf;
+}
 
 /**
  * Parse a Literal string out of the template and add it to the tree.
@@ -322,10 +326,10 @@ parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 
 	/* we now add the string to the tree */
 	for(i = 0 ; cstr[i] != '\0' ; ++i) {
-		ln_parser_t *parser;
-		ln_dbgprintf(ctx, "adding literal node: '%c'", cstr[i]);
-		parser = ln_newLiteralParser(ctx, cstr[i]);
-		CHKR(ln_pdagAddParser(pdag, parser));
+		struct json_object *const prscnf = 
+			newLiteralParserJSONConf(cstr[i]);
+		CHKN(prscnf);
+		CHKR(ln_pdagAddParser(pdag, prscnf));
 	}
 
 	r = 0;

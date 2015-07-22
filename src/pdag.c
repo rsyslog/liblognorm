@@ -130,9 +130,97 @@ done:
 	return td;
 }
 
+#if 0
 /**
  * Construct a parser node entry.
  * prscnf is destructed on exit
+ * @return parser node ptr or NULL (on error)
+ */
+ln_parser_t*
+ln_newParserInstance(ln_ctx ctx,
+	json_object *prscnf)
+{
+	ln_parser_t *node = NULL;
+	json_object *json;
+	const char *val;
+	prsid_t prsid;
+	struct ln_type_pdag *custType;
+	const char *name = NULL;
+	const char *extraData = NULL;
+
+	ln_dbgprintf(ctx, "in ln_newParser: %s", json_object_to_json_string(prscnf));
+	json = json_object_object_get(prscnf, "type");
+	if(json == NULL) {
+		ln_errprintf(ctx, 0, "parser type missing in config: %s",
+			json_object_to_json_string(prscnf));
+		goto done;
+	}
+	val = json_object_get_string(json);
+	if(*val == '@') {
+		prsid = PRS_CUSTOM_TYPE;
+		custType = ln_pdagFindType(ctx, val, 0);
+		if(custType == NULL) {
+			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", val);
+			goto done;
+		}
+	} else {
+		prsid = ln_parserName2ID(val);
+		if(prsid == PRS_INVALID) {
+			ln_errprintf(ctx, 0, "invalid field type '%s'", val);
+			goto done;
+		}
+	}
+
+	json = json_object_object_get(prscnf, "name");
+	if(json == NULL) {
+		ln_errprintf(ctx, 0, "parser name missing in config: %s",
+			json_object_to_json_string(prscnf));
+		goto done;
+	}
+	name = strdup(json_object_get_string(json));
+
+	json = json_object_object_get(prscnf, "extradata");
+	if(json == NULL) {
+		extraData = NULL;
+	} else {
+		extraData = strdup(json_object_get_string(json));
+	}
+
+	/* we need to remove already processed items from the config, so
+	 * that we can pass the remaining parameters to the parser.
+	 */
+	json_object_object_del(prscnf, "type");
+	json_object_object_del(prscnf, "name");
+	json_object_object_del(prscnf, "extradata");
+
+	/* got all data items */
+	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
+		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
+		goto done;
+	}
+
+	node->node = NULL;
+	node->prio = 0;
+	node->name = name;
+	node->prsid = prsid;
+	if(prsid == PRS_CUSTOM_TYPE) {
+		node->custType = custType;
+	} else {
+		if(parser_lookup_table[prsid].construct != NULL) {
+			parser_lookup_table[prsid].construct(ctx, extraData, prscnf, &node->parser_data);
+		}
+	}
+done:
+	ln_dbgprintf(ctx, "out ln_newParser [node %p]: %s", node, json_object_to_json_string(prscnf));
+	json_object_put(prscnf);
+	free((void*)extraData);
+	return node;
+}
+#endif
+
+/**
+ * Process a parser defintion. Note that a single defintion can potentially
+ * contain many parser instances.
  * @return parser node ptr or NULL (on error)
  */
 ln_parser_t*
@@ -216,6 +304,7 @@ done:
 	return node;
 }
 
+#if 0
 /**
  *  Construct a new literal parser.
  */
@@ -238,6 +327,7 @@ ln_newLiteralParser(ln_ctx ctx, char lit)
 	ln_parser_t *parser = ln_newParser(ctx, prscnf);
 	return parser;
 }
+#endif
 
 struct ln_pdag*
 ln_newPDAG(ln_ctx ctx)
@@ -478,11 +568,12 @@ isLeaf(struct ln_pdag *dag)
 //       different parameters. This is an important use case, especially
 //       when we get more generic parsers.
 int
-ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser)
+ln_pdagAddParser(struct ln_pdag **pdag, json_object *prscnf)
 {
 	int r;
 	struct ln_pdag *const dag = *pdag;
-
+	ln_parser_t *const parser = ln_newParser((*pdag)->ctx, prscnf);
+	CHKN(parser);
 	ln_dbgprintf(dag->ctx, "pdag: %p, *pdag: %p, parser %p", pdag, *pdag, parser);
 	/* check if we already have this parser, if so, merge
 	 */

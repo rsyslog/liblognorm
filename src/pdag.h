@@ -160,7 +160,7 @@ void ln_deletePDAGNode(ln_parser_t *node);
  * @param[in] parser parser definition
  * @returns 0 on success, something else otherwise
  */
-int ln_pdagAddParser(struct ln_pdag **pdag, ln_parser_t *parser);
+int ln_pdagAddParser(struct ln_pdag **pdag, json_object *);
 
 
 /**
