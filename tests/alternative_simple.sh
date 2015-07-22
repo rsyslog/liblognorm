@@ -4,7 +4,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "simple alternative syntax"
-add_rule 'rule=:a %[{"name":"num", "type":"number"}, {"name":"hex", "type":"hexnumber"}]% b'
+add_rule 'rule=:a %{"type":"alternative", "parser":[{"name":"num", "type":"number"}, {"name":"hex", "type":"hexnumber"}]}% b'
 execute 'a 4711 b'
 assert_output_json_eq '{ "num": "4711" }'
 execute 'a 0x4711 b'

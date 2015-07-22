@@ -12,6 +12,7 @@ user_test_LDFLAGS = -no-install
 
 TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
+	seq_simple.sh \
 	alternative_simple.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \

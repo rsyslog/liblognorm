@@ -231,7 +231,6 @@ ln_newParser(ln_ctx ctx,
 	}
 done:
 	ln_dbgprintf(ctx, "out ln_newParser [node %p]: %s", node, json_object_to_json_string(prscnf));
-	json_object_put(prscnf);
 	free((void*)extraData);
 	return node;
 }
@@ -583,6 +582,42 @@ done:
 	return r;
 }
 
+
+/**
+ * add parsers to current pdag. This is used
+ * to add parsers stored in an array. The mode specifies
+ * how parsers shall be added.
+ */
+#define PRS_ADD_MODE_SEQ 0
+#define PRS_ADD_MODE_ALTERNATIVE 1
+static int
+ln_pdagAddParsers(ln_ctx ctx,
+	json_object *const prscnf,
+	const int mode,
+	struct ln_pdag **pdag)
+{
+	int r = LN_BADCONFIG;
+	struct ln_pdag *nextnode = NULL;
+	
+	const int lenarr = json_object_array_length(prscnf);
+	for(int i = 0 ; i < lenarr ; ++i) {
+		struct json_object *const curr_prscnf =
+			json_object_array_get_idx(prscnf, i);
+		ln_dbgprintf(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
+		CHKR(ln_pdagAddParserInstance(ctx, curr_prscnf, *pdag, &nextnode));
+		if(mode == PRS_ADD_MODE_SEQ) {
+			*pdag = nextnode;
+			nextnode = NULL;
+		}
+	}
+
+	if(mode != PRS_ADD_MODE_SEQ)
+		*pdag = nextnode;
+	r = 0;
+done:
+	return r;
+}
+
 /* add a json parser config object. Note that this object may contain
  * multiple parser instances.
  */
@@ -592,31 +627,34 @@ ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
 	int r = LN_BADCONFIG;
 	struct ln_pdag *nextnode = NULL;
 	
-	ln_dbgprintf(ctx, "\n****************************************\npdagAddParser object type is %s", json_type_to_name(json_object_get_type(prscnf)));
 	if(json_object_get_type(prscnf) == json_type_object) {
-		CHKR(ln_pdagAddParserInstance(ctx, prscnf, *pdag, &nextnode));
-		goto success;
-	} else if(json_object_get_type(prscnf) != json_type_array) {
-		ln_dbgprintf(ctx, "bug: prscnf object of wrong type. Object: '%s'",
+		/* check for special types we need to handle here */
+		struct json_object *json = json_object_object_get(prscnf, "type");
+		const char *const ftype = json_object_get_string(json);
+		if(!strcmp(ftype, "alternative")) {
+			json = json_object_object_get(prscnf, "parser");
+			if(json_object_get_type(json) != json_type_array) {
+				ln_errprintf(ctx, 0, "alternative type needs array of parsers. "
+					"Object: '%s', type is %s",
+					json_object_to_json_string(prscnf),
+					json_type_to_name(json_object_get_type(json)));
+				goto done;
+			}
+			CHKR(ln_pdagAddParsers(ctx, json, PRS_ADD_MODE_ALTERNATIVE, pdag));
+		} else {
+			CHKR(ln_pdagAddParserInstance(ctx, prscnf, *pdag, &nextnode));
+			*pdag = nextnode;
+		}
+	} else if(json_object_get_type(prscnf) == json_type_array) {
+		CHKR(ln_pdagAddParsers(ctx, prscnf, PRS_ADD_MODE_SEQ, pdag));
+	} else {
+		ln_errprintf(ctx, 0, "bug: prscnf object of wrong type. Object: '%s'",
 			json_object_to_json_string(prscnf));
 		goto done;
 	}
 
-	/* if we reach this point, we have an array.
-	 * Keep in mind that these are alternative parsers, not a sequence.
-	 */
-	const int lenarr = json_object_array_length(prscnf);
-	for(int i = 0 ; i < lenarr ; ++i) {
-		struct json_object *const curr_prscnf =
-			json_object_array_get_idx(prscnf, i);
-		ln_dbgprintf(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
-		CHKR(ln_pdagAddParserInstance(ctx, curr_prscnf, *pdag, &nextnode));
-	}
-
-success:
-	*pdag = nextnode;
-	r = 0;
 done:
+	json_object_put(prscnf);
 	return r;
 }
 
