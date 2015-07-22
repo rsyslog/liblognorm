@@ -93,37 +93,126 @@ ln_parserName2ID(const char *const __restrict__ name)
 	return PRS_INVALID;
 }
 
+/* find type pdag in table. If "bAdd" is seit, add it if not
+ * already present.
+ * Returns NULL on error, ptr to type pdag entry otherwise
+ */
+struct ln_type_pdag *
+ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
+{
+	struct ln_type_pdag *td = NULL;
+	int i;
+
+	for(i = 0 ; i < ctx->nTypes ; ++i) {
+		if(!strcmp(ctx->type_pdags[i].name, name))
+			td = ctx->type_pdags + i;
+			goto done;
+	}
+
+	if(!bAdd) {
+		ln_dbgprintf(ctx, "custom type '%s' not found", name);
+		goto done;
+	}
+
+	/* type does not yet exist -- create entry */
+	struct ln_type_pdag *newarr;
+	newarr = realloc(ctx->type_pdags, sizeof(struct ln_type_pdag) * (ctx->nTypes+1));
+	if(newarr == NULL) {
+		ln_dbgprintf(ctx, "ln_pdagFindTypeAG: alloc newarr failed");
+		goto done;
+	}
+	ctx->type_pdags = newarr;
+	td = ctx->type_pdags + ctx->nTypes;
+	++ctx->nTypes;
+	td->name = strdup(name);
+	td->pdag = ln_newPDAG(ctx);
+done:
+	return td;
+}
 
 /**
  * Construct a parser node entry.
+ * prscnf is destructed on exit
  * @return parser node ptr or NULL (on error)
  */
 ln_parser_t*
 ln_newParser(ln_ctx ctx,
-	const char *const name,
-	const prsid_t prsid,
-	struct ln_type_pdag *const custType,
-	const char *const extraData,
-	json_object *const json)
+	json_object *prscnf)
 {
-	ln_parser_t *node;
+	ln_parser_t *node = NULL;
+	json_object *json;
+	const char *val;
+	prsid_t prsid;
+	struct ln_type_pdag *custType;
+	const char *name = NULL;
+	const char *extraData = NULL;
 
+	ln_dbgprintf(ctx, "in ln_newParser: %s", json_object_to_json_string(prscnf));
+	json = json_object_object_get(prscnf, "type");
+	if(json == NULL) {
+		ln_errprintf(ctx, 0, "parser type missing in config: %s",
+			json_object_to_json_string(prscnf));
+		goto done;
+	}
+	val = json_object_get_string(json);
+	if(*val == '@') {
+		prsid = PRS_CUSTOM_TYPE;
+		custType = ln_pdagFindType(ctx, val, 0);
+		if(custType == NULL) {
+			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", val);
+			goto done;
+		}
+	} else {
+		prsid = ln_parserName2ID(val);
+		if(prsid == PRS_INVALID) {
+			ln_errprintf(ctx, 0, "invalid field type '%s'", val);
+			goto done;
+		}
+	}
+
+	json = json_object_object_get(prscnf, "name");
+	if(json == NULL) {
+		ln_errprintf(ctx, 0, "parser name missing in config: %s",
+			json_object_to_json_string(prscnf));
+		goto done;
+	}
+	name = strdup(json_object_get_string(json));
+
+	json = json_object_object_get(prscnf, "extradata");
+	if(json == NULL) {
+		extraData = NULL;
+	} else {
+		extraData = strdup(json_object_get_string(json));
+	}
+
+	/* we need to remove already processed items from the config, so
+	 * that we can pass the remaining parameters to the parser.
+	 */
+	json_object_object_del(prscnf, "type");
+	json_object_object_del(prscnf, "name");
+	json_object_object_del(prscnf, "extradata");
+
+	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
 		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
 		goto done;
 	}
+
 	node->node = NULL;
 	node->prio = 0;
-	node->name = strdup(name);
+	node->name = name;
 	node->prsid = prsid;
 	if(prsid == PRS_CUSTOM_TYPE) {
 		node->custType = custType;
 	} else {
 		if(parser_lookup_table[prsid].construct != NULL) {
-			parser_lookup_table[prsid].construct(ctx, extraData, json, &node->parser_data);
+			parser_lookup_table[prsid].construct(ctx, extraData, prscnf, &node->parser_data);
 		}
 	}
 done:
+	ln_dbgprintf(ctx, "out ln_newParser [node %p]: %s", node, json_object_to_json_string(prscnf));
+	json_object_put(prscnf);
+	free((void*)extraData);
 	return node;
 }
 
@@ -135,7 +224,18 @@ ln_newLiteralParser(ln_ctx ctx, char lit)
 {
 	char buf[] = "x";
 	buf[0] = lit;
-	ln_parser_t *parser = ln_newParser(ctx, "-", PRS_LITERAL, NULL, buf, NULL);
+	struct json_object *val;
+	struct json_object *prscnf = json_object_new_object();
+	val = json_object_new_string("-");
+	json_object_object_add(prscnf, "name", val);
+
+	val = json_object_new_string("literal");
+	json_object_object_add(prscnf, "type", val);
+
+	val = json_object_new_string(buf);
+	json_object_object_add(prscnf, "extradata", val);
+
+	ln_parser_t *parser = ln_newParser(ctx, prscnf);
 	return parser;
 }
 

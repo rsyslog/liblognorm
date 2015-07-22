@@ -14,6 +14,7 @@ TESTS_SHELLSCRIPTS = \
 	parser_whitespace.sh \
 	parser_LF.sh \
 	field_hexnumber.sh \
+	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
 	field_mac48.sh \
 	field_name_value.sh \
@@ -27,7 +28,11 @@ TESTS_SHELLSCRIPTS = \
 	field_cef.sh \
 	field_checkpoint-lea.sh \
 	field_duration.sh \
-        field_float.sh \
+        field_float.sh
+# removed because test is not valid.
+# more info: https://github.com/rsyslog/liblognorm/issues/98
+# note that probably the other currently disable *_invalid_*.sh
+# tests are also affected.
 	field_float_with_invalid_ruledef.sh
 # there seems to be a problem with some format in cisco-interface-spec
 # Probably this was just not seen in v1, because of some impreciseness

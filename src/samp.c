@@ -61,97 +61,23 @@ ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 	free(samp);
 }
 
-/* find type pdag in table. If "bAdd" is seit, add it if not
- * already present.
- * Returns NULL on error, ptr to type pdag entry otherwise
- */
-static inline struct ln_type_pdag *
-findTypePDAG(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
-{
-	struct ln_type_pdag *td = NULL;
-	int i;
-
-	for(i = 0 ; i < ctx->nTypes ; ++i) {
-		if(!strcmp(ctx->type_pdags[i].name, name))
-			td = ctx->type_pdags + i;
-			goto done;
-	}
-
-	if(!bAdd) {
-		ln_dbgprintf(ctx, "custom type '%s' not found", name);
-		goto done;
-	}
-
-	/* type does not yet exist -- create entry */
-	struct ln_type_pdag *newarr;
-	newarr = realloc(ctx->type_pdags, sizeof(struct ln_type_pdag) * (ctx->nTypes+1));
-	if(newarr == NULL) {
-		ln_dbgprintf(ctx, "findTypePDAG: alloc newarr failed");
-		goto done;
-	}
-	ctx->type_pdags = newarr;
-	td = ctx->type_pdags + ctx->nTypes;
-	++ctx->nTypes;
-	td->name = strdup(name);
-	td->pdag = ln_newPDAG(ctx);
-done:
-	return td;
-}
-
-/**
- * Extract a field description from a sample.
- * The field description is added to the tail of the current
- * subtree's field list. The parse buffer must be position on the
- * leading '%' that starts a field definition. It is a program error
- * if this condition is not met.
- *
- * Note that we break up the object model and access ptree members
- * directly. Let's consider us a friend of ptree. This is necessary
- * to optimize the structure for a high-speed parsing process.
- *
- * @param[in] str a temporary work string. This is passed in to save the
- * 		  creation overhead
- * @returns 0 on success, something else otherwise
- */
-static inline int
-addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
-	        es_size_t *bufOffs, es_str_t **str)
-{
-	int r;
-	ln_dbgprintf(ctx, "new offs %d", *bufOffs);
-	ln_parser_t *parser = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
-	CHKR(r);
-	assert(subdag != NULL);
-
-	CHKR(ln_pdagAddParser(pdag, parser));
-done:
-	return r;
-}
-
-ln_parser_t*
-ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **str, int* ret)
+static int
+ln_parseLegacyFieldDescr(ln_ctx ctx,
+	const char *const buf,
+	const size_t lenBuf,
+	size_t *bufOffs,
+	es_str_t **str,
+	json_object **prscnf)
 {
 	int r = 0;
-	es_size_t i = *bufOffs;
 	char *cstr;	/* for debug mode strings */
 	char *ftype = NULL;
-	struct ln_type_pdag *custType;
-	const char *buf;
-	es_size_t lenBuf;
 	char name[MAX_FIELDNAME_LEN];
 	size_t iDst;
-	ln_parser_t *parser = NULL;
 	struct json_object *json = NULL;
-	prsid_t prsid;
+	char *ed = NULL;
+	es_size_t i = *bufOffs;
 
-	buf = (const char*)es_getBufAddr(rule);
-	lenBuf = es_strlen(rule);
-	assert(buf[i] == '%');
-	++i;	/* "eat" ':' */
-
-	/* skip leading whitespace in field name */
-	while(i < lenBuf && isspace(buf[i]))
-		++i;
 	for(  iDst = 0
 	    ; iDst < (MAX_FIELDNAME_LEN - 1) && i < lenBuf && buf[i] != ':'
 	    ; ++iDst) {
@@ -204,20 +130,6 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 
 	ftype = es_str2cstr(*str, NULL);
 	ln_dbgprintf(ctx, "field type '%s', i %d", ftype, i);
-	if(*ftype == '@') {
-		prsid = PRS_CUSTOM_TYPE;
-		custType = findTypePDAG(ctx, ftype, 0);
-		if(custType == NULL) {
-			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", ftype);
-			FAIL(LN_INVLDFDESCR);
-		}
-	} else {
-		prsid = ln_parserName2ID(ftype);
-		if(prsid == PRS_INVALID) {
-			ln_errprintf(ctx, 0, "invalid field type '%s'", ftype);
-			FAIL(LN_INVLDFDESCR);
-		}
-	}
 
 	if(buf[i] == '{') {
 		struct json_tokener *tokener = json_tokener_new();
@@ -251,20 +163,111 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		}
 	}
 
-	char *ed = NULL;
-	if(edata != NULL)
+	struct json_object *val;
+	*prscnf = json_object_new_object();
+	CHKN(val = json_object_new_string(name));
+	json_object_object_add(*prscnf, "name", val);
+	CHKN(val = json_object_new_string(ftype));
+	json_object_object_add(*prscnf, "type", val);
+	if(edata != NULL) {
 		ed = es_str2cstr(edata, " ");
-	parser = ln_newParser(ctx, name, prsid, custType, ed, json);
-	free(ed);
+		CHKN(val = json_object_new_string(ed));
+		json_object_object_add(*prscnf, "extradata", val);
+	}
+ln_dbgprintf(ctx, "before prscnf: %s", json_object_to_json_string(*prscnf));
+	if(json != NULL) {
+		/* now we need to merge the json params into the main object */
+		json_object_object_foreach(json, key, v) {
+ln_dbgprintf(ctx, "merge key: %s, json: %s", key, json_object_to_json_string(val));
+			json_object_get(v);
+			json_object_object_add(*prscnf, key, v);
+		}
+	}
+ln_dbgprintf(ctx, "after prscnf: %s", json_object_to_json_string(*prscnf));
 
 	*bufOffs = i;
 done:
+	free(ed);
 	free(ftype);
 	if(json != NULL)
 		json_object_put(json);
+	return r;
+}
+
+ln_parser_t*
+ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, size_t *bufOffs, es_str_t **str, int* ret)
+{
+	int r = 0;
+	es_size_t i = *bufOffs;
+	char *ftype = NULL;
+	const char *buf;
+	es_size_t lenBuf;
+	ln_parser_t *parser = NULL;
+	struct json_object *prs_config = NULL;
+
+	buf = (const char*)es_getBufAddr(rule);
+	lenBuf = es_strlen(rule);
+	assert(buf[i] == '%');
+	++i;	/* "eat" ':' */
+
+	/* skip leading whitespace in field name */
+	while(i < lenBuf && isspace(buf[i]))
+		++i;
+	/* check if we have new-style json config */
+	if(buf[i] == '{') {
+		struct json_tokener *tokener = json_tokener_new();
+		prs_config = json_tokener_parse_ex(tokener, buf+i, (int) (lenBuf - i));
+		i += tokener->char_offset;
+		json_tokener_free(tokener);
+		if(prs_config == NULL || i == lenBuf || buf[i] != '%') {
+			ln_errprintf(ctx, 0, "invalid json in '%s'", buf+i);
+			r = -1;
+			goto done;
+		}
+		*bufOffs = i+1; /* eat '%' - if above ensures it is present */
+	} else {
+		*bufOffs = i;
+		CHKR(ln_parseLegacyFieldDescr(ctx, buf, lenBuf, bufOffs, str, &prs_config));
+	}
+
+	parser = ln_newParser(ctx, prs_config);
+
+done:
+	free(ftype);
 	*ret = r;
 	return parser;
 }
+
+/**
+ * Extract a field description from a sample.
+ * The field description is added to the tail of the current
+ * subtree's field list. The parse buffer must be position on the
+ * leading '%' that starts a field definition. It is a program error
+ * if this condition is not met.
+ *
+ * Note that we break up the object model and access ptree members
+ * directly. Let's consider us a friend of ptree. This is necessary
+ * to optimize the structure for a high-speed parsing process.
+ *
+ * @param[in] str a temporary work string. This is passed in to save the
+ * 		  creation overhead
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
+	        size_t *bufOffs, es_str_t **str)
+{
+	int r;
+	ln_dbgprintf(ctx, "new offs %zu", *bufOffs);
+	ln_parser_t *parser = ln_parseFieldDescr(ctx, rule, bufOffs, str, &r);
+	CHKR(r);
+	assert(subdag != NULL);
+
+	CHKR(ln_pdagAddParser(pdag, parser));
+done:
+	return r;
+}
+
 
 /**
  * Parse a Literal string out of the template and add it to the tree.
@@ -289,7 +292,7 @@ done:
  */
 static inline int
 parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
-	     es_size_t *const __restrict__ bufOffs, es_str_t **str)
+	     size_t *const __restrict__ bufOffs, es_str_t **str)
 {
 	int r = 0;
 	size_t i = *bufOffs;
@@ -355,12 +358,12 @@ addSampToTree(ln_ctx ctx,
 {
 	int r = -1;
 	es_str_t *str = NULL;
-	es_size_t i;
+	size_t i;
 
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
-		ln_dbgprintf(ctx, "addSampToTree %d of %d", i, es_strlen(rule));
+		ln_dbgprintf(ctx, "addSampToTree %zu of %d", i, es_strlen(rule));
 		CHKR(parseLiteral(ctx, &dag, rule, &i, &str));
 		/* After the literal there can be field only*/
 		if (i < es_strlen(rule)) {
@@ -372,7 +375,7 @@ addSampToTree(ln_ctx ctx,
 		}
 	}
 
-	ln_dbgprintf(ctx, "end addSampToTree %d of %d", i, es_strlen(rule));
+	ln_dbgprintf(ctx, "end addSampToTree %zu of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
 	dag->flags.isTerminal = 1;
 	dag->tags = tagBucket;
@@ -643,7 +646,7 @@ processType(ln_ctx ctx,
 	// TODO: optimize
 	CHKN(str = es_newStr(lenBuf));
 	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
-	struct ln_type_pdag *const td = findTypePDAG(ctx, typename, 1);
+	struct ln_type_pdag *const td = ln_pdagFindType(ctx, typename, 1);
 	CHKN(td);
 	addSampToTree(ctx, str, td->pdag, NULL);
 	es_deleteStr(str);

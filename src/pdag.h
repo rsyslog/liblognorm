@@ -211,5 +211,6 @@ int ln_pdagOptimize(ln_ctx ctx);
 void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
 void ln_fullPdagStats(ln_ctx ctx, FILE *const fp);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
-ln_parser_t* ln_newParser(ln_ctx ctx, const char *const name, const prsid_t prsid, struct ln_type_pdag *const custType, const char *const extraData, json_object *const);
+ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
+struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */
