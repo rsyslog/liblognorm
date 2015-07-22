@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([liblognorm], [1.1.2.master], [rgerhards@adiscon.com])
+AC_INIT([liblognorm], [1.1.3.master], [rgerhards@adiscon.com])
 AM_INIT_AUTOMAKE
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 AC_CONFIG_SRCDIR([src/lognorm.c])
@@ -156,6 +156,7 @@ AM_CONDITIONAL(ENABLE_TOOLS, test x$enable_tools = xyes)
 
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
+		compat/Makefile \
 		doc/Makefile \
 		src/Makefile \
 		src/lognorm-features.h \
