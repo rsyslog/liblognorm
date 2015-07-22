@@ -145,6 +145,7 @@ AC_SUBST(VALGRIND)
 
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
+		compat/Makefile \
 		doc/Makefile \
 		src/Makefile \
 		src/lognorm-features.h \

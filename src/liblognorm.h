@@ -251,4 +251,13 @@ int ln_loadSamples(ln_ctx ctx, const char *file);
  */
 int ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p);
 
+/* here we add some stuff from the compatibility layer. A separate include
+ * would be cleaner, but would potentially require changes all over the
+ * place. So doing it here is better. The respective replacement
+ * functions should usually be found under ./compat -- rgerhards, 2015-05-20
+ */
+#ifndef HAVE_STRNDUP
+char * strndup(const char *s, size_t n);
+#endif
+
 #endif /* #ifndef LOGNORM_H_INCLUDED */

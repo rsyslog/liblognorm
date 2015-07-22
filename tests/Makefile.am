@@ -7,7 +7,7 @@ json_eq_LDFLAGS = -no-install
 
 user_test_SOURCES = user_test.c
 user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
-user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS)
+user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) ../compat/compat.la 
 user_test_LDFLAGS = -no-install
 
 TESTS_SHELLSCRIPTS = \

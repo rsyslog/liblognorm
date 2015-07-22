@@ -9,7 +9,7 @@ PTHREADS_CFLAGS = -pthread
 bin_PROGRAMS = lognormalizer
 lognormalizer_SOURCES = lognormalizer.c
 lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
-lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) 
+lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) ../compat/compat.la 
 lognormalizer_DEPENDENCIES = liblognorm.la
 
 check_PROGRAMS = ln_test

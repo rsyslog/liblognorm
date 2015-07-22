@@ -1,4 +1,4 @@
-SUBDIRS = src
+SUBDIRS = compat src
 if ENABLE_DOCS
     SUBDIRS += doc
 endif
