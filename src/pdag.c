@@ -65,7 +65,8 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY_NO_DATA("v2-iptables", v2IPTables),
 	PARSER_ENTRY("string-to", StringTo),
 	PARSER_ENTRY("char-to", CharTo),
-	PARSER_ENTRY("char-sep", CharSeparated)
+	PARSER_ENTRY("char-sep", CharSeparated),
+	PARSER_ENTRY("repeat", Repeat)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 
@@ -84,17 +85,19 @@ prsid_t
 ln_parserName2ID(const char *const __restrict__ name)
 {
 	unsigned i;
+
 	for(  i = 0
 	    ; i < sizeof(parser_lookup_table) / sizeof(struct ln_parser_info)
 	    ; ++i) {
-	    	if(!strcmp(parser_lookup_table[i].name, name))
+	    	if(!strcmp(parser_lookup_table[i].name, name)) {
 			return i;
+		}
 	    }
 	return PRS_INVALID;
 }
 
-/* find type pdag in table. If "bAdd" is seit, add it if not
- * already present.
+/* find type pdag in table. If "bAdd" is set, add it if not
+ * already present, a new entry will be added.
  * Returns NULL on error, ptr to type pdag entry otherwise
  */
 struct ln_type_pdag *
@@ -167,7 +170,6 @@ ln_newParser(ln_ctx ctx,
 	const char *name = NULL;
 	const char *extraData = NULL;
 
-	ln_dbgprintf(ctx, "in ln_newParser: %s", json_object_to_json_string(prscnf));
 	json = json_object_object_get(prscnf, "type");
 	if(json == NULL) {
 		ln_errprintf(ctx, 0, "parser type missing in config: %s",
@@ -191,18 +193,10 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	json = json_object_object_get(prscnf, "name");
-	if(json == NULL) {
-		name = strdup("-");
-	} else {
-		name = strdup(json_object_get_string(json));
-	}
+	name = strdup((json == NULL) ? "-" : json_object_get_string(json));
 
 	json = json_object_object_get(prscnf, "extradata");
-	if(json == NULL) {
-		extraData = NULL;
-	} else {
-		extraData = strdup(json_object_get_string(json));
-	}
+	extraData = (json == NULL) ? NULL : strdup(json_object_get_string(json));
 
 	/* we need to remove already processed items from the config, so
 	 * that we can pass the remaining parameters to the parser.
@@ -229,35 +223,10 @@ ln_newParser(ln_ctx ctx,
 		}
 	}
 done:
-	ln_dbgprintf(ctx, "out ln_newParser [node %p]: %s", node, json_object_to_json_string(prscnf));
 	free((void*)extraData);
 	return node;
 }
 
-#if 0
-/**
- *  Construct a new literal parser.
- */
-ln_parser_t *
-ln_newLiteralParser(ln_ctx ctx, char lit)
-{
-	char buf[] = "x";
-	buf[0] = lit;
-	struct json_object *val;
-	struct json_object *prscnf = json_object_new_object();
-	val = json_object_new_string("-");
-	json_object_object_add(prscnf, "name", val);
-
-	val = json_object_new_string("literal");
-	json_object_object_add(prscnf, "type", val);
-
-	val = json_object_new_string(buf);
-	json_object_object_add(prscnf, "extradata", val);
-
-	ln_parser_t *parser = ln_newParser(ctx, prscnf);
-	return parser;
-}
-#endif
 
 struct ln_pdag*
 ln_newPDAG(ln_ctx ctx)
@@ -832,7 +801,7 @@ fixJSON(struct ln_pdag *dag,
 }
 
 // TODO: streamline prototype when done with changes
-static int
+int
 ln_normalizeRec(struct ln_pdag *dag,
 	const char *const str,
 	const size_t strLen,
@@ -886,7 +855,7 @@ tryParser(struct ln_pdag *dag,
  *         characters.
  * TODO: can we use parameter block to prevent pushing params to the stack?
  */
-static int
+int
 ln_normalizeRec(struct ln_pdag *dag,
 	const char *const str,
 	const size_t strLen,

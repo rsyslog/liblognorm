@@ -14,6 +14,7 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
 	seq_simple.sh \
 	alternative_simple.sh \
+	repeat_simple.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \
 	parser_LF.sh \

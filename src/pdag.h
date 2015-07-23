@@ -216,4 +216,8 @@ void ln_fullPdagStats(ln_ctx ctx, FILE *const fp);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
+
+/* friends */
+int ln_normalizeRec(struct ln_pdag *dag, const char *const str, const size_t strLen, const size_t offs, const int bPartialMatch, size_t *const __restrict__ pParsedTo, struct json_object *json, struct ln_pdag **endNode);
+
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */
