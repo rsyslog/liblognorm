@@ -225,8 +225,8 @@ char-to
 ####### 
 
 One or more characters, up to the next character given in
-extra data. Additional data must contain exactly one character, which
-can be escaped.
+extra data. Additional data must contain one or more characters, which
+can be escaped. If multiple characters are given, any of them will match.
 
 ::
 
@@ -237,8 +237,9 @@ char-sep
 ########
 
 Zero or more characters, up to the next character given in extra data, or 
-up to end of line. Additional data must contain exactly one character, 
-which can be escaped.               
+up to end of line. Additional data must contain one or more characters,
+which can be escaped. If multiple characters are given, any of them will
+match.
 
 ::
 
