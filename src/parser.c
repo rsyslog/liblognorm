@@ -492,6 +492,7 @@ PARSER_Parse(Number)
 	if(value != NULL) {
 		char *cstr = strndup(str+ *offs, *parsed);
 		*value = json_object_new_string(cstr);
+ln_dbgprintf(ctx, "number parsed '%s'", cstr);
 		free(cstr);
 	}
 	r = 0; /* success */
@@ -2475,3 +2476,97 @@ done:
 	}
 	return r;
 }
+
+
+struct data_Repeat {
+	ln_pdag *parser;
+	ln_pdag *while_cond;
+};
+/**
+ * "repeat" special parser.
+ */
+PARSER_Parse(Repeat)
+	struct data_Repeat *const data = (struct data_Repeat*) pdata;
+	struct ln_pdag *endNode = NULL;
+	size_t longest_path = 0;
+	size_t strtoffs = *offs;
+	struct json_object *json_arr = NULL;
+
+	do {
+		struct json_object *parsed_value = json_object_new_object();
+		r = ln_normalizeRec(data->parser, str, strLen, strtoffs, 1,
+				    &longest_path, parsed_value, &endNode);
+		strtoffs = longest_path;
+		ln_dbgprintf(ctx, "repeat parser returns %d, parsed %zu, json: %s",
+			r, longest_path, json_object_to_json_string(parsed_value));
+
+		if(json_arr == NULL) {
+			json_arr = json_object_new_array();
+		}
+		json_object_array_add(json_arr, parsed_value);
+		ln_dbgprintf(ctx, "arr: %s", json_object_to_json_string(json_arr));
+
+		/* now check if we shall continue */
+		longest_path = 0;
+		r = ln_normalizeRec(data->while_cond, str, strLen, strtoffs, 1,
+				    &longest_path, NULL, &endNode);
+		ln_dbgprintf(ctx, "repeat while returns %d, parsed %zu",
+			r, longest_path);
+		if(r == 0)
+			strtoffs = longest_path;
+	} while(r == 0);
+
+	/* success, persist */
+	*parsed = strtoffs - *offs;
+	if(value == NULL) {
+		json_object_put(json_arr);
+	} else {
+		*value = json_arr;
+	}
+	r = 0; /* success */
+	return r;
+}
+PARSER_Construct(Repeat)
+{
+	int r = 0;
+	struct data_Repeat *data = (struct data_Repeat*) calloc(1, sizeof(struct data_Repeat));
+	struct ln_pdag *endnode; /* we need this fo ln_pdagAddParser, which updates its param! */
+
+	if(json == NULL)
+		goto done;
+
+	json_object_object_foreach(json, key, val) {
+		if(!strcmp(key, "parser")) {
+			endnode = data->parser = ln_newPDAG(ctx); 
+			CHKR(ln_pdagAddParser(ctx, &endnode, val));
+			endnode->flags.isTerminal = 1;
+		} else if(!strcmp(key, "while")) {
+			endnode = data->while_cond = ln_newPDAG(ctx); 
+			CHKR(ln_pdagAddParser(ctx, &endnode, val));
+			endnode->flags.isTerminal = 1;
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
+				 json_object_to_json_string(val));
+		}
+	}
+
+done:
+	if(data->parser == NULL || data->while_cond == NULL) {
+		ln_errprintf(ctx, 0, "repeat parser needs 'parser','while' parameters");
+		ln_destructRepeat(ctx, data);
+		r = LN_BADCONFIG;
+	} else {
+		*pdata = data;
+	}
+	return r;
+}
+PARSER_Destruct(Repeat)
+{
+	struct data_Repeat *data = (struct data_Repeat*) calloc(1, sizeof(struct data_Repeat));
+	if(data->parser != NULL)
+		ln_pdagDelete(data->parser);
+	if(data->while_cond != NULL)
+		ln_pdagDelete(data->while_cond);
+	free(pdata);
+}
+

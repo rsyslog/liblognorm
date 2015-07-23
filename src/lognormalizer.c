@@ -53,7 +53,7 @@ static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
 static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will
 					   be output. NULL=all */
-static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
+static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_json;
 
 void
 errCallBack(void __attribute__((unused)) *cookie, const char *msg,
@@ -205,8 +205,8 @@ static void usage(void)
 fprintf(stderr,
 	"Options:\n"
 	"    -r<rulebase> Rulebase to use. This is required option\n"
-	"    -e<json|xml|csv>\n"
-	"                 Change output format. By default, Mitre CEE is used\n"
+	"    -e<json|xml|csv|cee-syslog>\n"
+	"                 Change output format. By default, json is used\n"
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
@@ -276,6 +276,8 @@ int main(int argc, char *argv[])
 				outfmt = f_json;
 			} else if(!strcmp(optarg, "xml")) {
 				outfmt = f_xml;
+			} else if(!strcmp(optarg, "cee-syslog")) {
+				outfmt = f_syslog;
 			} else if(!strcmp(optarg, "csv")) {
 				outfmt = f_csv;
 			}

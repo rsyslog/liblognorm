@@ -1,3 +1,4 @@
+- the lognormalizer tool now defaults to json output format
 - API changes
   * ln_loadSamples() --> ln_loadRulebase()
 - loading of sample at runtime is no longer possible. This is due to
@@ -8,3 +9,7 @@
 - the plain old iptables parser is no longer supported. Sorry for that,
   but keeping it would have caused violation of layers. It can be
   replaced by the new one
+- the "tokenized" parser is no longer supported. Use the more
+  capable "repeat" parser instead.
+- the "recursive" and "descent" parsers are no longer supported. Use
+  user-defined data types instead.
