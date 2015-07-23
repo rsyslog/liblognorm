@@ -192,11 +192,10 @@ ln_newParser(ln_ctx ctx,
 
 	json = json_object_object_get(prscnf, "name");
 	if(json == NULL) {
-		ln_errprintf(ctx, 0, "parser name missing in config: %s",
-			json_object_to_json_string(prscnf));
-		goto done;
+		name = strdup("-");
+	} else {
+		name = strdup(json_object_get_string(json));
 	}
-	name = strdup(json_object_get_string(json));
 
 	json = json_object_object_get(prscnf, "extradata");
 	if(json == NULL) {
@@ -858,8 +857,8 @@ tryParser(struct ln_pdag *dag,
 		if(*value == NULL)
 			*value = json_object_new_object();
 		ln_dbgprintf(dag->ctx, "calling custom parser '%s'", prs->custType->name);
-		//r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1, pParsed, json, &endNode);
-		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1, pParsed, *value, &endNode);
+		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
+				    pParsed, *value, &endNode);
 		*pParsed -= *offs;
 		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s", prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
 	} else {
