@@ -865,7 +865,8 @@ done:
 
 
 struct data_CharTo {
-	char cTerm;
+	char *term_chars;
+	size_t n_term_chars;
 };
 /**
  * Parse everything up to a specific character.
@@ -877,22 +878,28 @@ struct data_CharTo {
  * other cases a string is extracted.
  */
 PARSER_Parse(CharTo)
-	const char *c;
 	size_t i;
 	struct data_CharTo *const data = (struct data_CharTo*) pdata;
-	const unsigned char cTerm = data->cTerm;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
-		i++;
+	int found = 0;
+	while(i < strLen && !found) {
+		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
+			if(str[i] == data->term_chars[j]) {
+				found = 1;
+				break;
+			}
+		}
+		if(!found)
+			++i;
+	}
 
-	if(i == *offs || i == strLen || c[i] != cTerm)
+	if(i == *offs || i == strLen || !found)
 		goto done;
 
 	/* success, persist */
@@ -910,12 +917,15 @@ PARSER_Construct(CharTo)
 {
 	int r = 0;
 	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
-	data->cTerm = *ed;
+	data->term_chars = strdup(ed);
+	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
 	return r;
 }
 PARSER_Destruct(CharTo)
 {
+	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
+	free(data->term_chars);
 	free(pdata);
 }
 
@@ -986,7 +996,8 @@ done:	return r;
 
 
 struct data_CharSeparated {
-	char cTerm;
+	char *term_chars;
+	size_t n_term_chars;
 };
 /**
  * Parse everything up to a specific character, or up to the end of string.
@@ -997,19 +1008,26 @@ struct data_CharSeparated {
  * follows this field in rule.
  */
 PARSER_Parse(CharSeparated)
-	const char *c;
 	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
 	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != data->cTerm) 
-		i++;
+	int found = 0;
+	while(i < strLen && !found) {
+		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
+			if(str[i] == data->term_chars[j]) {
+				found = 1;
+				break;
+			}
+		}
+		if(!found)
+			++i;
+	}
 
 	/* success, persist */
 	*parsed = i - *offs;
@@ -1026,13 +1044,15 @@ PARSER_Construct(CharSeparated)
 	int r = 0;
 	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
 
-	data->cTerm = *ed;
-
+	data->term_chars = strdup(ed);
+	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
 	return r;
 }
 PARSER_Destruct(CharSeparated)
 {
+	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
+	free(data->term_chars);
 	free(pdata);
 }
 
