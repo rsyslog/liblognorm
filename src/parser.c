@@ -772,6 +772,7 @@ PARSER(StringTo)
 
 	r = 0; /* success */
 done:
+        free(toFind);
 	return r;
 }
 
@@ -808,8 +809,8 @@ done:
 
 /**
  * Parse everything up to a specific character.
- * The character must be the only char inside extra data passed to the parser.
- * It is a program error if strlen(ed) != 1. It is considered a format error if
+ * If there are multiple characters in ed, all are checked as possible delimiters.
+ * It is considered a format error if
  * a) the to-be-parsed buffer is already positioned on the terminator character
  * b) there is no terminator until the end of the buffer
  * In those cases, the parsers declares itself as not being successful, in all
@@ -818,21 +819,32 @@ done:
 PARSER(CharTo)
 	const char *c;
 	unsigned char cTerm;
-	size_t i;
+	const char *toFind;
+	size_t i, j, k;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	assert(es_strlen(ed) == 1);
-	cTerm = *(es_getBufAddr(ed));
+	assert(ed != NULL);
+	k = es_strlen(ed);
+	toFind = es_str2cstr(ed, NULL);
+	cTerm = 0;
 	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
-		i++;
+	while(i < strLen && !cTerm) {
+                for (j=0;j < k; j++) {
+                        if (c[i] == toFind[j]) {
+                                cTerm = 1;
+                                break;
+                        }
+                }
+                if (!cTerm)
+		        i++;
+        }
 
-	if(i == *offs || i == strLen || c[i] != cTerm)
+	if(i == *offs || i == strLen || !cTerm)
 		goto done;
 
 	/* success, persist */
@@ -840,14 +852,14 @@ PARSER(CharTo)
 
 	r = 0; /* success */
 done:
+        free(toFind);
 	return r;
 }
 
 
 /**
  * Parse everything up to a specific character, or up to the end of string.
- * The character must be the only char inside extra data passed to the parser.
- * It is a program error if strlen(ed) != 1.
+ * If there are multiple characters in ed, all are checked as possible delimiters.
  * This parser always returns success.
  * By nature of the parser, it is required that end of string or the separator
  * follows this field in rule.
@@ -855,24 +867,36 @@ done:
 PARSER(CharSeparated)
 	const char *c;
 	unsigned char cTerm;
-	size_t i;
+	const char *toFind;
+	size_t i, j, k;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	assert(es_strlen(ed) == 1);
-	cTerm = *(es_getBufAddr(ed));
+	assert(ed != NULL);
+	k = es_strlen(ed);
+	toFind = es_str2cstr(ed, NULL);
+	cTerm = 0;
 	c = str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
-		i++;
+	while(i < strLen && !cTerm) {
+                for (j=0;j < k; j++) {
+                        if (c[i] == toFind[j]) {
+                                cTerm = 1;
+                                break;
+                        }
+                }
+                if (!cTerm)
+		        i++;
+        }
 
 	/* success, persist */
 	*parsed = i - *offs;
 
 	r = 0; /* success */
+        free(toFind);
 	return r;
 }
 
