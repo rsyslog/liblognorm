@@ -183,7 +183,7 @@ ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str)
 
 	es_addBuf(str, "[cee@115", 8);
 	
-	if((tags = json_object_object_get(json, "event.tags")) != NULL) {
+	if(json_object_object_get_ex(json, "event.tags", &tags)) {
 		CHKR(ln_addTags_Syslog(tags, str));
 	}
 	json_object_object_foreach(json, name, field) {

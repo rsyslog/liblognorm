@@ -168,7 +168,7 @@ ln_newParser(ln_ctx ctx,
 	json_object *json;
 	const char *val;
 	prsid_t prsid;
-	struct ln_type_pdag *custType;
+	struct ln_type_pdag *custType = NULL;
 	const char *name = NULL;
 	const char *extraData = NULL;
 

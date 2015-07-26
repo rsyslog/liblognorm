@@ -159,8 +159,9 @@ normalize(void)
 		ln_normalize(ctx, buf, strlen(buf), &json);
 		if(json != NULL) {
 			if(eventHasTag(json, mandatoryTagCstr)) {
+				struct json_object *dummy;
 				if( parsedOnly == 1
-						&& json_object_object_get(json, "unparsed-data") != NULL) {
+						&& json_object_object_get_ex(json, "unparsed-data", &dummy)) {
 					numUnparsed++;
 				} else {
 					outputEvent(json);

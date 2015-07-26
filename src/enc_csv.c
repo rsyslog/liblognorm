@@ -197,7 +197,7 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 			*nn = '\0';
 			nn++;
 		}
-		field = json_object_object_get(json, name);
+		json_object_object_get_ex(json, name, &field);
 		if (needComma) {
 			CHKR(es_addChar(str, ','));
 		} else {

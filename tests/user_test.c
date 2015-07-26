@@ -11,8 +11,8 @@ int main() {
 	ln_loadSample(ctx, "rule=:%from:word% says %msg:word%");
 	if (ln_normalize(ctx, str, strlen(str), &obj) == 0) {
 
-		from = json_object_object_get(obj, "from");
-		msg = json_object_object_get(obj, "msg");
+		json_object_object_get_ex(obj, "from", &from);
+		json_object_object_get_ex(obj, "msg", &msg);
 
 		ret = strcmp(json_object_get_string(from), "foo") ||
 			strcmp(json_object_get_string(msg), "hello!");

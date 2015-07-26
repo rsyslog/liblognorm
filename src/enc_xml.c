@@ -204,7 +204,7 @@ ln_fmtEventToXML(struct json_object *json, es_str_t **str)
 		goto done;
 
 	es_addBuf(str, "<event>", 7);
-	if((tags = json_object_object_get(json, "event.tags")) != NULL) {
+	if(json_object_object_get_ex(json, "event.tags", &tags)) {
 		CHKR(ln_addTags_XML(tags, str));
 	}
 	json_object_object_foreach(json, name, field) {

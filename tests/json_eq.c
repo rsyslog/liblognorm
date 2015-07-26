@@ -13,7 +13,8 @@ static int obj_eq(obj* expected, obj* actual) {
     struct json_object_iter iter;
     int eql = 1;
 	json_object_object_foreachC(expected, iter) {
-        obj *actual_val = json_object_object_get(actual, iter.key);
+        obj *actual_val;
+        json_object_object_get_ex(actual, iter.key, &actual_val);
         eql &= eq(iter.val, actual_val);
     }
     return eql;
