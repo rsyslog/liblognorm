@@ -30,6 +30,7 @@ struct ln_type_pdag;
  * of the respective parser inside the parser lookup table.
  */
 #define PRS_LITERAL			0
+#define PRS_REPEAT			1
 #if 0
 #define PRS_DATE_RFC3164		1
 #define PRS_DATE_RFC5424		2
@@ -62,7 +63,6 @@ struct ln_type_pdag;
 #define PRS_CHAR_SEP			29
 #endif
 
-#define PRS_REPEAT			253
 #define PRS_CUSTOM_TYPE			254
 #define PRS_INVALID			255
 /* NOTE: current max limit on parser ID is 255, because we use uint8_t

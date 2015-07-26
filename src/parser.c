@@ -2494,10 +2494,6 @@ done:
 }
 
 
-struct data_Repeat {
-	ln_pdag *parser;
-	ln_pdag *while_cond;
-};
 /**
  * "repeat" special parser.
  */

@@ -38,6 +38,7 @@ char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const 
 { identifier, ln_construct##parser, ln_parse##parser, ln_destruct##parser }
 static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("literal", Literal),
+	PARSER_ENTRY("repeat", Repeat),
 	PARSER_ENTRY_NO_DATA("date-rfc3164", RFC3164Date),
 	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date),
 	PARSER_ENTRY_NO_DATA("number", Number),
@@ -66,8 +67,7 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY_NO_DATA("v2-iptables", v2IPTables),
 	PARSER_ENTRY("string-to", StringTo),
 	PARSER_ENTRY("char-to", CharTo),
-	PARSER_ENTRY("char-sep", CharSeparated),
-	PARSER_ENTRY("repeat", Repeat)
+	PARSER_ENTRY("char-sep", CharSeparated)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 
@@ -643,10 +643,19 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers);
 
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
 		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s':", indent,
-			parserName(dag->parsers[i].prsid),
+			parserName(prs->prsid),
 			dag->parsers[i].name,
-			(dag->parsers[i].prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, dag->parsers[i].parser_data) : "UNKNOWN");
+			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
+		if(prs->prsid == PRS_REPEAT) {
+			struct data_Repeat *const data = (struct data_Repeat*) prs->parser_data;
+			ln_dbgprintf(dag->ctx, "%sparser:", indent);
+			ln_displayPDAGComponent(data->parser, level + 1);
+			ln_dbgprintf(dag->ctx, "%swhile:", indent);
+			ln_displayPDAGComponent(data->while_cond, level + 1);
+			ln_dbgprintf(dag->ctx, "%send repeat def", indent);
+		}
 		ln_displayPDAGComponent(dag->parsers[i].node, level + 1);
 	}
 }

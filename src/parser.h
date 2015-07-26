@@ -95,4 +95,10 @@ void regex_parser_data_destructor(void** dataPtr);
 /* utility functions */
 int ln_combineData_Literal(void *const org, void *const add);
 
+/* definitions for friends */
+struct data_Repeat {
+	ln_pdag *parser;
+	ln_pdag *while_cond;
+};
+
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
