@@ -24,6 +24,7 @@
 #include "annot.h"
 #include "internal.h"
 #include "parser.h"
+char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
 
 /* parser lookup table
@@ -323,7 +324,8 @@ ln_pdagComponentOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
 		ln_dbgprintf(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
-			prs->node, i, parserName(prs->prsid), prs->name, prs->parser_data);
+			prs->node, i, parserName(prs->prsid), prs->name,
+			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
 		
 		optLitPathCompact(ctx, prs);
 
@@ -641,10 +643,10 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers);
 
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
-		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%p':", indent,
+		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s':", indent,
 			parserName(dag->parsers[i].prsid),
 			dag->parsers[i].name,
-			dag->parsers[i].parser_data);
+			(dag->parsers[i].prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, dag->parsers[i].parser_data) : "UNKNOWN");
 		ln_displayPDAGComponent(dag->parsers[i].node, level + 1);
 	}
 }
@@ -880,8 +882,9 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			ln_dbgprintf(dag->ctx, "%zu/%d:trying '%s' parser for field '%s'",
-					offs, bPartialMatch, parserName(prs->prsid), prs->name);
+			ln_dbgprintf(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', data '%s'",
+					offs, bPartialMatch, parserName(prs->prsid), prs->name,
+					(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
 		}
 		i = offs;
 		value = NULL;

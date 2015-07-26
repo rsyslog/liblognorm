@@ -107,6 +107,17 @@ done:
 	return r; \
 }
 
+
+/* Return printable representation of parser content for 
+ * display purposes. This must not be 100% exact, but provide
+ * a good indication of what it contains for a human.
+ * @param[data] data parser data block
+ * @return pointer to c string, NOT to be freed
+ */
+#define PARSER_DataForDisplay(ParserName) \
+char * ln_DataForDisplay##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+
+
 /* parser constructor
  * @param[in] ed extra data (legacy)
  * @param[in] json config json items
@@ -960,6 +971,11 @@ PARSER_Parse(Literal)
 		r = 0;
 	}
 	return r;
+}
+PARSER_DataForDisplay(Literal)
+{
+	struct data_Literal *data = (struct data_Literal*) pdata;
+	return data->lit;
 }
 PARSER_Construct(Literal)
 {
