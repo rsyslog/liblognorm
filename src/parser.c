@@ -1277,8 +1277,8 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * is present. Otherwise, we check if we have a valid interface.
 	 */
 	int bHaveInterface = 0;
-	size_t idxInterface;
-	size_t lenInterface;
+	size_t idxInterface = 0;
+	size_t lenInterface = 0;
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
@@ -1317,8 +1317,8 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * We assume we must at least have 5 chars [" (::1)"]
 	 */
 	int bHaveIP2 = 0;
-	size_t idxIP2, lenIP2;
-	size_t idxPort2, lenPort2;
+	size_t idxIP2 = 0, lenIP2 = 0;
+	size_t idxPort2 = 0, lenPort2 = 0;
 	if(i+5 < strLen && c[i] == ' ' && c[i+1] == '(') {
 		size_t iTmp = i+2; /* skip over " (" */
 		idxIP2 = iTmp;
@@ -1342,8 +1342,8 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * We assume we must at least have 3 chars ["(n)"]
 	 */
 	int bHaveUser = 0;
-	size_t idxUser;
-	size_t lenUser;
+	size_t idxUser = 0;
+	size_t lenUser = 0;
 	if(   (i+2 < strLen && c[i] == '(' && !isspace(c[i+1]) )
 	   || (i+3 < strLen && c[i] == ' ' && c[i+1] == '(' && !isspace(c[i+2])) ) {
 		idxUser = i + ((c[i] == ' ') ? 2 : 1); /* skip [SP]'(' */
