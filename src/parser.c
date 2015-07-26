@@ -115,7 +115,7 @@ done:
  * @return pointer to c string, NOT to be freed
  */
 #define PARSER_DataForDisplay(ParserName) \
-char * ln_DataForDisplay##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+const char * ln_DataForDisplay##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
 
 
 /* parser constructor
