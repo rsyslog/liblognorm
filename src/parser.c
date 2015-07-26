@@ -118,6 +118,15 @@ done:
 const char * ln_DataForDisplay##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
 
 
+/* Return JSON parser config. This is primarily for comparison
+ * of parser equalness.
+ * @param[data] data parser data block
+ * @return pointer to c string, NOT to be freed
+ */
+#define PARSER_JsonConf(ParserName) \
+const char * ln_JsonConf##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+
+
 /* parser constructor
  * @param[in] ed extra data (legacy)
  * @param[in] json config json items
@@ -945,6 +954,7 @@ PARSER_Destruct(CharTo)
 
 struct data_Literal {
 	const char *lit;
+	const char *json_conf;
 };
 /**
  * Parse a specific literal.
@@ -977,12 +987,18 @@ PARSER_DataForDisplay(Literal)
 	struct data_Literal *data = (struct data_Literal*) pdata;
 	return data->lit;
 }
+PARSER_JsonConf(Literal)
+{
+	struct data_Literal *data = (struct data_Literal*) pdata;
+	return data->json_conf;
+}
 PARSER_Construct(Literal)
 {
 	int r = 0;
 	struct data_Literal *data = (struct data_Literal*) calloc(1, sizeof(struct data_Literal));
 
 	data->lit = strdup(ed);
+	data->json_conf = strdup(ed); //strdup(json_object_to_json_string(json)); // TODO: fix this
 
 	*pdata = data;
 	return r;
@@ -991,6 +1007,7 @@ PARSER_Destruct(Literal)
 {
 	struct data_Literal *data = (struct data_Literal*) pdata;
 	free((void*)data->lit);
+	free((void*)data->json_conf);
 	free(pdata);
 }
 /* for path compaction, we need a special handler to combine two

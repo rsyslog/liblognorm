@@ -24,7 +24,8 @@
 #include "annot.h"
 #include "internal.h"
 #include "parser.h"
-char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
 
 /* parser lookup table
@@ -521,8 +522,11 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 			//        literals (see header TODO)
 			// FIXME: if nextnode is set, check we can actually combine, 
 			//        else err out
+			if(parser->prsid == PRS_LITERAL) // TODO: generalize
+				ln_dbgprintf(ctx, "parser comparison: \n\t'%s'\n\t'%s'",ln_JsonConfLiteral(ctx, pdag->parsers[i].parser_data), ln_JsonConfLiteral(ctx, parser->parser_data));
 			if(parser->prsid == PRS_LITERAL &&
-			   ((char*)pdag->parsers[i].parser_data)[0] != ((char*)parser->parser_data)[0])
+			   strcmp(ln_JsonConfLiteral(ctx, pdag->parsers[i].parser_data), ln_JsonConfLiteral(ctx, parser->parser_data)))
+			   //((char*)pdag->parsers[i].parser_data)[0] != ((char*)parser->parser_data)[0])
 			   	continue;
 			*nextnode = pdag->parsers[i].node;
 			r = 0;
