@@ -60,6 +60,7 @@ AC_CHECK_FUNCS(json_object_get_string_len,,)
 AC_CHECK_TYPES(json_bool,,,[#include <json.h>])
 AC_CHECK_FUNCS(json_object_get_int64,,)
 AC_CHECK_FUNCS(json_object_new_int64,,)
+AC_CHECK_FUNCS(json_type_to_name,,)
 AC_CHECK_MEMBERS([json_object_iter.key],,,[#include <json.h>])
 LIBS="$LIBS_BEFORE"
 CFLAGS="$CFLAGS_BEFORE"

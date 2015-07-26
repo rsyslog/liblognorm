@@ -35,3 +35,34 @@ struct json_object* json_object_new_int64(int64_t i) {
 	return json_object_new_int((int) i);
 }
 #endif
+
+#ifndef HAVE_JSON_TYPE_TO_NAME
+const char* json_type_to_name(int t) {
+	switch(t) {
+	case json_type_null:
+		return "null";
+		break;
+	case json_type_boolean:
+		return "boolean";
+		break;
+	case json_type_double:
+		return "double";
+		break;
+	case json_type_int:
+		return "int";
+		break;
+	case json_type_object:
+		return "object";
+		break;
+	case json_type_array:
+		return "array";
+		break;
+	case json_type_string:
+		return "string";
+		break;
+	default:
+		return "UNKNOWN TYPE";
+		break;
+	}
+}
+#endif
