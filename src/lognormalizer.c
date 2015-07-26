@@ -120,7 +120,7 @@ eventHasTag(struct json_object *json, const char *tag)
 	
 	if (tag == NULL)
 		return 1;
-	if ((tagbucket = json_object_object_get(json, "event.tags")) != NULL) {
+	if (json_object_object_get_ex(json, "event.tags", &tagbucket)) {
 		if (json_object_get_type(tagbucket) == json_type_array) {
 			for (i = json_object_array_length(tagbucket) - 1; i >= 0; i--) {
 				tagObj = json_object_array_get_idx(tagbucket, i);

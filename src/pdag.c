@@ -171,7 +171,7 @@ ln_newParser(ln_ctx ctx,
 	const char *name = NULL;
 	const char *extraData = NULL;
 
-	json = json_object_object_get(prscnf, "type");
+	json_object_object_get_ex(prscnf, "type", &json);
 	if(json == NULL) {
 		ln_errprintf(ctx, 0, "parser type missing in config: %s",
 			json_object_to_json_string(prscnf));
@@ -193,10 +193,10 @@ ln_newParser(ln_ctx ctx,
 		}
 	}
 
-	json = json_object_object_get(prscnf, "name");
+	json_object_object_get_ex(prscnf, "name", &json);
 	name = strdup((json == NULL) ? "-" : json_object_get_string(json));
 
-	json = json_object_object_get(prscnf, "extradata");
+	json_object_object_get_ex(prscnf, "extradata", &json);
 	extraData = (json == NULL) ? NULL : strdup(json_object_get_string(json));
 
 	/* we need to remove already processed items from the config, so
@@ -599,10 +599,11 @@ ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
 	
 	if(json_object_get_type(prscnf) == json_type_object) {
 		/* check for special types we need to handle here */
-		struct json_object *json = json_object_object_get(prscnf, "type");
+		struct json_object *json;
+		json_object_object_get_ex(prscnf, "type", &json);
 		const char *const ftype = json_object_get_string(json);
 		if(!strcmp(ftype, "alternative")) {
-			json = json_object_object_get(prscnf, "parser");
+			json_object_object_get_ex(prscnf, "parser", &json);
 			if(json_object_get_type(json) != json_type_array) {
 				ln_errprintf(ctx, 0, "alternative type needs array of parsers. "
 					"Object: '%s', type is %s",
