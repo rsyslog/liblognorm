@@ -128,7 +128,6 @@ const char * ln_JsonConf##ParserName(__attribute__((unused)) ln_ctx ctx, void *c
 
 
 /* parser constructor
- * @param[in] ed extra data (legacy)
  * @param[in] json config json items
  * @param[out] data parser data block (to be allocated)
  * At minimum, *data must be set to NULL
@@ -137,7 +136,6 @@ const char * ln_JsonConf##ParserName(__attribute__((unused)) ln_ctx ctx, void *c
 #define PARSER_Construct(ParserName) \
 int ln_construct##ParserName( \
 	__attribute__((unused)) ln_ctx ctx, \
-	__attribute__((unused)) const char *const ed, \
 	__attribute__((unused)) json_object *const json, \
 	void **pdata)
 
@@ -835,11 +833,18 @@ PARSER_Construct(StringTo)
 {
 	int r = 0;
 	struct data_StringTo *data = (struct data_StringTo*) calloc(1, sizeof(struct data_StringTo));
+	struct json_object *ed;
 
-	data->toFind = strdup(ed);
+	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
+		ln_errprintf(ctx, 0, "string-to type needs 'extradata' parameter");
+		r = LN_BADCONFIG ;
+		goto done;
+	}
+	data->toFind = strdup(json_object_get_string(ed));
 	data->len = strlen(data->toFind);
 
 	*pdata = data;
+done:
 	return r;
 }
 PARSER_Destruct(StringTo)
@@ -892,7 +897,7 @@ struct data_CharTo {
 /**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
- * It is a program error if strlen(ed) != 1. It is considered a format error if
+ * It is considered a format error if
  * a) the to-be-parsed buffer is already positioned on the terminator character
  * b) there is no terminator until the end of the buffer
  * In those cases, the parsers declares itself as not being successful, in all
@@ -938,9 +943,17 @@ PARSER_Construct(CharTo)
 {
 	int r = 0;
 	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
-	data->term_chars = strdup(ed);
+	struct json_object *ed;
+
+	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
+		ln_errprintf(ctx, 0, "char-to type needs 'extradata' parameter");
+		r = LN_BADCONFIG ;
+		goto done;
+	}
+	data->term_chars = strdup(json_object_get_string(ed));
 	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
+done:
 	return r;
 }
 PARSER_Destruct(CharTo)
@@ -1043,7 +1056,6 @@ struct data_CharSeparated {
 /**
  * Parse everything up to a specific character, or up to the end of string.
  * The character must be the only char inside extra data passed to the parser.
- * It is a program error if strlen(ed) != 1.
  * This parser always returns success.
  * By nature of the parser, it is required that end of string or the separator
  * follows this field in rule.
@@ -1084,10 +1096,18 @@ PARSER_Construct(CharSeparated)
 {
 	int r = 0;
 	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
+	struct json_object *ed;
 
-	data->term_chars = strdup(ed);
+	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
+		ln_errprintf(ctx, 0, "char-separated type needs 'extradata' parameter");
+		r = LN_BADCONFIG ;
+		goto done;
+	}
+
+	data->term_chars = strdup(json_object_get_string(ed));
 	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
+done:
 	return r;
 }
 PARSER_Destruct(CharSeparated)

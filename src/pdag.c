@@ -170,7 +170,6 @@ ln_newParser(ln_ctx ctx,
 	prsid_t prsid;
 	struct ln_type_pdag *custType = NULL;
 	const char *name = NULL;
-	const char *extraData = NULL;
 
 	json_object_object_get_ex(prscnf, "type", &json);
 	if(json == NULL) {
@@ -197,15 +196,11 @@ ln_newParser(ln_ctx ctx,
 	json_object_object_get_ex(prscnf, "name", &json);
 	name = strdup((json == NULL) ? "-" : json_object_get_string(json));
 
-	json_object_object_get_ex(prscnf, "extradata", &json);
-	extraData = (json == NULL) ? NULL : strdup(json_object_get_string(json));
-
 	/* we need to remove already processed items from the config, so
 	 * that we can pass the remaining parameters to the parser.
 	 */
 	json_object_object_del(prscnf, "type");
 	json_object_object_del(prscnf, "name");
-	json_object_object_del(prscnf, "extradata");
 
 	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
@@ -221,11 +216,10 @@ ln_newParser(ln_ctx ctx,
 		node->custType = custType;
 	} else {
 		if(parser_lookup_table[prsid].construct != NULL) {
-			parser_lookup_table[prsid].construct(ctx, extraData, prscnf, &node->parser_data);
+			parser_lookup_table[prsid].construct(ctx, prscnf, &node->parser_data);
 		}
 	}
 done:
-	free((void*)extraData);
 	return node;
 }
 
