@@ -2594,10 +2594,12 @@ PARSER_Construct(Repeat)
 	json_object_object_foreach(json, key, val) {
 		if(!strcmp(key, "parser")) {
 			endnode = data->parser = ln_newPDAG(ctx); 
+			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
 		} else if(!strcmp(key, "while")) {
 			endnode = data->while_cond = ln_newPDAG(ctx); 
+			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
 		} else {
