@@ -958,7 +958,7 @@ done:
 }
 PARSER_Destruct(CharTo)
 {
-	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
+	struct data_CharTo *const data = (struct data_CharTo*) pdata;
 	free(data->term_chars);
 	free(pdata);
 }
@@ -1112,7 +1112,7 @@ done:
 }
 PARSER_Destruct(CharSeparated)
 {
-	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
+	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
 	free(data->term_chars);
 	free(pdata);
 }
@@ -2618,7 +2618,7 @@ done:
 }
 PARSER_Destruct(Repeat)
 {
-	struct data_Repeat *data = (struct data_Repeat*) calloc(1, sizeof(struct data_Repeat));
+	struct data_Repeat *const data = (struct data_Repeat*) pdata;
 	if(data->parser != NULL)
 		ln_pdagDelete(data->parser);
 	if(data->while_cond != NULL)
