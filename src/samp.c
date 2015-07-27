@@ -268,7 +268,7 @@ newLiteralParserJSONConf(char lit)
 	json_object_object_add(prscnf, "type", val);
 
 	val = json_object_new_string(buf);
-	json_object_object_add(prscnf, "extradata", val);
+	json_object_object_add(prscnf, "text", val);
 
 	return prscnf;
 }

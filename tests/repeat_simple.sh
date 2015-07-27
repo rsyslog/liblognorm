@@ -7,11 +7,11 @@ test_def $0 "simple repeat syntax"
 add_rule 'rule=:a %{"name":"numbers", "type":"repeat",
 			"parser":[
 			  {"name":"n1", "type":"number"},
-			  {"type":"literal", "extradata":":"},
+			  {"type":"literal", "text":":"},
 			  {"name":"n2", "type":"number"}
 			  ],
 			"while":[
-			  {"type":"literal", "extradata":", "}
+			  {"type":"literal", "text":", "}
 			]
        		   }% b %w:word%
 '

@@ -996,11 +996,18 @@ PARSER_Construct(Literal)
 {
 	int r = 0;
 	struct data_Literal *data = (struct data_Literal*) calloc(1, sizeof(struct data_Literal));
+	struct json_object *text;
 
-	data->lit = strdup(ed);
-	data->json_conf = strdup(ed); //strdup(json_object_to_json_string(json)); // TODO: fix this
+	if(json_object_object_get_ex(json, "text", &text) == 0) {
+		ln_errprintf(ctx, 0, "literal type needs 'text' parameter");
+		r = LN_BADCONFIG ;
+		goto done;
+	}
+	data->lit = strdup(json_object_get_string(text));
+	data->json_conf = strdup(json_object_to_json_string(json));
 
 	*pdata = data;
+done:
 	return r;
 }
 PARSER_Destruct(Literal)
