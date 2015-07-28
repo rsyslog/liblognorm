@@ -14,7 +14,6 @@
 #include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
-#include "ptree.h"
 
 /* Code taken from rsyslog ASL 2.0 code.
  * From varmojfekoj's mail on why he provided rs_strerror_r():
