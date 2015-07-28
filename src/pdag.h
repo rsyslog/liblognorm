@@ -78,7 +78,8 @@ struct ln_parser_s {
 	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
 	const char *name;	/**< field name */
 	uint8_t prio;		/**< assigned priority */
-	void *parser_data;	/** opaque data that the field-parser understands */
+	void *parser_data;	/**< opaque data that the field-parser understands */
+	const char *conf;	/**< configuration as printable json for comparison reasons */
 };
 
 struct ln_parser_info {

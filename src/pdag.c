@@ -170,6 +170,7 @@ ln_newParser(ln_ctx ctx,
 	prsid_t prsid;
 	struct ln_type_pdag *custType = NULL;
 	const char *name = NULL;
+	const char *textconf = json_object_to_json_string(prscnf);
 
 	json_object_object_get_ex(prscnf, "type", &json);
 	if(json == NULL) {
@@ -212,6 +213,7 @@ ln_newParser(ln_ctx ctx,
 	node->prio = 0;
 	node->name = name;
 	node->prsid = prsid;
+	node->conf = strdup(textconf);
 	if(prsid == PRS_CUSTOM_TYPE) {
 		node->custType = custType;
 	} else {
@@ -250,6 +252,7 @@ pdagDeletePrs(ln_ctx ctx, ln_parser_t *const __restrict__ prs)
 	if(prs->node != NULL)
 		ln_pdagDelete(prs->node);
 	free((void*)prs->name);
+	free((void*)prs->conf);
 	if(prs->parser_data != NULL)
 		parser_lookup_table[prs->prsid].destruct(ctx, prs->parser_data);
 }
@@ -469,9 +472,6 @@ isLeaf(struct ln_pdag *dag)
 }
 
 
-// TODO: how to *exactly* handle detection of same parser type with
-//       different parameters. This is an important use case, especially
-//       when we get more generic parsers.
 /**
  * Add a parser instance to the pdag at the current position.
  *
@@ -510,18 +510,15 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	 */
 	int i;
 	for(i = 0 ; i < pdag->nparsers ; ++i) {
+		ln_dbgprintf(ctx, "parser  comparison:\n%s\n%s",  pdag->parsers[i].conf, parser->conf);
 		if(   pdag->parsers[i].prsid == parser->prsid
-		   && !strcmp(pdag->parsers[i].name, parser->name)) {
-			// FIXME: work-around for literal parser with different
-			//        literals (see header TODO)
+		   && !strcmp(pdag->parsers[i].conf, parser->conf)) {
+		   	// FIXME: the current ->conf object is depending on
+			//        the order of json elements. We should do a JSON
+			//        comparison (a bit more complex). For now, it
+			//        works like we do it now.
 			// FIXME: if nextnode is set, check we can actually combine, 
 			//        else err out
-			if(parser->prsid == PRS_LITERAL) // TODO: generalize
-				ln_dbgprintf(ctx, "parser comparison: \n\t'%s'\n\t'%s'",ln_JsonConfLiteral(ctx, pdag->parsers[i].parser_data), ln_JsonConfLiteral(ctx, parser->parser_data));
-			if(parser->prsid == PRS_LITERAL &&
-			   strcmp(ln_JsonConfLiteral(ctx, pdag->parsers[i].parser_data), ln_JsonConfLiteral(ctx, parser->parser_data)))
-			   //((char*)pdag->parsers[i].parser_data)[0] != ((char*)parser->parser_data)[0])
-			   	continue;
 			*nextnode = pdag->parsers[i].node;
 			r = 0;
 			ln_dbgprintf(ctx, "merging with pdag %p", pdag);
