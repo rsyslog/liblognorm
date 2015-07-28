@@ -77,6 +77,7 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 	struct json_object *json = NULL;
 	char *ed = NULL;
 	es_size_t i = *bufOffs;
+	es_str_t *edata = NULL;
 
 	for(  iDst = 0
 	    ; iDst < (MAX_FIELDNAME_LEN - 1) && i < lenBuf && buf[i] != ':'
@@ -141,7 +142,6 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 		json_tokener_free(tokener);
 	}
 
-	es_str_t *edata = NULL;
 	if(buf[i] == '%') {
 		i++;
 	} else {
@@ -185,6 +185,8 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 	*bufOffs = i;
 done:
 	free(ed);
+	if(edata != NULL)
+		es_deleteStr(edata);
 	free(ftype);
 	if(json != NULL)
 		json_object_put(json);
@@ -268,7 +270,7 @@ newLiteralParserJSONConf(char lit)
 	json_object_object_add(prscnf, "type", val);
 
 	val = json_object_new_string(buf);
-	json_object_object_add(prscnf, "extradata", val);
+	json_object_object_add(prscnf, "text", val);
 
 	return prscnf;
 }

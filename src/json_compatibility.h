@@ -32,6 +32,10 @@ struct json_object_iter
 };
 #endif
 
+#ifndef HAVE_JSON_TYPE_TO_NAME
+const char* json_type_to_name(int t);
+#endif
+
 #ifndef json_object_object_foreachC
 #define json_object_object_foreachC(obj,iter)							\
 	for(iter.entry = json_object_get_object(obj)->head; (iter.entry ? (iter.key = (char*)iter.entry->k, iter.val = (struct json_object*)iter.entry->v, iter.entry) : 0); iter.entry = iter.entry->next)

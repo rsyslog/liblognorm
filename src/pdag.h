@@ -83,7 +83,7 @@ struct ln_parser_s {
 
 struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
-	int (*construct)(ln_ctx ctx, const char *ed, json_object *const json, void **);
+	int (*construct)(ln_ctx ctx, json_object *const json, void **);
 	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */

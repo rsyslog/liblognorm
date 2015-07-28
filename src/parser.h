@@ -30,9 +30,6 @@
  * @param[in] str the to-be-parsed string
  * @param[in] strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
- * @param[in] node fieldlist with additional data; for simple
- *            parsers, this sets variable "ed", which just is
- *            string data.
  * @param[out] parsed bytes
  * @param[out] ptr to json object containing parsed data (can be unused)
  *             if NULL on input, object is NOT persisted
@@ -44,7 +41,7 @@
 	int ln_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value);
 
 #define PARSERDEF(parser) \
-	int ln_construct##parser(ln_ctx ctx, const char *ed, json_object *const json, void **pdata); \
+	int ln_construct##parser(ln_ctx ctx, json_object *const json, void **pdata); \
 	int ln_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value); \
 	void ln_destruct##parser(ln_ctx ctx, void *const pdata);
 

@@ -7,13 +7,13 @@ test_def $0 "repeat syntax with alternative terminators"
 add_rule 'rule=:a %{"name":"numbers", "type":"repeat",
 			"parser":[
 			    {"name":"n1", "type":"number"},
-			    {"type":"literal", "extradata":":"},
+			    {"type":"literal", "text":":"},
 			    {"name":"n2", "type":"number"}
 			  ],
 			"while": {
 			    "type":"alternative", "parser": [
-			        {"type":"literal", "extradata":", "},
-			        {"type":"literal", "extradata":","}
+			        {"type":"literal", "text":", "},
+			        {"type":"literal", "text":","}
 			     ]
 			 }
        		   }% b %w:word%

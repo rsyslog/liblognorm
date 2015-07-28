@@ -108,6 +108,11 @@ ln_exitCtx(ln_ctx ctx)
 	ctx->objID = LN_ObjID_None; /* prevent double free */
 	if(ctx->pdag != NULL)
 		ln_pdagDelete(ctx->pdag);
+	for(int i = 0 ; i < ctx->nTypes ; ++i) {
+		free((void*)ctx->type_pdags[i].name);
+		ln_pdagDelete(ctx->type_pdags[i].pdag);
+	}
+	free(ctx->type_pdags);
 	if(ctx->rulePrefix != NULL)
 		es_deleteStr(ctx->rulePrefix);
 	if(ctx->pas != NULL)
