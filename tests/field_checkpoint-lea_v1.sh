@@ -3,7 +3,6 @@
 . $srcdir/exec.sh
 
 test_def $0 "Checkpoint LEA parser"
-add_rule 'version=2'
 add_rule 'rule=:%f:checkpoint-lea%'
 
 execute 'tcp_flags: RST-ACK; src: 192.168.0.1;'

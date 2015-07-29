@@ -3,7 +3,6 @@
 . $srcdir/exec.sh
 
 test_def $0 "v2-iptables field"
-add_rule 'version=2'
 add_rule 'rule=:iptables output denied: %field:v2-iptables%'
 
 # first, a real-world case

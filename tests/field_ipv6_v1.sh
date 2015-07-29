@@ -2,7 +2,6 @@
 # This file is part of the liblognorm project, released under ASL 2.0
 . $srcdir/exec.sh
 
-add_rule 'version=2'
 test_def $0 "IPv6 parser"
 add_rule 'rule=:%f:ipv6%'
 

@@ -3,7 +3,6 @@
 . $srcdir/exec.sh
 
 test_def $0 "dmac48 syntax"
-add_rule 'version=2'
 add_rule 'rule=:%field:mac48%'
 
 execute 'f0:f6:1c:5f:cc:a2'
