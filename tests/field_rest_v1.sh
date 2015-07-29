@@ -7,7 +7,6 @@
 test_def $0 "rest matches"
 
 #tail recursion with default tail field
-add_rule 'version=2'
 add_rule 'rule=:%iface:char-to:\x3a%\x3a%ip:ipv4%/%port:number% (%label2:char-to:)%)'
 add_rule 'rule=:%iface:char-to:\x3a%\x3a%ip:ipv4%/%port:number% (%label2:char-to:)%)%tail:rest%'
 add_rule 'rule=:%iface:char-to:\x3a%\x3a%ip:ipv4%/%port:number%'

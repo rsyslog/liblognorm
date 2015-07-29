@@ -35,34 +35,48 @@ TESTS_SHELLSCRIPTS = \
 	parser_LF.sh \
 	parser_LF_jsoncnf.sh \
 	field_hexnumber.sh \
+	field_hexnumber_v1.sh \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
 	field_hexnumber_range_jsoncnf.sh \
 	field_mac48.sh \
+	field_mac48_v1.sh \
 	field_mac48_jsoncnf.sh \
 	field_name_value.sh \
+	field_name_value_v1.sh \
 	field_name_value_jsoncnf.sh \
 	field_kernel_timestamp.sh \
+	field_kernel_timestamp_v1.sh \
 	field_kernel_timestamp_jsoncnf.sh \
 	field_whitespace.sh \
+	field_whitespace_v1.sh \
 	field_whitespace_jsoncnf.sh \
 	field_rest.sh \
+	field_rest_v1.sh \
 	field_rest_jsoncnf.sh \
 	field_json.sh \
+	field_json_v1.sh \
 	field_json_jsoncnf.sh \
 	field_cee-syslog.sh \
+	field_cee-syslog_v1.sh \
 	field_cee-syslog_jsoncnf.sh \
 	field_ipv6.sh \
+	field_ipv6_v1.sh \
 	field_ipv6_jsoncnf.sh \
 	field_v2-iptables.sh \
+	field_v2-iptables_v1.sh \
 	field_v2-iptables_jsoncnf.sh \
 	field_cef.sh \
+	field_cef_v1.sh \
 	field_cef_jsoncnf.sh \
 	field_checkpoint-lea.sh \
+	field_checkpoint-lea_v1.sh \
 	field_checkpoint-lea_jsoncnf.sh \
 	field_duration.sh \
+	field_duration_v1.sh \
 	field_duration_jsoncnf.sh \
         field_float.sh \ 
+        field_float_v1.sh \ 
         field_float_jsoncnf.sh
 
 # now come tests for the legacy (v1) engine
