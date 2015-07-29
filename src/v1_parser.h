@@ -24,7 +24,7 @@
  */
 #ifndef LIBLOGNORM_PARSER_H_INCLUDED
 #define	LIBLOGNORM_PARSER_H_INCLUDED
-#include "ptree.h"
+#include "v1_ptree.h"
 
 
 /**
