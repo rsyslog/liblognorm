@@ -1,7 +1,7 @@
 - the lognormalizer tool now defaults to json output format
 - API changes
   * ln_loadSamples() --> ln_loadRulebase()
-- loading of sample at runtime is no longer possible. This is due to
+- loading of samples at runtime is no longer possible. This is due to
   the fact that the parse DAG is compiled into the most efficient form
   and thereafter read-only. If urgently needed, we could change the code
   so that the unoptimized form is kept (memory intense) and a re-compile
@@ -9,7 +9,24 @@
 - the plain old iptables parser is no longer supported. Sorry for that,
   but keeping it would have caused violation of layers. It can be
   replaced by the new one
-- the "tokenized" parser is no longer supported. Use the more
-  capable "repeat" parser instead.
-- the "recursive" and "descent" parsers are no longer supported. Use
-  user-defined data types instead.
+- the rulebase format for v2 has changed to support the enhancements
+
+  It is mostly compatible with v1, which means it understands mosts of
+  it's constructs. However, some are NOT understood:
+	- the "tokenized" parser is no longer supported. Use the more
+	  capable "repeat" parser instead.
+	- the "recursive" and "descent" parsers are no longer supported. Use
+	  user-defined data types instead.
+	- the suffixed parser and friends are no longer supported. A
+	  replacement is currently being developed.
+
+  To signify that a rule base file contains v2 format, it must contain
+  the line
+
+  version=2
+
+  as the very first line of the file, in exactly this format (no comments,
+  no whitespace, nothing else in between the words or after them). If that
+  line is missing or not given **exactly** as above, the old v1 engine is
+  used, with all of its restrictions. If it is present, the v2 engine is
+  used.
