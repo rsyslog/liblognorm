@@ -33,43 +33,51 @@ const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const 
  * This is a memory- and cache-optimized way of calling parsers.
  * VERY IMPORTANT: the initialization must be done EXACTLY in the
  * order of parser IDs (also see comment in pdag.h).
+ *
+ * Rough guideline for assigning priorites:
+ * 0 is highest, 255 lowest. 255 should be reserved for things that
+ * *really* should only be run as last resort --> rest. Also keep in
+ * mind that the user-assigned priority is put in the upper 24 bits, so
+ * parser-specific priorities only count when the user has assigned
+ * no priorities (which is expected to be common) or user-assigned
+ * priorities are equal for some parsers.
  */
-#define PARSER_ENTRY_NO_DATA(identifier, parser) \
-{ identifier, NULL, ln_v2_parse##parser, NULL }
-#define PARSER_ENTRY(identifier, parser) \
-{ identifier, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser }
+#define PARSER_ENTRY_NO_DATA(identifier, parser, prio) \
+{ identifier, prio, NULL, ln_v2_parse##parser, NULL }
+#define PARSER_ENTRY(identifier, parser, prio) \
+{ identifier, prio, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser }
 static struct ln_parser_info parser_lookup_table[] = {
-	PARSER_ENTRY("literal", Literal),
-	PARSER_ENTRY("repeat", Repeat),
-	PARSER_ENTRY_NO_DATA("date-rfc3164", RFC3164Date),
-	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date),
-	PARSER_ENTRY_NO_DATA("number", Number),
-	PARSER_ENTRY_NO_DATA("float", Float),
-	PARSER_ENTRY("hexnumber", HexNumber),
-	PARSER_ENTRY_NO_DATA("kernel-timestamp", KernelTimestamp),
-	PARSER_ENTRY_NO_DATA("whitespace", Whitespace),
-	PARSER_ENTRY_NO_DATA("ipv4", IPv4),
-	PARSER_ENTRY_NO_DATA("ipv6", IPv6),
-	PARSER_ENTRY_NO_DATA("word", Word),
-	PARSER_ENTRY_NO_DATA("alpha", Alpha),
-	PARSER_ENTRY_NO_DATA("rest", Rest),
-	PARSER_ENTRY_NO_DATA("op-quoted-string", OpQuotedString),
-	PARSER_ENTRY_NO_DATA("quoted-string", QuotedString),
-	PARSER_ENTRY_NO_DATA("date-iso", ISODate),
-	PARSER_ENTRY_NO_DATA("time-24hr", Time24hr),
-	PARSER_ENTRY_NO_DATA("time-12hr", Time12hr),
-	PARSER_ENTRY_NO_DATA("duration", Duration),
-	PARSER_ENTRY_NO_DATA("cisco-interface-spec", CiscoInterfaceSpec),
-	PARSER_ENTRY_NO_DATA("name-value-list", NameValue),
-	PARSER_ENTRY_NO_DATA("json", JSON),
-	PARSER_ENTRY_NO_DATA("cee-syslog", CEESyslog),
-	PARSER_ENTRY_NO_DATA("mac48", MAC48),
-	PARSER_ENTRY_NO_DATA("cef", CEF),
-	PARSER_ENTRY_NO_DATA("checkpoint-lea", CheckpointLEA),
-	PARSER_ENTRY_NO_DATA("v2-iptables", v2IPTables),
-	PARSER_ENTRY("string-to", StringTo),
-	PARSER_ENTRY("char-to", CharTo),
-	PARSER_ENTRY("char-sep", CharSeparated)
+	PARSER_ENTRY("literal", Literal, 4),
+	PARSER_ENTRY("repeat", Repeat, 4),
+	PARSER_ENTRY_NO_DATA("date-rfc3164", RFC3164Date, 8),
+	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date, 8),
+	PARSER_ENTRY_NO_DATA("number", Number, 16),
+	PARSER_ENTRY_NO_DATA("float", Float, 16),
+	PARSER_ENTRY("hexnumber", HexNumber, 16),
+	PARSER_ENTRY_NO_DATA("kernel-timestamp", KernelTimestamp, 16),
+	PARSER_ENTRY_NO_DATA("whitespace", Whitespace, 4),
+	PARSER_ENTRY_NO_DATA("ipv4", IPv4, 4),
+	PARSER_ENTRY_NO_DATA("ipv6", IPv6, 4),
+	PARSER_ENTRY_NO_DATA("word", Word, 32),
+	PARSER_ENTRY_NO_DATA("alpha", Alpha, 32),
+	PARSER_ENTRY_NO_DATA("rest", Rest, 255),
+	PARSER_ENTRY_NO_DATA("op-quoted-string", OpQuotedString, 64),
+	PARSER_ENTRY_NO_DATA("quoted-string", QuotedString, 64),
+	PARSER_ENTRY_NO_DATA("date-iso", ISODate, 8),
+	PARSER_ENTRY_NO_DATA("time-24hr", Time24hr, 8),
+	PARSER_ENTRY_NO_DATA("time-12hr", Time12hr, 8),
+	PARSER_ENTRY_NO_DATA("duration", Duration, 16),
+	PARSER_ENTRY_NO_DATA("cisco-interface-spec", CiscoInterfaceSpec, 4),
+	PARSER_ENTRY_NO_DATA("name-value-list", NameValue, 8),
+	PARSER_ENTRY_NO_DATA("json", JSON, 4),
+	PARSER_ENTRY_NO_DATA("cee-syslog", CEESyslog, 4),
+	PARSER_ENTRY_NO_DATA("mac48", MAC48, 16),
+	PARSER_ENTRY_NO_DATA("cef", CEF, 4),
+	PARSER_ENTRY_NO_DATA("checkpoint-lea", CheckpointLEA, 4),
+	PARSER_ENTRY_NO_DATA("v2-iptables", v2IPTables, 4),
+	PARSER_ENTRY("string-to", StringTo, 32),
+	PARSER_ENTRY("char-to", CharTo, 32),
+	PARSER_ENTRY("char-sep", CharSeparated, 32)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 
@@ -172,6 +180,7 @@ ln_newParser(ln_ctx ctx,
 	struct ln_type_pdag *custType = NULL;
 	const char *name = NULL;
 	const char *textconf = json_object_to_json_string(prscnf);
+	int parserPrio;
 
 	json_object_object_get_ex(prscnf, "type", &json);
 	if(json == NULL) {
@@ -183,6 +192,7 @@ ln_newParser(ln_ctx ctx,
 	if(*val == '@') {
 		prsid = PRS_CUSTOM_TYPE;
 		custType = ln_pdagFindType(ctx, val, 0);
+		parserPrio = 16; /* hopefully relatively specific... */
 		if(custType == NULL) {
 			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", val);
 			goto done;
@@ -193,6 +203,7 @@ ln_newParser(ln_ctx ctx,
 			ln_errprintf(ctx, 0, "invalid field type '%s'", val);
 			goto done;
 		}
+		parserPrio = parser_lookup_table[prsid].prio;
 	}
 
 	json_object_object_get_ex(prscnf, "name", &json);
@@ -211,7 +222,7 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	node->node = NULL;
-	node->prio = 0;
+	node->prio = parserPrio & 0xff;
 	node->name = name;
 	node->prsid = prsid;
 	node->conf = strdup(textconf);
@@ -315,11 +326,35 @@ done:
 	return r;
 }
 
+
+static int
+qsort_parserCmp(const void *v1, const void *v2)
+{
+	const ln_parser_t *const p1 = (const ln_parser_t *const) v1;
+	const ln_parser_t *const p2 = (const ln_parser_t *const) v2;
+fprintf(stderr, "parserCmp: '%s'[%d], '%s'[%d]: %d\n", p1->name, p1->prio, p2->name, p2->prio, p1->prio-p2->prio);
+	return p1->prio - p2->prio;
+}
+
 static int
 ln_pdagComponentOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 {
 	int r = 0;
 
+for(int i = 0 ; i < dag->nparsers ; ++i) {
+	ln_parser_t *prs = dag->parsers+i;
+	ln_dbgprintf(ctx, "pre sort, parser %d:%s[%d]", i, prs->name, prs->prio);
+}
+	/* first sort parsers in priority order */
+	if(dag->nparsers > 1) {
+		qsort(dag->parsers, dag->nparsers, sizeof(ln_parser_t), qsort_parserCmp);
+	}
+for(int i = 0 ; i < dag->nparsers ; ++i) {
+	ln_parser_t *prs = dag->parsers+i;
+	ln_dbgprintf(ctx, "post sort, parser %d:%s[%d]", i, prs->name, prs->prio);
+}
+
+	/* now on to rest of processing */
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
 		ln_dbgprintf(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",

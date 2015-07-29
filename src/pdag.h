@@ -75,32 +75,22 @@ struct ln_type_pdag;
 struct ln_parser_s {
 	prsid_t prsid;		/**< parser ID (for lookup table) */
 	ln_pdag *node;		/**< node to branch to if parser succeeded */
-	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
-	const char *name;	/**< field name */
-	uint8_t prio;		/**< assigned priority */
 	void *parser_data;	/**< opaque data that the field-parser understands */
+	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
+	int prio;		/**< priority (combination of user- and parser-specific parts) */
+	const char *name;	/**< field name */
 	const char *conf;	/**< configuration as printable json for comparison reasons */
 };
 
 struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
+	int prio;		/**< parser specific prio in range 0..255 */
 	int (*construct)(ln_ctx ctx, json_object *const json, void **);
 	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
 };
 
-
-
-#if 0 // TODO: remove again?
-/** 
- * PDAG node types
- */
-#define NODET_SEQ		0	/**< simple sequence */
-#define NODET_CALL		1	/**< call user-defined type */
-#define NODET_REPEAT_HEAD	2	/**< head of repeat sequence */
-#define NODET_REPEAT_TAIL	3	/**< tail of repeat sequence */
-#endif
 
 /* parse DAG object
  */
@@ -114,13 +104,6 @@ struct ln_pdag {
 	} flags;
 	struct json_object *tags;	/**< tags to assign to events of this type */
 	int refcnt;			/**< reference count for deleting tracking */
-#if 0 // TODO: remove again?
-	union {
-		struct {
-			ln_pdag *type;
-		} call;
-	} data;
-#endif
 };
 
 
