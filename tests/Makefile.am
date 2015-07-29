@@ -67,6 +67,7 @@ TESTS_SHELLSCRIPTS = \
 
 # now come tests for the legacy (v1) engine
 TESTS_SHELLSCRIPTS += \
+	field_cee-syslog_v1.sh \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
 	field_recursive.sh \
