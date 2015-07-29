@@ -30,6 +30,7 @@ TESTS_SHELLSCRIPTS = \
 	alternative_simple.sh \
 	repeat_simple.sh \
 	repeat_while_alternative.sh \
+	parser_prios.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \
 	parser_LF.sh \

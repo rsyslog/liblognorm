@@ -209,11 +209,16 @@ ln_newParser(ln_ctx ctx,
 	json_object_object_get_ex(prscnf, "name", &json);
 	name = strdup((json == NULL) ? "-" : json_object_get_string(json));
 
+	json_object_object_get_ex(prscnf, "priority", &json);
+	const int assignedPrio = json_object_get_int(json);
+	ln_dbgprintf(ctx, "assigned priority is %d", assignedPrio);
+
 	/* we need to remove already processed items from the config, so
 	 * that we can pass the remaining parameters to the parser.
 	 */
 	json_object_object_del(prscnf, "type");
 	json_object_object_del(prscnf, "name");
+	json_object_object_del(prscnf, "priority");
 
 	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
@@ -222,7 +227,7 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	node->node = NULL;
-	node->prio = parserPrio & 0xff;
+	node->prio = ((assignedPrio << 8) & 0xffffff00) | (parserPrio & 0xff);
 	node->name = name;
 	node->prsid = prsid;
 	node->conf = strdup(textconf);
@@ -332,7 +337,6 @@ qsort_parserCmp(const void *v1, const void *v2)
 {
 	const ln_parser_t *const p1 = (const ln_parser_t *const) v1;
 	const ln_parser_t *const p2 = (const ln_parser_t *const) v2;
-fprintf(stderr, "parserCmp: '%s'[%d], '%s'[%d]: %d\n", p1->name, p1->prio, p2->name, p2->prio, p1->prio-p2->prio);
 	return p1->prio - p2->prio;
 }
 
@@ -341,7 +345,7 @@ ln_pdagComponentOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 {
 	int r = 0;
 
-for(int i = 0 ; i < dag->nparsers ; ++i) {
+for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough */
 	ln_parser_t *prs = dag->parsers+i;
 	ln_dbgprintf(ctx, "pre sort, parser %d:%s[%d]", i, prs->name, prs->prio);
 }
@@ -349,7 +353,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) {
 	if(dag->nparsers > 1) {
 		qsort(dag->parsers, dag->nparsers, sizeof(ln_parser_t), qsort_parserCmp);
 	}
-for(int i = 0 ; i < dag->nparsers ; ++i) {
+for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough */
 	ln_parser_t *prs = dag->parsers+i;
 	ln_dbgprintf(ctx, "post sort, parser %d:%s[%d]", i, prs->name, prs->prio);
 }
@@ -917,7 +921,6 @@ ln_normalizeRec(struct ln_pdag *dag,
 	struct json_object *value;
 	
 ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
-// TODO: parser priorities are desperately needed --> rest
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
