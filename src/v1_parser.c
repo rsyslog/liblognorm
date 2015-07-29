@@ -31,14 +31,13 @@
 #include <sys/types.h>
 #include <string.h>
 #include <strings.h>
-#include <errno.h>
 
 #include "json_compatibility.h"
-#include "liblognorm.h"
-#include "lognorm.h"
+#include "v1_liblognorm.h"
 #include "internal.h"
-#include "parser.h"
-#include "samp.h"
+#include "lognorm.h"
+#include "v1_parser.h"
+#include "v1_samp.h"
 
 #ifdef FEATURE_REGEXP
 #include <pcre.h>
@@ -64,14 +63,16 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	return i;
 }
 
-/* parser _parse interface
+/* parsers for the primitive types
  *
  * All parsers receive 
  *
  * @param[in] str the to-be-parsed string
  * @param[in] strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
- * @param[in] pointer to parser data block
+ * @param[in] node fieldlist with additional data; for simple
+ *            parsers, this sets variable "ed", which just is
+ *            string data.
  * @param[out] parsed bytes
  * @param[out] value ptr to json object containing parsed data
  *             (can be unused, but if used *value MUST be NULL on entry)
@@ -83,17 +84,15 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *           not successfully parse (but all went well otherwise) and something
  *           else in case of an error.
  */
-#define PARSER_Parse(ParserName) \
-int ln_v2_parse##ParserName( \
-	__attribute__((unused)) ln_ctx ctx, \
-	const char *const str, \
-	const size_t strLen, \
+#define PARSER(ParserName) \
+int ln_parse##ParserName(const char *const str, const size_t strLen, \
 	size_t *const offs,       \
-	__attribute__((unused)) void *const pdata, \
+	__attribute__((unused)) const ln_fieldList_t *node,  \
 	size_t *parsed,                                      \
-	struct json_object **value) \
+	__attribute__((unused)) struct json_object **value) \
 { \
 	int r = LN_WRONGPARSER; \
+	__attribute__((unused)) es_str_t *ed = node->data;  \
 	*parsed = 0;
 
 #define FAILParser \
@@ -108,49 +107,89 @@ done:
 }
 
 
-/* Return printable representation of parser content for 
- * display purposes. This must not be 100% exact, but provide
- * a good indication of what it contains for a human.
- * @param[data] data parser data block
- * @return pointer to c string, NOT to be freed
+/**
+ * Utilities to allow constructors of complex parser's to
+ *  easily process field-declaration arguments.
  */
-#define PARSER_DataForDisplay(ParserName) \
-const char * ln_DataForDisplay##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+#define FIELD_ARG_SEPERATOR ":"
+#define MAX_FIELD_ARGS 10
 
+struct pcons_args_s {
+	int argc;
+	char *argv[MAX_FIELD_ARGS];
+};
 
-/* Return JSON parser config. This is primarily for comparison
- * of parser equalness.
- * @param[data] data parser data block
- * @return pointer to c string, NOT to be freed
- */
-#define PARSER_JsonConf(ParserName) \
-const char * ln_JsonConf##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+typedef struct pcons_args_s pcons_args_t;
 
+static void free_pcons_args(pcons_args_t** dat_p) {
+	pcons_args_t *dat = *dat_p;
+	*dat_p = NULL;
+	if (! dat) {
+	  return;
+	}
+	while((--(dat->argc)) >= 0) {
+		if (dat->argv[dat->argc] != NULL) free(dat->argv[dat->argc]);
+	}
+	free(dat);
+}
 
-/* parser constructor
- * @param[in] json config json items
- * @param[out] data parser data block (to be allocated)
- * At minimum, *data must be set to NULL
- * @return error status (0 == OK)
- */
-#define PARSER_Construct(ParserName) \
-int ln_construct##ParserName( \
-	__attribute__((unused)) ln_ctx ctx, \
-	__attribute__((unused)) json_object *const json, \
-	void **pdata)
+static pcons_args_t* pcons_args(es_str_t *args, int expected_argc) {
+	pcons_args_t *dat = NULL;
+	char* orig_str = NULL;
+	if ((dat = malloc(sizeof(pcons_args_t))) == NULL) goto fail;
+	dat->argc = 0;
+	if (args != NULL) {
+		orig_str = es_str2cstr(args, NULL);
+		char *str = orig_str;
+		while (dat->argc < MAX_FIELD_ARGS) {
+			int i = dat->argc++;
+			char *next = (dat->argc == expected_argc) ? NULL : strstr(str, FIELD_ARG_SEPERATOR);
+			if (next == NULL) {
+				if ((dat->argv[i] = strdup(str)) == NULL) goto fail;
+				break;
+			} else {
+				if ((dat->argv[i] = strndup(str, next - str)) == NULL) goto fail;
+				next++;
+			}
+			str = next;
+		}
+	}
+	goto done;
+fail:
+	if (dat != NULL) free_pcons_args(&dat);
+done:
+	if (orig_str != NULL) free(orig_str);
+	return dat;
+}
 
-/* parser destructor
- * @param[data] data parser data block (to be de-allocated)
- */
-#define PARSER_Destruct(ParserName) \
-void ln_destruct##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
+static const char* pcons_arg(pcons_args_t *dat, int i, const char* dflt_val) {
+	if (i >= dat->argc) return dflt_val;
+	return dat->argv[i];
+}
 
+static char* pcons_arg_copy(pcons_args_t *dat, int i, const char* dflt_val) {
+	const char *str = pcons_arg(dat, i, dflt_val);
+	return (str == NULL) ? NULL : strdup(str);
+}
 
+static void pcons_unescape_arg(pcons_args_t *dat, int i) {
+	char *arg = (char*) pcons_arg(dat, i, NULL);
+	es_str_t *str = NULL;
+	if (arg != NULL) {
+		str = es_newStrFromCStr(arg, strlen(arg));
+		if (str != NULL) {
+			es_unescapeStr(str);
+			free(arg);
+			dat->argv[i] = es_str2cstr(str, NULL);
+			es_deleteStr(str);
+		}
+	}
+}
 
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
  */
-PARSER_Parse(RFC5424Date)
+PARSER(RFC5424Date)
 	const unsigned char *pszTS;
 	/* variables to temporarily hold time information while we parse */
 	__attribute__((unused)) int year;
@@ -246,12 +285,6 @@ PARSER_Parse(RFC5424Date)
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
 
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
-
 	r = 0; /* success */
 done:
 	return r;
@@ -261,7 +294,7 @@ done:
 /**
  * Parse a RFC3164 Date.
  */
-PARSER_Parse(RFC3164Date)
+PARSER(RFC3164Date)
 	const unsigned char *p;
 	size_t len, orglen;
 	/* variables to temporarily hold time information while we parse */
@@ -476,11 +509,7 @@ PARSER_Parse(RFC3164Date)
 
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -492,7 +521,7 @@ done:
  * Note that a number is an abstracted concept. We always represent it
  * as 64 bits (but may later change our mind if performance dictates so).
  */
-PARSER_Parse(Number)
+PARSER(Number)
 	const char *c;
 	size_t i;
 
@@ -507,12 +536,7 @@ PARSER_Parse(Number)
 	
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-ln_dbgprintf(ctx, "number parsed '%s'", cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -521,7 +545,7 @@ done:
 /**
  * Parse a Real-number in floating-pt form.
  */
-PARSER_Parse(Float)
+PARSER(Float)
 	const char *c;
 	size_t i;
 
@@ -549,31 +573,21 @@ PARSER_Parse(Float)
 		
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
 	r = 0; /* success */
 done:
 	return r;
 }
 
 
-struct data_HexNumber {
-	uint64_t maxval;
-};
 /**
  * Parse a hex Number.
  * A hex number begins with 0x and contains only hex digits until the terminating
  * whitespace. Note that if a non-hex character is deteced inside the number string,
  * this is NOT considered to be a number.
  */
-PARSER_Parse(HexNumber)
+PARSER(HexNumber)
 	const char *c;
 	size_t i = *offs;
-	struct data_HexNumber *const data = (struct data_HexNumber*) pdata;
-	uint64_t maxval = data->maxval;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -583,64 +597,16 @@ PARSER_Parse(HexNumber)
 	if(c[i] != '0' || c[i+1] != 'x')
 		goto done;
 
-	uint64_t val = 0;
-	for (i += 2 ; i < strLen && isxdigit(c[i]); i++) {
-		const char digit = tolower(c[i]);
-		val *= 16;
-		if(digit >= 'a' && digit <= 'f')
-			val += digit - 'a' + 10;
-		else
-			val += digit - '0';
-	}
+	for (i += 2 ; i < strLen && isxdigit(c[i]); i++);
 	if (i == *offs || !isspace(c[i]))
 		goto done;
-	if(maxval > 0 && val > maxval) {
-		ln_dbgprintf(ctx, "hexnumber parser: val too large (max %" PRIu64
-			     ", actual %" PRIu64 ")",
-			     maxval, val);
-		goto done;
-	}
 	
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
-}
-PARSER_Construct(HexNumber)
-{
-	int r = 0;
-	struct data_HexNumber *data = (struct data_HexNumber*) calloc(1, sizeof(struct data_HexNumber));
-
-	if(json == NULL)
-		goto done;
-
-	json_object_object_foreach(json, key, val) {
-		if(!strcmp(key, "maxval")) {
-			errno = 0;
-			data->maxval = json_object_get_int64(val);
-			if(errno != 0) {
-				ln_errprintf(ctx, errno, "param 'maxval' must be integer but is: %s",
-					 json_object_to_json_string(val));
-			}
-		} else {
-			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
-				 json_object_to_json_string(val));
-		}
-	}
-
-done:
-	*pdata = data;
-	return r;
-}
-PARSER_Destruct(HexNumber)
-{
-	free(pdata);
 }
 
 
@@ -654,7 +620,7 @@ PARSER_Destruct(HexNumber)
  * no timestamp.
  */
 #define LEN_KERNEL_TIMESTAMP 14
-PARSER_Parse(KernelTimestamp)
+PARSER(KernelTimestamp)
 	const char *c;
 	size_t i;
 
@@ -695,11 +661,6 @@ PARSER_Parse(KernelTimestamp)
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
 	r = 0; /* success */
 done:
 	return r;
@@ -715,7 +676,7 @@ done:
  * This parser is also a forward-compatibility tool for the upcoming
  * slsa (simple log structure analyser) tool.
  */
-PARSER_Parse(Whitespace)
+PARSER(Whitespace)
 	const char *c;
 	size_t i = *offs;
 
@@ -730,11 +691,6 @@ PARSER_Parse(Whitespace)
 	for (i++ ; i < strLen && isspace(c[i]); i++);
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
 	r = 0; /* success */
 done:
 	return r;
@@ -746,7 +702,7 @@ done:
  * A word is a SP-delimited entity. The parser always works, except if
  * the offset is position on a space upon entry.
  */
-PARSER_Parse(Word)
+PARSER(Word)
 	const char *c;
 	size_t i;
 
@@ -765,34 +721,28 @@ PARSER_Parse(Word)
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
 }
 
 
-struct data_StringTo {
-	const char *toFind;
-	size_t len;
-};
 /**
  * Parse everything up to a specific string.
  * swisskid, 2015-01-21
  */
-PARSER_Parse(StringTo)
+PARSER(StringTo)
 	const char *c;
-	size_t i, j, m;
+	const char *toFind;
+	size_t i, j, k, m;
 	int chkstr;
-	struct data_StringTo *const data = (struct data_StringTo*) pdata;
-	const char *const toFind = data->toFind;
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
+	assert(ed != NULL);
+	k = es_strlen(ed) - 1;
+	toFind = es_str2cstr(ed, NULL);
 	c = str;
 	i = *offs;
 	chkstr = 0;
@@ -804,12 +754,12 @@ PARSER_Parse(StringTo)
 		/* Found the first letter, now find the rest of the string */
 		j = 0;
 		m = i;
-		while(m < strLen && j < data->len ) {
+		while(m < strLen && j < k ) {
 		    m++;
 		    j++;
 		    if(c[m] != toFind[j])
 			break;
-		    if (j == data->len) 
+		    if (j == k) 
 			chkstr = 1;
 		}
 	    }
@@ -819,39 +769,10 @@ PARSER_Parse(StringTo)
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
-}
-
-PARSER_Construct(StringTo)
-{
-	int r = 0;
-	struct data_StringTo *data = (struct data_StringTo*) calloc(1, sizeof(struct data_StringTo));
-	struct json_object *ed;
-
-	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
-		ln_errprintf(ctx, 0, "string-to type needs 'extradata' parameter");
-		r = LN_BADCONFIG ;
-		goto done;
-	}
-	data->toFind = strdup(json_object_get_string(ed));
-	data->len = strlen(data->toFind);
-
-	*pdata = data;
-done:
-	return r;
-}
-PARSER_Destruct(StringTo)
-{
-	struct data_StringTo *data = (struct data_StringTo*) pdata;
-	free((void*)data->toFind);
-	free(pdata);
 }
 
 /**
@@ -859,7 +780,7 @@ PARSER_Destruct(StringTo)
  * A alpha word is composed of characters for which isalpha returns true.
  * The parser dones if there is no alpha character at all.
  */
-PARSER_Parse(Alpha)
+PARSER(Alpha)
 	const char *c;
 	size_t i;
 
@@ -879,249 +800,939 @@ PARSER_Parse(Alpha)
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
 	r = 0; /* success */
 done:
 	return r;
 }
 
 
-struct data_CharTo {
-	char *term_chars;
-	size_t n_term_chars;
-};
 /**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
- * It is considered a format error if
+ * It is a program error if strlen(ed) != 1. It is considered a format error if
  * a) the to-be-parsed buffer is already positioned on the terminator character
  * b) there is no terminator until the end of the buffer
  * In those cases, the parsers declares itself as not being successful, in all
  * other cases a string is extracted.
  */
-PARSER_Parse(CharTo)
+PARSER(CharTo)
+	const char *c;
+	unsigned char cTerm;
 	size_t i;
-	struct data_CharTo *const data = (struct data_CharTo*) pdata;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
+	assert(es_strlen(ed) == 1);
+	cTerm = *(es_getBufAddr(ed));
+	c = str;
 	i = *offs;
 
 	/* search end of word */
-	int found = 0;
-	while(i < strLen && !found) {
-		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
-			if(str[i] == data->term_chars[j]) {
-				found = 1;
-				break;
-			}
-		}
-		if(!found)
-			++i;
-	}
+	while(i < strLen && c[i] != cTerm) 
+		i++;
 
-	if(i == *offs || i == strLen || !found)
+	if(i == *offs || i == strLen || c[i] != cTerm)
 		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
-	r = 0;
+
+	r = 0; /* success */
 done:
 	return r;
 }
-PARSER_Construct(CharTo)
-{
-	int r = 0;
-	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
-	struct json_object *ed;
-
-	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
-		ln_errprintf(ctx, 0, "char-to type needs 'extradata' parameter");
-		r = LN_BADCONFIG ;
-		goto done;
-	}
-	data->term_chars = strdup(json_object_get_string(ed));
-	data->n_term_chars = strlen(data->term_chars);
-	*pdata = data;
-done:
-	return r;
-}
-PARSER_Destruct(CharTo)
-{
-	struct data_CharTo *const data = (struct data_CharTo*) pdata;
-	free(data->term_chars);
-	free(pdata);
-}
 
 
-
-struct data_Literal {
-	const char *lit;
-	const char *json_conf;
-};
-/**
- * Parse a specific literal.
- */
-PARSER_Parse(Literal)
-	struct data_Literal *const data = (struct data_Literal*) pdata;
-	const char *const lit = data->lit;
-	size_t i = *offs;
-	size_t j;
-
-	for(j = 0 ; lit[j] != '\0' && i < strLen ; ++j) {
-		if(lit[j] != str[i])
-			break;
-		++i;
-	}
-
-	*parsed = j; /* we must always return how far we parsed! */
-	if(lit[j] == '\0') {
-		if(value != NULL) {
-			char *cstr = strndup(str+ *offs, *parsed);
-			*value = json_object_new_string(cstr);
-			free(cstr);
-		}
-		r = 0;
-	}
-	return r;
-}
-PARSER_DataForDisplay(Literal)
-{
-	struct data_Literal *data = (struct data_Literal*) pdata;
-	return data->lit;
-}
-PARSER_JsonConf(Literal)
-{
-	struct data_Literal *data = (struct data_Literal*) pdata;
-	return data->json_conf;
-}
-PARSER_Construct(Literal)
-{
-	int r = 0;
-	struct data_Literal *data = (struct data_Literal*) calloc(1, sizeof(struct data_Literal));
-	struct json_object *text;
-
-	if(json_object_object_get_ex(json, "text", &text) == 0) {
-		ln_errprintf(ctx, 0, "literal type needs 'text' parameter");
-		r = LN_BADCONFIG ;
-		goto done;
-	}
-	data->lit = strdup(json_object_get_string(text));
-	data->json_conf = strdup(json_object_to_json_string(json));
-
-	*pdata = data;
-done:
-	return r;
-}
-PARSER_Destruct(Literal)
-{
-	struct data_Literal *data = (struct data_Literal*) pdata;
-	free((void*)data->lit);
-	free((void*)data->json_conf);
-	free(pdata);
-}
-/* for path compaction, we need a special handler to combine two
- * literal data elements.
- */
-int
-ln_combineData_Literal(void *const porg, void *const padd)
-{
-	struct data_Literal *const __restrict__ org = porg;
-	struct data_Literal *const __restrict__ add = padd;
-	int r = 0;
-	const size_t len = strlen(org->lit);
-	const size_t add_len = strlen(add->lit);
-	char *const newlit = (char*)realloc((void*)org->lit, len+add_len+1);
-	CHKN(newlit);
-	org->lit = newlit;
-	memcpy((char*)org->lit+len, add->lit, add_len+1);
-done:	return r;
-}
-
-
-struct data_CharSeparated {
-	char *term_chars;
-	size_t n_term_chars;
-};
 /**
  * Parse everything up to a specific character, or up to the end of string.
  * The character must be the only char inside extra data passed to the parser.
+ * It is a program error if strlen(ed) != 1.
  * This parser always returns success.
  * By nature of the parser, it is required that end of string or the separator
  * follows this field in rule.
  */
-PARSER_Parse(CharSeparated)
-	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
+PARSER(CharSeparated)
+	const char *c;
+	unsigned char cTerm;
 	size_t i;
 
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
+	assert(es_strlen(ed) == 1);
+	cTerm = *(es_getBufAddr(ed));
+	c = str;
 	i = *offs;
 
 	/* search end of word */
-	int found = 0;
-	while(i < strLen && !found) {
-		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
-			if(str[i] == data->term_chars[j]) {
-				found = 1;
-				break;
-			}
-		}
-		if(!found)
-			++i;
-	}
+	while(i < strLen && c[i] != cTerm) 
+		i++;
 
 	/* success, persist */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 	return r;
 }
-PARSER_Construct(CharSeparated)
-{
-	int r = 0;
-	struct data_CharSeparated *data = (struct data_CharSeparated*) calloc(1, sizeof(struct data_CharSeparated));
-	struct json_object *ed;
 
-	if(json_object_object_get_ex(json, "extradata", &ed) == 0) {
-		ln_errprintf(ctx, 0, "char-separated type needs 'extradata' parameter");
-		r = LN_BADCONFIG ;
-		goto done;
+/**
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
+ */
+#define DEFAULT_REMAINING_FIELD_NAME "tail"
+
+struct recursive_parser_data_s {
+	ln_ctx ctx;
+	char* remaining_field;
+	int free_ctx;
+};
+
+PARSER(Recursive)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+
+	struct recursive_parser_data_s* pData = (struct recursive_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		json_object *unparsed = NULL;
+		CHKN(*value = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, value);
+
+		if (json_object_object_get_ex(*value, UNPARSED_DATA_KEY, &unparsed)) {
+			json_object_put(*value);
+			*value = NULL;
+			*parsed = 0;
+		} else if (pData->remaining_field != NULL && json_object_object_get_ex(*value, pData->remaining_field, &unparsed)) {
+			*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			json_object_object_del(*value, pData->remaining_field);
+		} else {
+			*parsed = strLen - *offs;
+		}
 	}
-
-	data->term_chars = strdup(json_object_get_string(ed));
-	data->n_term_chars = strlen(data->term_chars);
-	*pdata = data;
+	r = 0; /* success */
 done:
 	return r;
 }
-PARSER_Destruct(CharSeparated)
+
+typedef ln_ctx (ctx_constructor)(ln_ctx, pcons_args_t*, const char*);
+
+static void*
+_recursive_parser_data_constructor(ln_fieldList_t *node,
+	ln_ctx ctx,
+	int no_of_args,
+	int remaining_field_arg_idx,
+	int free_ctx, ctx_constructor *fn)
 {
-	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
-	free(data->term_chars);
-	free(pdata);
+	int r = LN_BADCONFIG;
+	char* name = NULL;
+	struct recursive_parser_data_s *pData = NULL;
+	pcons_args_t *args = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(pData = calloc(1, sizeof(struct recursive_parser_data_s)));
+	pData->free_ctx = free_ctx;
+	pData->remaining_field = NULL;
+	CHKN(args = pcons_args(node->raw_data, no_of_args));
+	CHKN(pData->ctx = fn(ctx, args, name));
+	CHKN(pData->remaining_field = pcons_arg_copy(args, remaining_field_arg_idx, DEFAULT_REMAINING_FIELD_NAME));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation doneed for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
+															  "recursive/descent field: %s", name);
+
+		recursive_parser_data_destructor((void**) &pData);
+	}
+	free(name);
+	free_pcons_args(&args);
+	return pData;
 }
 
+static ln_ctx identity_recursive_parse_ctx_constructor(ln_ctx parent_ctx,
+													   __attribute__((unused)) pcons_args_t* args,
+													   __attribute__((unused)) const char* field_name) {
+	return parent_ctx;
+}
+
+void* recursive_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 1, 0, 0, identity_recursive_parse_ctx_constructor);
+}
+
+static ln_ctx child_recursive_parse_ctx_constructor(ln_ctx parent_ctx, pcons_args_t* args, const char* field_name) {
+	int r = LN_BADCONFIG;
+	const char* rb = NULL;
+	ln_ctx ctx = NULL;
+	pcons_unescape_arg(args, 0);
+	CHKN(rb = pcons_arg(args, 0, NULL));
+	CHKN(ctx = ln_v1_inherittedCtx(parent_ctx));
+	CHKR(ln_v1_loadSamples(ctx, rb));
+done:
+	if (r != 0) {
+		if (rb == NULL) ln_dbgprintf(parent_ctx, "file-name for descent rulebase not provided for field: %s", field_name);
+		else if (ctx == NULL) ln_dbgprintf(parent_ctx, "couldn't allocate memory to create descent-field normalizer context "
+										   "for field: %s", field_name);
+		else ln_dbgprintf(parent_ctx, "couldn't load samples into descent context for field: %s", field_name);
+		if (ctx != NULL) ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
+void* descent_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _recursive_parser_data_constructor(node, ctx, 2, 1, 1, child_recursive_parse_ctx_constructor);
+}
+
+void recursive_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct recursive_parser_data_s *pData = (struct recursive_parser_data_s*) *dataPtr;
+		if (pData->free_ctx && pData->ctx != NULL) {
+			ln_exitCtx(pData->ctx);
+			pData->ctx = NULL;
+		}
+		if (pData->remaining_field != NULL) free(pData->remaining_field);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
+
+/**
+ * Parse string tokenized by given char-sequence
+ * The sequence may appear 0 or more times, but zero times means 1 token.
+ * NOTE: its not 0 tokens, but 1 token.
+ *
+ * The token found is parsed according to the field-type provided after
+ *  tokenizer char-seq.
+ */
+#define DEFAULT_MATCHED_FIELD_NAME "default"
+
+struct tokenized_parser_data_s {
+	es_str_t *tok_str;
+	ln_ctx ctx;
+	char *remaining_field;
+	int use_default_field;
+	int free_ctx;
+};
+
+typedef struct tokenized_parser_data_s tokenized_parser_data_t;
+
+PARSER(Tokenized)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+
+	tokenized_parser_data_t *pData = (tokenized_parser_data_t*) node->parser_data;
+
+	if (pData != NULL ) {
+		json_object *json_p = NULL;
+		if (pData->use_default_field) CHKN(json_p = json_object_new_object());
+		json_object *matches = NULL;
+		CHKN(matches = json_object_new_array());
+
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		json_object *remaining = NULL;
+		json_object *match = NULL;
+
+		while (remaining_len > 0) {
+			if (! pData->use_default_field) {
+				json_object_put(json_p);
+				json_p = json_object_new_object();
+			} /*TODO: handle null condition gracefully*/
+
+			ln_normalize(pData->ctx, remaining_str, remaining_len, &json_p);
+
+			if (remaining) json_object_put(remaining);
+
+			if (pData->use_default_field && json_object_object_get_ex(json_p, DEFAULT_MATCHED_FIELD_NAME, &match)) {
+				json_object_array_add(matches, json_object_get(match));
+			} else if (! (pData->use_default_field || json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
+				json_object_array_add(matches, json_object_get(json_p));
+			} else {
+				if (json_object_array_length(matches) > 0) {
+					remaining_len += es_strlen(pData->tok_str);
+					break;
+				} else {
+					json_object_put(json_p);
+					json_object_put(matches);
+					FAIL(LN_WRONGPARSER);
+				}
+			}
+
+			if (json_object_object_get_ex(json_p, pData->remaining_field, &remaining)) {
+				remaining_len = json_object_get_string_len(remaining);
+				if (remaining_len > 0) {
+					remaining_str = json_object_get_string(json_object_get(remaining));
+					json_object_object_del(json_p, pData->remaining_field);
+					if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
+						json_object_put(remaining);
+						break;
+					} else {
+						remaining_str += es_strlen(pData->tok_str);
+						remaining_len -= es_strlen(pData->tok_str);
+					}
+				}
+			} else {
+				remaining_len = 0;
+				break;
+			}
+
+			if (pData->use_default_field) json_object_object_del(json_p, DEFAULT_MATCHED_FIELD_NAME);
+		}
+		json_object_put(json_p);
+
+		/* success, persist */
+		*parsed = (strLen - *offs) - remaining_len;
+		*value =  matches;
+	} else {
+		FAIL(LN_BADPARSERSTATE);
+	}
+
+	r = 0; /* success */
+done:
+	return r;
+}
+
+void tokenized_parser_data_destructor(void** dataPtr) {
+	tokenized_parser_data_t *data = (tokenized_parser_data_t*) *dataPtr;
+	if (data->tok_str != NULL) es_deleteStr(data->tok_str);
+	if (data->free_ctx && (data->ctx != NULL)) ln_exitCtx(data->ctx);
+	if (data->remaining_field != NULL) free(data->remaining_field);
+	free(data);
+	*dataPtr = NULL;
+}
+
+static void load_generated_parser_samples(ln_ctx ctx,
+	const char* const field_descr, const int field_descr_len,
+	const char* const suffix, const int length) {
+	static const char* const RULE_PREFIX = "rule=:%"DEFAULT_MATCHED_FIELD_NAME":";/*TODO: extract nice constants*/
+	static const int RULE_PREFIX_LEN = 15;
+
+	char *sample_str = NULL;
+	es_str_t *field_decl = es_newStrFromCStr(RULE_PREFIX, RULE_PREFIX_LEN);
+	if (! field_decl) goto free;
+
+	if (es_addBuf(&field_decl, field_descr, field_descr_len)
+		|| es_addBuf(&field_decl, "%", 1)
+		|| es_addBuf(&field_decl, suffix, length)) {
+		ln_dbgprintf(ctx, "couldn't prepare field for tokenized field-picking: '%s'", field_descr);
+		goto free;
+	}
+	sample_str = es_str2cstr(field_decl, NULL);
+	if (! sample_str) {
+		ln_dbgprintf(ctx, "couldn't prepare sample-string for: '%s'", field_descr);
+		goto free;
+	}
+	ln_v1_loadSample(ctx, sample_str);
+free:
+	if (sample_str) free(sample_str);
+	if (field_decl) es_deleteStr(field_decl);
+}
+
+static ln_ctx generate_context_with_field_as_prefix(ln_ctx parent, const char* field_descr, int field_descr_len) {
+	int r = LN_BADCONFIG;
+	const char* remaining_field = "%"DEFAULT_REMAINING_FIELD_NAME":rest%";
+	ln_ctx ctx = NULL;
+	CHKN(ctx = ln_v1_inherittedCtx(parent));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, remaining_field, strlen(remaining_field));
+	load_generated_parser_samples(ctx, field_descr, field_descr_len, "", 0);
+	r = 0;
+done:
+	if (r != 0) {
+		ln_exitCtx(ctx);
+		ctx = NULL;
+	}
+	return ctx;
+}
+
+static ln_fieldList_t* parse_tokenized_content_field(ln_ctx ctx, const char* field_descr, size_t field_descr_len) {
+	es_str_t* tmp = NULL;
+	es_str_t* descr = NULL;
+	ln_fieldList_t *node = NULL;
+	int r = 0;
+	CHKN(tmp = es_newStr(80));
+	CHKN(descr = es_newStr(80));
+	const char* field_prefix = "%" DEFAULT_MATCHED_FIELD_NAME ":";
+	CHKR(es_addBuf(&descr, field_prefix, strlen(field_prefix)));
+	CHKR(es_addBuf(&descr, field_descr, field_descr_len));
+	CHKR(es_addChar(&descr, '%'));
+	es_size_t offset = 0;
+	CHKN(node = ln_v1_parseFieldDescr(ctx, descr, &offset, &tmp, &r));
+	if (offset != es_strlen(descr)) FAIL(LN_BADPARSERSTATE);
+done:
+	if (r != 0) {
+		if (node != NULL) ln_deletePTreeNode(node);
+		node = NULL;
+	}
+	if (descr != NULL) es_deleteStr(descr);
+	if (tmp != NULL) es_deleteStr(tmp);
+	return node;
+}
+
+void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	char* name = es_str2cstr(node->name, NULL);
+	pcons_args_t *args = NULL;
+	tokenized_parser_data_t *pData = NULL;
+	const char *field_descr = NULL;
+	ln_fieldList_t* field = NULL;
+	const char *tok = NULL;
+
+	CHKN(args = pcons_args(node->raw_data, 2));
+
+	CHKN(pData = calloc(1, sizeof(tokenized_parser_data_t)));
+	pcons_unescape_arg(args, 0);
+	CHKN(tok = pcons_arg(args, 0, NULL));
+	CHKN(pData->tok_str = es_newStrFromCStr(tok, strlen(tok)));
+	es_unescapeStr(pData->tok_str);
+	CHKN(field_descr = pcons_arg(args, 1, NULL));
+	const int field_descr_len = strlen(field_descr);
+	pData->free_ctx = 1;
+	CHKN(field = parse_tokenized_content_field(ctx, field_descr, field_descr_len));
+	if (field->parser == ln_parseRecursive) {
+		pData->use_default_field = 0;
+		struct recursive_parser_data_s *dat = (struct recursive_parser_data_s*) field->parser_data;
+		if (dat != NULL) {
+			CHKN(pData->remaining_field = strdup(dat->remaining_field));
+			pData->free_ctx = dat->free_ctx;
+			pData->ctx = dat->ctx;
+			dat->free_ctx = 0;
+		}
+	} else {
+		pData->use_default_field = 1;
+		CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_descr, field_descr_len));
+	}
+	if (pData->remaining_field == NULL) CHKN(pData->remaining_field = strdup(DEFAULT_REMAINING_FIELD_NAME));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for tokenized-field name");
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (tok == NULL) ln_dbgprintf(ctx, "token-separator not provided for field: %s", name);
+		else if (pData->tok_str == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for token-separator for field: %s", name);
+		else if (field_descr == NULL) ln_dbgprintf(ctx, "field-type not provided for field: %s", name);
+		else if (field == NULL) ln_dbgprintf(ctx, "couldn't resolve single-token field-type for tokenized field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't initialize normalizer-context for field: %s", name);
+		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for "
+															  "remaining-field-name for field: %s", name);
+		if (pData) tokenized_parser_data_destructor((void**) &pData);
+	}
+	if (name != NULL) free(name);
+	if (field != NULL) ln_deletePTreeNode(field);
+	if (args) free_pcons_args(&args);
+	return pData;
+}
+
+#ifdef FEATURE_REGEXP
+
+/**
+ * Parse string matched by provided posix extended regex.
+ *
+ * Please note that using regex field in most cases will be
+ * significantly slower than other field-types.
+ */
+struct regex_parser_data_s {
+	pcre *re;
+	int consume_group;
+	int return_group;
+	int max_groups;
+};
+
+PARSER(Regex)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	unsigned int* ovector = NULL;
+
+	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
+	if (pData != NULL) {
+		ovector = calloc(pData->max_groups, sizeof(unsigned int) * 3);
+		if (ovector == NULL) FAIL(LN_NOMEM);
+
+		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
+		if (result == 0) result = pData->max_groups;
+		if (result > pData->consume_group) {
+			/*please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic*/
+			if (ovector[2 * pData->consume_group] == *offs) {
+				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
+				if (pData->consume_group != pData->return_group) {
+					char* val = NULL;
+					CHKN(val = strndup(str + ovector[2 * pData->return_group],
+						ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group]));
+					*value = json_object_new_string(val);
+					free(val);
+					if (*value == NULL) {
+						free(ovector);
+						FAIL(LN_NOMEM);
+					}
+				}
+			}
+		}
+		free(ovector);
+	}
+	r = 0; /* success */
+done:
+	return r;
+}
+
+static const char* regex_parser_configure_consume_and_return_group(pcons_args_t* args, struct regex_parser_data_s *pData) {
+	const char* consume_group_parse_error = "couldn't parse consume-group number";
+	const char* return_group_parse_error = "couldn't parse return-group number";
+
+	char* tmp = NULL;
+
+	const char* consume_grp_str = NULL;
+	const char* return_grp_str = NULL;
+
+	if ((consume_grp_str = pcons_arg(args, 1, "0")) == NULL ||
+		strlen(consume_grp_str) == 0) return consume_group_parse_error;
+	if ((return_grp_str = pcons_arg(args, 2, consume_grp_str)) == NULL ||
+		strlen(return_grp_str) == 0) return return_group_parse_error;
+
+	errno = 0;
+	pData->consume_group = strtol(consume_grp_str, &tmp, 10);
+	if (errno != 0 || strlen(tmp) != 0) return consume_group_parse_error;
+
+	pData->return_group = strtol(return_grp_str, &tmp, 10);
+	if (errno != 0 || strlen(tmp) != 0) return return_group_parse_error;
+
+	return NULL;
+}
+
+void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	char* exp = NULL;
+	const char* grp_parse_err = NULL;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
+	struct regex_parser_data_s *pData = NULL;
+	const char *unescaped_exp = NULL;
+	const char *error = NULL;
+	int erroffset = 0;
+
+
+	CHKN(name = es_str2cstr(node->name, NULL));
+
+	if (! ctx->allowRegex) FAIL(LN_BADCONFIG);
+	CHKN(pData = malloc(sizeof(struct regex_parser_data_s)));
+	pData->re = NULL;
+
+	CHKN(args = pcons_args(node->raw_data, 3));
+	pData->consume_group = pData->return_group = 0;
+	CHKN(unescaped_exp = pcons_arg(args, 0, NULL));
+	pcons_unescape_arg(args, 0);
+	CHKN(exp = pcons_arg_copy(args, 0, NULL));
+
+	if ((grp_parse_err = regex_parser_configure_consume_and_return_group(args, pData)) != NULL) FAIL(LN_BADCONFIG);
+
+	CHKN(pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL));
+
+	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group : pData->return_group) + 1;
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory regex-field name");
+		else if (! ctx->allowRegex) ln_dbgprintf(ctx, "regex support is not enabled for: '%s' "
+												 "(please check lognorm context initialization)", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (unescaped_exp == NULL) ln_dbgprintf(ctx, "regular-expression missing for field: '%s'", name);
+		else if (exp == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for regex-string for field: '%s'", name);
+		else if (grp_parse_err != NULL)  ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
+		else if (pData->re == NULL)	ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
+												 "for regex-matched field: '%s'", error, erroffset, name);
+		regex_parser_data_destructor((void**)&pData);
+	}
+	if (exp != NULL) free(exp);
+	if (args != NULL) free_pcons_args(&args);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+void regex_parser_data_destructor(void** dataPtr) {
+	if ((*dataPtr) != NULL) {
+		struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
+		if (pData->re != NULL) pcre_free(pData->re);
+		free(pData);
+		*dataPtr = NULL;
+	}
+}
+
+#endif
+
+/**
+ * Parse yet-to-be-matched portion of string by re-applying
+ * top-level rules again. 
+ */
+typedef enum interpret_type {
+	/* If you change this, be sure to update json_type_to_name() too */
+	it_b10int,
+	it_b16int,
+	it_floating_pt,
+	it_boolean
+} interpret_type;
+
+struct interpret_parser_data_s {
+	ln_ctx ctx;
+	enum interpret_type intrprt;
+};
+
+static json_object* interpret_as_int(json_object *value, int base) {
+	if (json_object_is_type(value, json_type_string)) {
+		return json_object_new_int64(strtol(json_object_get_string(value), NULL, base));
+	} else if (json_object_is_type(value, json_type_int)) {
+		return value;
+	} else {
+		return NULL;
+	}
+}
+
+static json_object* interpret_as_double(json_object *value) {
+	double val = json_object_get_double(value);
+	return json_object_new_double(val);
+}
+
+static json_object* interpret_as_boolean(json_object *value) {
+	json_bool val;
+	if (json_object_is_type(value, json_type_string)) {
+		const char* str = json_object_get_string(value);
+		val = (strcasecmp(str, "false") == 0 || strcasecmp(str, "no") == 0) ? 0 : 1;
+	} else {
+		val = json_object_get_boolean(value);
+	}
+	return json_object_new_boolean(val);
+}
+
+static int reinterpret_value(json_object **value, enum interpret_type to_type) {
+	switch(to_type) {
+	case it_b10int:
+		*value = interpret_as_int(*value, 10);
+		break;
+	case it_b16int:
+		*value = interpret_as_int(*value, 16);
+		break;
+	case it_floating_pt:
+		*value = interpret_as_double(*value);
+		break;
+	case it_boolean:
+		*value = interpret_as_boolean(*value);
+		break;
+	default:
+		return 0;
+	}
+	return 1;
+}
+
+PARSER(Interpret)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	json_object *unparsed = NULL;
+	json_object *parsed_raw = NULL;
+
+	struct interpret_parser_data_s* pData = (struct interpret_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+
+		CHKN(parsed_raw = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
+
+		if (json_object_object_get_ex(parsed_raw, UNPARSED_DATA_KEY, NULL)) {
+			*parsed = 0;
+		} else {
+			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, value);
+			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
+			if (reinterpret_value(value, pData->intrprt)) {
+				*parsed = strLen - *offs - json_object_get_string_len(unparsed);
+			}
+		}
+		json_object_put(parsed_raw);
+	}
+	r = 0; /* success */
+done:
+	return r;
+}
+
+void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	char* name = NULL;
+	struct interpret_parser_data_s *pData = NULL;
+	pcons_args_t *args = NULL;
+	int bad_interpret = 0;
+	const char* type_str = NULL;
+	const char *field_type = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(pData = calloc(1, sizeof(struct interpret_parser_data_s)));
+	CHKN(args = pcons_args(node->raw_data, 2));
+	CHKN(type_str = pcons_arg(args, 0, NULL));
+	if (strcmp(type_str, "int") == 0 || strcmp(type_str, "base10int") == 0) {
+		pData->intrprt = it_b10int;
+	} else if (strcmp(type_str, "base16int") == 0) {
+		pData->intrprt = it_b16int;
+	} else if (strcmp(type_str, "float") == 0) {
+		pData->intrprt = it_floating_pt;
+	} else if (strcmp(type_str, "bool") == 0) {
+		pData->intrprt = it_boolean;
+	} else {
+		bad_interpret = 1;
+		FAIL(LN_BADCONFIG);
+	}
+
+	CHKN(field_type = pcons_arg(args, 1, NULL));
+	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for interpret-field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (type_str == NULL) ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
+		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s",
+												  type_str, name);
+		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for "
+												  "field: %s", name);
+		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching "
+												  "field: %s", name);
+
+		interpret_parser_data_destructor((void**) &pData);
+	}
+	free(name);
+	free_pcons_args(&args);
+	return pData;
+}
+
+void interpret_parser_data_destructor(void** dataPtr) {
+	if (*dataPtr != NULL) {
+		struct interpret_parser_data_s *pData = (struct interpret_parser_data_s*) *dataPtr;
+		if (pData->ctx != NULL) ln_exitCtx(pData->ctx);
+		free(pData);
+		*dataPtr = NULL;
+	}
+};
+
+/**
+ * Parse suffixed char-sequence, where suffix is one of many possible suffixes.
+ */
+struct suffixed_parser_data_s {
+	int nsuffix;
+	int *suffix_offsets;
+    int *suffix_lengths;
+	char* suffixes_str;
+	ln_ctx ctx;
+	char* value_field_name;
+	char* suffix_field_name;
+};
+
+PARSER(Suffixed) {
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	json_object *unparsed = NULL;
+	json_object *parsed_raw = NULL;
+	json_object *parsed_value = NULL;
+    json_object *result = NULL;
+    json_object *suffix = NULL;
+
+	struct suffixed_parser_data_s *pData = (struct suffixed_parser_data_s*) node->parser_data;
+
+	if (pData != NULL) {
+		int remaining_len = strLen - *offs;
+		const char *remaining_str = str + *offs;
+		int i;
+
+		CHKN(parsed_raw = json_object_new_object());
+
+		ln_normalize(pData->ctx, remaining_str, remaining_len, &parsed_raw);
+
+		if (json_object_object_get_ex(parsed_raw, UNPARSED_DATA_KEY, NULL)) {
+			*parsed = 0;
+		} else {
+			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, &parsed_value);
+			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
+            const char* unparsed_frag = json_object_get_string(unparsed);
+			for(i = 0; i < pData->nsuffix; i++) {
+                const char* possible_suffix = pData->suffixes_str + pData->suffix_offsets[i];
+				int len = pData->suffix_lengths[i];
+				if (strncmp(possible_suffix, unparsed_frag, len) == 0) {
+                    CHKN(result = json_object_new_object());
+                    CHKN(suffix = json_object_new_string(possible_suffix));
+					json_object_get(parsed_value);
+                    json_object_object_add(result, pData->value_field_name, parsed_value);
+                    json_object_object_add(result, pData->suffix_field_name, suffix);
+					*parsed = strLen - *offs - json_object_get_string_len(unparsed) + len;
+                    break;
+                }
+			}
+            if (result != NULL) {
+                *value = result;
+            }
+		}
+	}
+FAILParser
+	if (r != 0) {
+		if (result != NULL) json_object_put(result);
+	}
+	if (parsed_raw != NULL) json_object_put(parsed_raw);
+} ENDFailParser
+
+static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_fieldList_t *node,
+																 ln_ctx ctx,
+																 es_str_t* raw_args,
+																 const char* value_field,
+																 const char* suffix_field) {
+	int r = LN_BADCONFIG;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
+	struct suffixed_parser_data_s *pData = NULL;
+	const char *escaped_tokenizer = NULL;
+	const char *uncopied_suffixes_str = NULL;
+	const char *tokenizer = NULL;
+	char *suffixes_str = NULL;
+	const char *field_type = NULL;
+
+	char *tok_saveptr = NULL;
+	char *tok_input = NULL;
+	int i = 0;
+	char *tok = NULL;
+
+	CHKN(name = es_str2cstr(node->name, NULL));
+
+	CHKN(pData = calloc(1, sizeof(struct suffixed_parser_data_s)));
+
+	if (value_field == NULL) value_field = "value";
+	if (suffix_field == NULL) suffix_field = "suffix";
+	pData->value_field_name = strdup(value_field);
+	pData->suffix_field_name = strdup(suffix_field);
+
+	CHKN(args = pcons_args(raw_args, 3));
+	CHKN(escaped_tokenizer = pcons_arg(args, 0, NULL));
+	pcons_unescape_arg(args, 0);
+	CHKN(tokenizer = pcons_arg(args, 0, NULL));
+
+	CHKN(uncopied_suffixes_str = pcons_arg(args, 1, NULL));
+	pcons_unescape_arg(args, 1);
+	CHKN(suffixes_str = pcons_arg_copy(args, 1, NULL));
+
+	tok_input = suffixes_str;
+	while (strtok_r(tok_input, tokenizer, &tok_saveptr) != NULL) {
+		tok_input = NULL;
+		pData->nsuffix++;
+	}
+
+	if (pData->nsuffix == 0) {
+		FAIL(LN_INVLDFDESCR);
+	}
+	CHKN(pData->suffix_offsets = calloc(pData->nsuffix, sizeof(int)));
+	CHKN(pData->suffix_lengths = calloc(pData->nsuffix, sizeof(int)));
+	CHKN(pData->suffixes_str = pcons_arg_copy(args, 1, NULL));
+
+	tok_input = pData->suffixes_str;
+	while ((tok = strtok_r(tok_input, tokenizer, &tok_saveptr)) != NULL) {
+		tok_input = NULL;
+		pData->suffix_offsets[i] = tok - pData->suffixes_str;
+        pData->suffix_lengths[i++] = strlen(tok);
+	}
+
+	CHKN(field_type = pcons_arg(args, 2, NULL));
+	CHKN(pData->ctx = generate_context_with_field_as_prefix(ctx, field_type, strlen(field_type)));
+	
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory suffixed-field name");
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (pData->value_field_name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for value-field's name for field: %s", name);
+		else if (pData->suffix_field_name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for suffix-field's name for field: %s", name);
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (escaped_tokenizer == NULL) ln_dbgprintf(ctx, "suffix token-string missing for field: '%s'", name);
+		else if (tokenizer == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'", name);
+		else if (uncopied_suffixes_str == NULL)  ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
+		else if (suffixes_str == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (pData->nsuffix == 0)  ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
+		else if (pData->suffix_offsets == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: '%s'", name);
+		else if (pData->suffix_lengths == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element lengths for field: '%s'", name);
+		else if (pData->suffixes_str == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (field_type == NULL)  ln_dbgprintf(ctx, "field-type declaration missing for field: '%s'", name);
+		else if (pData->ctx == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for normalizer-context for field: '%s'", name);
+		suffixed_parser_data_destructor((void**)&pData);
+	}
+	free_pcons_args(&args);
+	if (suffixes_str != NULL) free(suffixes_str);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+void* suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	return _suffixed_parser_data_constructor(node, ctx, node->raw_data, NULL, NULL);
+}
+
+void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
+	int r = LN_BADCONFIG;
+	pcons_args_t* args = NULL;
+	char* name = NULL;
+	const char* value_field_name = NULL;
+	const char* suffix_field_name = NULL;
+	const char* remaining_args = NULL;
+	es_str_t* unnamed_suffix_args = NULL;
+	struct suffixed_parser_data_s* pData = NULL;
+	CHKN(name = es_str2cstr(node->name, NULL));
+	CHKN(args = pcons_args(node->raw_data, 3));
+	CHKN(value_field_name = pcons_arg(args, 0, NULL));
+	CHKN(suffix_field_name = pcons_arg(args, 1, NULL));
+	CHKN(remaining_args = pcons_arg(args, 2, NULL));
+	CHKN(unnamed_suffix_args = es_newStrFromCStr(remaining_args, strlen(remaining_args)));
+	
+	CHKN(pData = _suffixed_parser_data_constructor(node, ctx, unnamed_suffix_args, value_field_name, suffix_field_name));
+	r = 0;
+done:
+	if (r != 0) {
+		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory named_suffixed-field name");
+		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (value_field_name == NULL) ln_dbgprintf(ctx, "key-name for value not provided for field: %s", name);
+		else if (suffix_field_name == NULL) ln_dbgprintf(ctx, "key-name for suffix not provided for field: %s", name);
+		else if (unnamed_suffix_args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for unnamed-suffix-field args for field: %s", name);
+		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't create parser-data for field: %s", name);
+		suffixed_parser_data_destructor((void**)&pData);
+	}
+	if (unnamed_suffix_args != NULL) free(unnamed_suffix_args);
+	if (args != NULL) free_pcons_args(&args);
+	if (name != NULL) free(name);
+	return pData;
+}
+
+
+void suffixed_parser_data_destructor(void** dataPtr) {
+	if ((*dataPtr) != NULL) {
+		struct suffixed_parser_data_s *pData = (struct suffixed_parser_data_s*) *dataPtr;
+		if (pData->suffixes_str != NULL) free(pData->suffixes_str);
+		if (pData->suffix_offsets != NULL) free(pData->suffix_offsets);
+		if (pData->suffix_lengths != NULL) free(pData->suffix_lengths);
+		if (pData->value_field_name != NULL) free(pData->value_field_name);
+		if (pData->suffix_field_name != NULL) free(pData->suffix_field_name);
+		if (pData->ctx != NULL)	ln_exitCtx(pData->ctx);
+		free(pData);
+		*dataPtr = NULL;
+	}
+}
 
 /**
  * Just get everything till the end of string.
  */
-PARSER_Parse(Rest)
+PARSER(Rest)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
@@ -1130,11 +1741,6 @@ PARSER_Parse(Rest)
 	(void)str;
 	/* success, persist */
 	*parsed = strLen - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
 	r = 0;
 	return r;
 }
@@ -1146,7 +1752,7 @@ PARSER_Parse(Rest)
  * quote character seen. The extracted string does NOT include the quote characters.
  * swisskid, 2015-01-21
  */
-PARSER_Parse(OpQuotedString)
+PARSER(OpQuotedString)
 	const char *c;
 	size_t i;
 	char *cstr = NULL;
@@ -1190,7 +1796,6 @@ done:
 	return r;
 }
 
-
 /**
  * Parse a quoted string. In this initial implementation, escaping of the quote
  * char is not supported. A quoted string is one start starts with a double quote,
@@ -1198,9 +1803,10 @@ done:
  * quote character seen. The extracted string does NOT include the quote characters.
  * rgerhards, 2011-01-14
  */
-PARSER_Parse(QuotedString)
+PARSER(QuotedString)
 	const char *c;
 	size_t i;
+	char *cstr = NULL;
 
 	assert(str != NULL);
 	assert(offs != NULL);
@@ -1224,13 +1830,11 @@ PARSER_Parse(QuotedString)
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+	CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+	CHKN(*value = json_object_new_string(cstr));
 	r = 0; /* success */
 done:
+	free(cstr);
 	return r;
 }
 
@@ -1240,7 +1844,7 @@ done:
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-PARSER_Parse(ISODate)
+PARSER(ISODate)
 	const char *c;
 	size_t i;
 
@@ -1281,11 +1885,7 @@ PARSER_Parse(ISODate)
 
 	/* success, persist */
 	*parsed = 10;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1304,7 +1904,7 @@ done:
  * In order to match, this syntax must start on a non-whitespace char
  * other than colon.
  */
-PARSER_Parse(CiscoInterfaceSpec)
+PARSER(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
 
@@ -1321,12 +1921,12 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * is present. Otherwise, we check if we have a valid interface.
 	 */
 	int bHaveInterface = 0;
-	size_t idxInterface = 0;
-	size_t lenInterface = 0;
+	size_t idxInterface;
+	size_t lenInterface;
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
-	if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) == 0) {
+	if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) == 0) {
 		bHaveIP = 1;
 		i += lenIP - 1; /* position on delimiter */
 	} else {
@@ -1346,14 +1946,14 @@ PARSER_Parse(CiscoInterfaceSpec)
 	/* we now utilize our other parser helpers */
 	if(!bHaveIP) {
 		idxIP = i;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) != 0) goto done;
+		if(ln_parseIPv4(str, strLen, &i, node, &lenIP, NULL) != 0) goto done;
 		i += lenIP;
 	}
 	if(i == strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
 	const size_t idxPort = i;
 	size_t lenPort;
-	if(ln_v2_parseNumber(ctx, str, strLen, &i, NULL, &lenPort, NULL) != 0) goto done;
+	if(ln_parseNumber(str, strLen, &i, node, &lenPort, NULL) != 0) goto done;
 	i += lenPort;
 	if(i == strLen) goto success;
 
@@ -1361,17 +1961,17 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * We assume we must at least have 5 chars [" (::1)"]
 	 */
 	int bHaveIP2 = 0;
-	size_t idxIP2 = 0, lenIP2 = 0;
-	size_t idxPort2 = 0, lenPort2 = 0;
+	size_t idxIP2, lenIP2;
+	size_t idxPort2, lenPort2;
 	if(i+5 < strLen && c[i] == ' ' && c[i+1] == '(') {
 		size_t iTmp = i+2; /* skip over " (" */
 		idxIP2 = iTmp;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &iTmp, NULL, &lenIP2, NULL) == 0) {
+		if(ln_parseIPv4(str, strLen, &iTmp, node, &lenIP2, NULL) == 0) {
 			iTmp += lenIP2;
 			if(i < strLen || c[iTmp] == '/') {
 				++iTmp; /* skip slash */
 				idxPort2 = iTmp;
-				if(ln_v2_parseNumber(ctx, str, strLen, &iTmp, NULL, &lenPort2, NULL) == 0) {
+				if(ln_parseNumber(str, strLen, &iTmp, node, &lenPort2, NULL) == 0) {
 					iTmp += lenPort2;
 					if(iTmp < strLen && c[iTmp] == ')') {
 						i = iTmp + 1; /* match, so use new index */
@@ -1386,8 +1986,8 @@ PARSER_Parse(CiscoInterfaceSpec)
 	 * We assume we must at least have 3 chars ["(n)"]
 	 */
 	int bHaveUser = 0;
-	size_t idxUser = 0;
-	size_t lenUser = 0;
+	size_t idxUser;
+	size_t lenUser;
 	if(   (i+2 < strLen && c[i] == '(' && !isspace(c[i+1]) )
 	   || (i+3 < strLen && c[i] == ' ' && c[i+1] == '(' && !isspace(c[i+2])) ) {
 		idxUser = i + ((c[i] == ' ') ? 2 : 1); /* skip [SP]'(' */
@@ -1444,7 +2044,7 @@ done:
  * is commonly done in Cisco software).
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  */
-PARSER_Parse(Duration)
+PARSER(Duration)
 	const char *c;
 	size_t i;
 
@@ -1475,11 +2075,7 @@ PARSER_Parse(Duration)
 
 	/* success, persist */
 	*parsed = (i + 5) - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1490,7 +2086,7 @@ done:
  * Note: we do manual loop unrolling -- this is fast AND efficient.
  * rgerhards, 2011-01-14
  */
-PARSER_Parse(Time24hr)
+PARSER(Time24hr)
 	const char *c;
 	size_t i;
 
@@ -1521,11 +2117,7 @@ PARSER_Parse(Time24hr)
 
 	/* success, persist */
 	*parsed = 8;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1537,7 +2129,7 @@ done:
  * TODO: the code below is a duplicate of 24hr parser - create common function?
  * rgerhards, 2011-01-14
  */
-PARSER_Parse(Time12hr)
+PARSER(Time12hr)
 	const char *c;
 	size_t i;
 
@@ -1567,11 +2159,7 @@ PARSER_Parse(Time12hr)
 
 	/* success, persist */
 	*parsed = 8;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1613,7 +2201,7 @@ done:
 /**
  * Parser for IPv4 addresses.
  */
-PARSER_Parse(IPv4)
+PARSER(IPv4)
 	const char *c;
 	size_t i;
 
@@ -1641,11 +2229,7 @@ PARSER_Parse(IPv4)
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1681,7 +2265,7 @@ skipIPv6AddrBlock(const char *const __restrict__ str,
  * by whitespace or end-of-string, else it is not considered
  * a valid address. This prevents false positives.
  */
-PARSER_Parse(IPv6)
+PARSER(IPv6)
 	const char *c;
 	size_t i;
 	size_t beginBlock; /* last block begin in case we need IPv4 parsing */
@@ -1735,7 +2319,7 @@ PARSER_Parse(IPv6)
 		/* prevent pure IPv4 address to be recognized */
 		if(beginBlock == *offs) goto done;
 		i = beginBlock;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &ipv4_parsed, NULL) != 0)
+		if(ln_parseIPv4(str, strLen, &i, node, &ipv4_parsed, NULL) != 0)
 			goto done;
 		i += ipv4_parsed;
 	}
@@ -1751,11 +2335,7 @@ chk_ok:	/* we are finished parsing, check if things are ok */
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
-	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
-	}
+
 	r = 0; /* success */
 done:
 	return r;
@@ -1844,7 +2424,7 @@ done:
  * may be imposed in the future as we see additional need.
  * added 2015-04-30 rgerhards
  */
-PARSER_Parse(v2IPTables)
+PARSER(v2IPTables)
 	size_t i = *offs;
 	int nfields = 0;
 
@@ -1897,7 +2477,7 @@ done:
  * behaviour, and probably emulate it.
  * added 2015-04-28 by rgerhards, v1.1.2
  */
-PARSER_Parse(JSON)
+PARSER(JSON)
 	const size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 
@@ -2013,7 +2593,7 @@ done:
  * only.
  * added 2015-04-28 by rgerhards, v1.1.2
  */
-PARSER_Parse(CEESyslog)
+PARSER(CEESyslog)
 	size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 	struct json_object *json = NULL;
@@ -2074,7 +2654,7 @@ done:
  * have much more frequent mismatches than matches.
  * added 2015-04-25 rgerhards
  */
-PARSER_Parse(NameValue)
+PARSER(NameValue)
 	size_t i = *offs;
 
 	/* stage one */
@@ -2118,7 +2698,7 @@ done:
  * This parser must start on a hex digit.
  * added 2015-05-04 by rgerhards, v1.1.2
  */
-PARSER_Parse(MAC48)
+PARSER(MAC48)
 	size_t i = *offs;
 	char delim;
 
@@ -2261,7 +2841,7 @@ cefParseExtensions(const char *const __restrict__ str,
 	size_t iValue, lenValue;
 	char *name = NULL;
 	char *value = NULL;
-
+	
 	while(i < strLen) {
 		while(i < strLen && str[i] == ' ')
 			++i;
@@ -2311,8 +2891,6 @@ cefParseExtensions(const char *const __restrict__ str,
 			free(value); value = NULL;
 		}
 	}
-
-	*offs = strLen; /* this parser consume everything or fails */
 
 done:
 	free(name);
@@ -2377,7 +2955,7 @@ done:
  * Parser for ArcSight Common Event Format (CEF) version 0.
  * added 2015-05-05 by rgerhards, v1.1.2
  */
-PARSER_Parse(CEF)
+PARSER(CEF)
 	size_t i = *offs;
 	char *vendor = NULL;
 	char *product = NULL;
@@ -2422,7 +3000,7 @@ PARSER_Parse(CEF)
 	 CHKR(cefParseExtensions(str, strLen, &i, NULL));
 
 	/* success, persist */
-	*parsed = i - *offs;
+	*parsed = *offs - i;
 	r = 0; /* success */
 
 	if(value != NULL) {
@@ -2467,7 +3045,7 @@ done:
  * Parser for Checkpoint LEA on-disk format.
  * added 2015-06-18 by rgerhards, v1.1.2
  */
-PARSER_Parse(CheckpointLEA)
+PARSER(CheckpointLEA)
 	size_t i = *offs;
 	size_t iName, lenName;
 	size_t iValue, lenValue;
@@ -2524,7 +3102,7 @@ PARSER_Parse(CheckpointLEA)
 	}
 
 	/* success, persist */
-	*parsed =  i - *offs;
+	*parsed = *offs - i;
 	r = 0; /* success */
 
 done:
@@ -2536,95 +3114,3 @@ done:
 	}
 	return r;
 }
-
-
-/**
- * "repeat" special parser.
- */
-PARSER_Parse(Repeat)
-	struct data_Repeat *const data = (struct data_Repeat*) pdata;
-	struct ln_pdag *endNode = NULL;
-	size_t longest_path = 0;
-	size_t strtoffs = *offs;
-	struct json_object *json_arr = NULL;
-
-	do {
-		struct json_object *parsed_value = json_object_new_object();
-		r = ln_normalizeRec(data->parser, str, strLen, strtoffs, 1,
-				    &longest_path, parsed_value, &endNode);
-		strtoffs = longest_path;
-		ln_dbgprintf(ctx, "repeat parser returns %d, parsed %zu, json: %s",
-			r, longest_path, json_object_to_json_string(parsed_value));
-
-		if(json_arr == NULL) {
-			json_arr = json_object_new_array();
-		}
-		json_object_array_add(json_arr, parsed_value);
-		ln_dbgprintf(ctx, "arr: %s", json_object_to_json_string(json_arr));
-
-		/* now check if we shall continue */
-		longest_path = 0;
-		r = ln_normalizeRec(data->while_cond, str, strLen, strtoffs, 1,
-				    &longest_path, NULL, &endNode);
-		ln_dbgprintf(ctx, "repeat while returns %d, parsed %zu",
-			r, longest_path);
-		if(r == 0)
-			strtoffs = longest_path;
-	} while(r == 0);
-
-	/* success, persist */
-	*parsed = strtoffs - *offs;
-	if(value == NULL) {
-		json_object_put(json_arr);
-	} else {
-		*value = json_arr;
-	}
-	r = 0; /* success */
-	return r;
-}
-PARSER_Construct(Repeat)
-{
-	int r = 0;
-	struct data_Repeat *data = (struct data_Repeat*) calloc(1, sizeof(struct data_Repeat));
-	struct ln_pdag *endnode; /* we need this fo ln_pdagAddParser, which updates its param! */
-
-	if(json == NULL)
-		goto done;
-
-	json_object_object_foreach(json, key, val) {
-		if(!strcmp(key, "parser")) {
-			endnode = data->parser = ln_newPDAG(ctx); 
-			json_object_get(val); /* prevent free in pdagAddParser */
-			CHKR(ln_pdagAddParser(ctx, &endnode, val));
-			endnode->flags.isTerminal = 1;
-		} else if(!strcmp(key, "while")) {
-			endnode = data->while_cond = ln_newPDAG(ctx); 
-			json_object_get(val); /* prevent free in pdagAddParser */
-			CHKR(ln_pdagAddParser(ctx, &endnode, val));
-			endnode->flags.isTerminal = 1;
-		} else {
-			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
-				 json_object_to_json_string(val));
-		}
-	}
-
-done:
-	if(data->parser == NULL || data->while_cond == NULL) {
-		ln_errprintf(ctx, 0, "repeat parser needs 'parser','while' parameters");
-		ln_destructRepeat(ctx, data);
-		r = LN_BADCONFIG;
-	} else {
-		*pdata = data;
-	}
-	return r;
-}
-PARSER_Destruct(Repeat)
-{
-	struct data_Repeat *const data = (struct data_Repeat*) pdata;
-	if(data->parser != NULL)
-		ln_pdagDelete(data->parser);
-	if(data->while_cond != NULL)
-		ln_pdagDelete(data->while_cond);
-	free(pdata);
-}
-

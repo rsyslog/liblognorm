@@ -4,6 +4,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "simple user-defined type"
+add_rule 'version=2'
 add_rule 'type=@hex-byte:%f1:hexnumber{"maxval": "255"}%'
 add_rule 'rule=:a word %w1:word% a byte %   .:@hex-byte   % another word %w2:word%'
 execute 'a word w1 a byte 0xff another word w2'

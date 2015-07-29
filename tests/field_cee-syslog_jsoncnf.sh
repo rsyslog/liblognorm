@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "JSON field"
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"field", "type":"cee-syslog"}%'
 
 execute '@cee:{"f1": "1", "f2": 2}'

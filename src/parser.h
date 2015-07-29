@@ -38,11 +38,11 @@
 // TODO #warning check how to handle "value" - does it need to be set to NULL?
 
 #define PARSERDEF_NO_DATA(parser) \
-	int ln_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value);
+	int ln_v2_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value);
 
 #define PARSERDEF(parser) \
 	int ln_construct##parser(ln_ctx ctx, json_object *const json, void **pdata); \
-	int ln_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value); \
+	int ln_v2_parse##parser(ln_ctx ctx, const char *str, size_t strlen, size_t *offs, void *const, size_t *parsed, struct json_object **value); \
 	void ln_destruct##parser(ln_ctx ctx, void *const pdata);
 
 PARSERDEF_NO_DATA(RFC5424Date);

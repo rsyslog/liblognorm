@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "duration syntax"
+add_rule 'version=2'
 add_rule 'rule=:duration %{"name":"field", "type":"duration"}% bytes'
 add_rule 'rule=:duration %{"name":"field", "type":"duration"}%'
 

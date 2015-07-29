@@ -11,6 +11,7 @@ test_def $0 "whitespace parser"
 # that parser also treats HT as being part of the word. But thanks
 # to the quotes, we can force it to not do that.
 # rgerhards, 2015-04-30
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"a", "type":"op-quoted-string"}%%{"name":"-", "type":"whitespace"}%%{"name":"b", "type":"op-quoted-string"}%'
 
 execute 'word1  word2' # multiple spaces

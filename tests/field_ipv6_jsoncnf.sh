@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "IPv6 parser"
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"f", "type":"ipv6"}%'
 
 # examples from RFC4291, sect. 2.2

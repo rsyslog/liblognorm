@@ -34,14 +34,15 @@
 #include <ctype.h>
 #include <libestr.h>
 
+#define LOGNORM_V1_SUBSYSTEM /* indicate we are old cruft */
 #include "json_compatibility.h"
 #include "liblognorm.h"
-#include "lognorm.h"
-#include "samp.h"
-#include "ptree.h"
 #include "annot.h"
 #include "internal.h"
-#include "parser.h"
+#include "lognorm.h"
+#include "v1_ptree.h"
+#include "v1_samp.h"
+#include "v1_parser.h"
 
 /**
  * Get base addr of common prefix. Takes length of prefix in account
@@ -297,6 +298,7 @@ ln_buildPTree(struct ln_ptree *tree, es_str_t *str, size_t offs)
 	unsigned short ipfix;
 
 	assert(tree != NULL);
+fprintf(stderr, "tree %p\n", tree);
 	ln_dbgprintf(tree->ctx, "buildPTree: begin at %p, offs %zu", tree, offs);
 	c = es_getBufAddr(str);
 
@@ -646,7 +648,7 @@ done:
  *         characters.
  */
 static int
-ln_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t offs, struct json_object *json,
+ln_v1_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t offs, struct json_object *json,
 		struct ln_ptree **endNode)
 {
 	int r;
@@ -710,7 +712,7 @@ ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "potential hit, trying subtree");
-				left = ln_normalizeRec(node->subtree, str, strLen, i, json, endNode);
+				left = ln_v1_normalizeRec(node->subtree, str, strLen, i, json, endNode);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
 					r = 0;
@@ -735,7 +737,7 @@ ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 			if(localR == 0) {
 				/* potential hit, need to verify */
 				ln_dbgprintf(tree->ctx, "%zu: potential hit, trying subtree %p", offs, node->subtree);
-				left = ln_normalizeRec(node->subtree, str, strLen, i + parsed, json, endNode);
+				left = ln_v1_normalizeRec(node->subtree, str, strLen, i + parsed, json, endNode);
 				ln_dbgprintf(tree->ctx, "%zu: subtree returns %d", offs, r);
 				if(left == 0 && (*endNode)->flags.isTerminal) {
 					ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
@@ -789,7 +791,7 @@ ln_dbgprintf(tree->ctx, "%zu no field, offset already beyond end", offs);
 }
 	/* now let's see if we have a literal */
 	if(tree->subtree[(unsigned char)str[offs]] != NULL) {
-		left = ln_normalizeRec(tree->subtree[(unsigned char)str[offs]],
+		left = ln_v1_normalizeRec(tree->subtree[(unsigned char)str[offs]],
 				       str, strLen, offs + 1, json, endNode);
 ln_dbgprintf(tree->ctx, "%zu got left %d, r %d", offs, left, r);
 		if(left < r)
@@ -810,7 +812,7 @@ ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 #		ifndef NDEBUG
 		left = /* we only need this for the assert below */
 #		endif
-		       ln_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
+		       ln_v1_normalizeRec(restMotifNode->subtree, str, strLen, i + parsed, json, endNode);
 		assert(left == 0); /* with rest, we have this invariant */
 		assert((*endNode)->flags.isTerminal); /* this one also */
 		ln_dbgprintf(tree->ctx, "%zu: parser matches at %zu", offs, i);
@@ -843,7 +845,7 @@ done:
 
 
 int
-DISABLED_ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
+ln_v1_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p)
 {
 	int r;
 	int left;
@@ -853,7 +855,7 @@ DISABLED_ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_ob
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	left = ln_normalizeRec(ctx->ptree, str, strLen, 0, *json_p, &endNode);
+	left = ln_v1_normalizeRec(ctx->ptree, str, strLen, 0, *json_p, &endNode);
 
 	if(ctx->debug) {
 		if(left == 0) {

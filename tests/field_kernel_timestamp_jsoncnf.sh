@@ -3,18 +3,21 @@
 . $srcdir/exec.sh
 
 test_def $0 "kernel timestamp parser"
+add_rule 'version=2'
 add_rule 'rule=:begin %{"name":"timestamp", "type":"kernel-timestamp"}% end'
 execute 'begin [12345.123456] end'
 assert_output_json_eq '{ "timestamp": "[12345.123456]"}'
 
 reset_rules
 
+add_rule 'version=2'
 add_rule 'rule=:begin %{"name":"timestamp", "type":"kernel-timestamp"}%'
 execute 'begin [12345.123456]'
 assert_output_json_eq '{ "timestamp": "[12345.123456]"}'
 
 reset_rules
 
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"timestamp", "type":"kernel-timestamp"}%'
 execute '[12345.123456]'
 assert_output_json_eq '{ "timestamp": "[12345.123456]"}'

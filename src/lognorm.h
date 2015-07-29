@@ -64,6 +64,14 @@ struct ln_ctx_s {
 				     * (disabled by default for performance reasons) */
 	struct ln_type_pdag *type_pdags; /**< array of our type pdags */
 	int nTypes;		 /**< number of type pdags */
+	int version;		/**< 1 or 2, depending on rulebase/algo version */
+
+	/* here follows stuff for the v1 subsystem -- do NOT make any changes
+	 * down here. This is strictly read-only. May also be removed some time in
+	 * the future.
+	 */
+	struct ln_ptree *ptree;
+	/* end old cruft */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "JSON field"
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"field", "type":"json"}%'
 
 execute '{"f1": "1", "f2": 2}'
@@ -51,6 +52,7 @@ assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 
 # now check some strange cases
 reset_rules
+add_rule 'version=2'
 add_rule 'rule=:%field:json%'
 
 # this check is because of bug in json-c:

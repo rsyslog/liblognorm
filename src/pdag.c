@@ -18,6 +18,7 @@
 
 #include "json_compatibility.h"
 #include "liblognorm.h"
+#include "v1_liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
 #include "pdag.h"
@@ -34,9 +35,9 @@ const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const 
  * order of parser IDs (also see comment in pdag.h).
  */
 #define PARSER_ENTRY_NO_DATA(identifier, parser) \
-{ identifier, NULL, ln_parse##parser, NULL }
+{ identifier, NULL, ln_v2_parse##parser, NULL }
 #define PARSER_ENTRY(identifier, parser) \
-{ identifier, ln_construct##parser, ln_parse##parser, ln_destruct##parser }
+{ identifier, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser }
 static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("literal", Literal),
 	PARSER_ENTRY("repeat", Repeat),
@@ -934,6 +935,13 @@ int
 ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
 {
 	int r;
+	/* old cruft */
+	if(ctx->version == 1) {
+		r = ln_v1_normalize(ctx, str, strLen, json_p);
+		goto done;
+	}
+	/* end old cruft */
+
 	struct ln_pdag *endNode = NULL;
 	size_t parsedTo = 0;
 

@@ -1,15 +1,29 @@
-check_PROGRAMS = json_eq user_test
+check_PROGRAMS = json_eq
+# re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
 json_eq_SOURCES = $(json_eq_self_sources) $(top_srcdir)/src/json_compatibility.c
 json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) -I$(top_srcdir)/src
 json_eq_LDADD = $(JSON_C_LIBS)
 json_eq_LDFLAGS = -no-install
 
-user_test_SOURCES = user_test.c
-user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
-user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) ../compat/compat.la 
-user_test_LDFLAGS = -no-install
+#user_test_SOURCES = user_test.c
+#user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+#user_test_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) ../compat/compat.la 
+#user_test_LDFLAGS = -no-install
 
+# The following tests are for the new pdag-based engine (v2+).
+#
+# There are some notes due:
+#
+# removed field_float_with_invalid_ruledef.sh because test is not valid.
+# more info: https://github.com/rsyslog/liblognorm/issues/98
+# note that probably the other currently disable *_invalid_*.sh
+# tests are also affected.
+#
+# there seems to be a problem with some format in cisco-interface-spec
+# Probably this was just not seen in v1, because of some impreciseness
+# in the ptree normalizer. Pushing equivalent v2 test back until v2
+# implementation is further developed.
 TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
 	seq_simple.sh \
@@ -49,19 +63,10 @@ TESTS_SHELLSCRIPTS = \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
         field_float.sh \ 
-        field_float_jsoncnf.sh 
-# removed because test is not valid.
-# more info: https://github.com/rsyslog/liblognorm/issues/98
-# note that probably the other currently disable *_invalid_*.sh
-# tests are also affected.
-	field_float_with_invalid_ruledef.sh
-# there seems to be a problem with some format in cisco-interface-spec
-# Probably this was just not seen in v1, because of some impreciseness
-# in the ptree normalizer. Pushing this back until v2 implementation is
-# further.
-	field_cisco-interface-spec.sh 
-# the other tests are currently disabled because we do not
-# yet support the required parsers
+        field_float_jsoncnf.sh
+
+# now come tests for the legacy (v1) engine
+TESTS_SHELLSCRIPTS += \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
 	field_recursive.sh \
@@ -71,10 +76,13 @@ TESTS_SHELLSCRIPTS = \
 	field_descent.sh \
 	field_descent_with_invalid_ruledef.sh \
 	field_suffixed.sh \
-	field_suffixed_with_invalid_ruledef.sh
+	field_suffixed_with_invalid_ruledef.sh \
+	field_cisco-interface-spec.sh \
+	field_float_with_invalid_ruledef.sh
 
+
+#re-add to TESTS if needed: user_test
 TESTS = \
-	user_test \
 	$(TESTS_SHELLSCRIPTS)
 
 REGEXP_TESTS = \

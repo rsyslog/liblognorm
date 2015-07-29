@@ -5,6 +5,7 @@
 . $srcdir/exec.sh
 test_def $0 "whitespace in parser definition"
 
+add_rule 'version=2'
 add_rule 'rule=:here is a number %   {"name":"num", "type":"hexnumber"}   % in hex form'
 execute 'here is a number 0x1234 in hex form'
 assert_output_json_eq '{"num": "0x1234"}'

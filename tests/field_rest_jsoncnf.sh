@@ -7,6 +7,7 @@
 test_def $0 "rest matches"
 
 #tail recursion with default tail field
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"iface", "type":"char-to", "extradata":":"}%:%{"name":"ip", "type":"ipv4"}%/%{"name":"port", "type":"number"}% (%{"name":"label2", "type":"char-to", "extradata":")"}%)'
 add_rule 'rule=:%{"name":"iface", "type":"char-to", "extradata":":"}%:%{"name":"ip", "type":"ipv4"}%/%{"name":"port", "type":"number"}% (%{"name":"label2", "type":"char-to", "extradata":")"}%)%{"name":"tail", "type":"rest"}%'
 add_rule 'rule=:%{"name":"iface", "type":"char-to", "extradata":":"}%:%{"name":"ip", "type":"ipv4"}%/%{"name":"port", "type":"number"}%'

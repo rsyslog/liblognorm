@@ -1,5 +1,7 @@
-#include <liblognorm.h>
+#include <config.h>
 #include <string.h>
+#include "liblognorm.h"
+#include "v1_liblognorm.h"
 
 int main() {
 	const char* str = "foo says hello!";
@@ -8,8 +10,8 @@ int main() {
 	ln_ctx ctx =  ln_initCtx();
 	int ret = 1;
 
-	ln_loadSample(ctx, "rule=:%from:word% says %msg:word%");
-	if (ln_normalize(ctx, str, strlen(str), &obj) == 0) {
+	ln_v1_loadSample(ctx, "rule=:%from:word% says %msg:word%");
+	if (ln_v1_normalize(ctx, str, strlen(str), &obj) == 0) {
 
 		json_object_object_get_ex(obj, "from", &from);
 		json_object_object_get_ex(obj, "msg", &msg);

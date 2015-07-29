@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "name/value parser"
+add_rule 'version=2'
 add_rule 'rule=:%{"name":"f", "type":"name-value-list"}%'
 
 execute 'name=value'

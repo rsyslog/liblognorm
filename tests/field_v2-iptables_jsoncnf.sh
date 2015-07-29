@@ -3,6 +3,7 @@
 . $srcdir/exec.sh
 
 test_def $0 "v2-iptables field"
+add_rule 'version=2'
 add_rule 'rule=:iptables output denied: %{"name":"field", "type":"v2-iptables"}%'
 
 # first, a real-world case
@@ -11,6 +12,7 @@ assert_output_json_eq '{ "field": { "IN": "", "OUT": "eth0", "SRC": "176.9.56.14
 
 # now some more "fabricated" cases for better readable test
 reset_rules
+add_rule 'version=2'
 add_rule 'rule=:iptables: %field:v2-iptables%'
 
 execute 'iptables: IN=value SECOND=test'

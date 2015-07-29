@@ -33,6 +33,16 @@ liblognorm_la_SOURCES = \
 	enc_xml.c \
 	json_compatibility.c
 
+# Users violently requested that v2 shall be able to understand v1
+# rulebases. As both are very very different, we now include the
+# full v1 engine for this purpose. This here is what does this.
+# see also: https://github.com/rsyslog/liblognorm/issues/103
+liblognorm_la_SOURCES += \
+	v1_liblognorm.c \
+	v1_parser.c \
+	v1_ptree.c \
+	v1_samp.c
+
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr
 # info on version-info:
@@ -49,5 +59,12 @@ EXTRA_DIST = \
 	enc.h \
 	parser.h \
 	json_compatibility.h
+
+# and now the old cruft:
+EXTRA_DIST += \
+	v1_liblognorm.h \
+	v1_parser.h \
+	v1_samp.h \
+	v1_ptree.h
 
 include_HEADERS = liblognorm.h samp.h lognorm.h pdag.h annot.h enc.h parser.h lognorm-features.h

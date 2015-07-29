@@ -33,6 +33,8 @@
 #include "lognorm.h"
 #include "annot.h"
 #include "samp.h"
+#include "v1_liblognorm.h"
+#include "v1_ptree.h"
 
 #define ERR_ABORT {r = 1; goto done; }
 
@@ -48,17 +50,6 @@ ln_version(void)
 	return VERSION;
 }
 
-ln_ctx
-ln_inherittedCtx(ln_ctx parent)
-{
-	ln_ctx child = ln_initCtx();
-	if (child != NULL) {
-		child->allowRegex = parent->allowRegex;
-		child->dbgCB = parent->dbgCB;
-		child->dbgCookie = parent->dbgCookie;
-	}
-	return child;
-}
 
 ln_ctx
 ln_initCtx(void)
@@ -106,6 +97,10 @@ ln_exitCtx(ln_ctx ctx)
 
 	ln_dbgprintf(ctx, "exitCtx %p", ctx);
 	ctx->objID = LN_ObjID_None; /* prevent double free */
+	/* support for old cruft */
+	if(ctx->ptree != NULL)
+		ln_deletePTree(ctx->ptree);
+	/* end support for old cruft */
 	if(ctx->pdag != NULL)
 		ln_pdagDelete(ctx->pdag);
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
@@ -149,16 +144,39 @@ done:
 }
 
 
-int
-ln_loadSample(ln_ctx ctx, const char *buf)
+/* check rulebase format version. Returns 2 if this is v2 rulebase,
+ * 1 for any pre-v2 and -1 if there was a problem reading the file.
+ */
+static int
+checkVersion(FILE *const fp)
 {
-    // Something bad happened - no new sample
-    if (ln_processSamp(ctx, buf, strlen(buf)) == NULL) {
-        return 1;
-    }
-    return 0;
+	char buf[64];
+
+	if(fgets(buf, sizeof(buf), fp) == NULL)
+		return -1;
+	if(!strcmp(buf, "version=2\n")) {
+		return 2;
+	} else {
+		return 1;
+	}
 }
 
+/* we have a v1 rulebase, so let's do all stuff that we need
+ * to make that ole piece of ... work.
+ */
+static int
+doOldCruft(ln_ctx ctx, const char *file)
+{
+	int r = -1;
+	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
+		free(ctx);
+		r = -1;
+		goto done;
+	}
+	r = ln_v1_loadSamples(ctx, file);
+done:
+	return r;
+}
 
 int
 ln_loadSamples(ln_ctx ctx, const char *file)
@@ -174,6 +192,19 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 		ln_errprintf(ctx, errno, "cannot open file %s", file);
 		ERR_ABORT;
 	}
+	ctx->version = checkVersion(repo);
+	ln_dbgprintf(ctx, "rulebase version is %d\n", ctx->version);
+	if(ctx->version == -1) {
+		ln_errprintf(ctx, errno, "error determing version of %s", file);
+		ERR_ABORT;
+	}
+	if(ctx->version == 1) {
+		fclose(repo);
+		r = doOldCruft(ctx, file);
+		goto done;
+	}
+
+	/* now we are in our native code */
 	while(!isEof) {
 		if((samp = ln_sampRead(ctx, repo, &isEof)) == NULL) {
 			/* TODO: what exactly to do? */

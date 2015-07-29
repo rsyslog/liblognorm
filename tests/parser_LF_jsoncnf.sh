@@ -5,6 +5,7 @@
 . $srcdir/exec.sh
 test_def $0 "LF in parser definition"
 
+add_rule 'version=2'
 add_rule 'rule=:here is a number %{
                 "name":"num", "type":"hexnumber"
                 }% in hex form'
