@@ -29,6 +29,7 @@ TESTS_SHELLSCRIPTS = \
 	names.sh \
 	seq_simple.sh \
 	alternative_simple.sh \
+	repeat_very_simple.sh \
 	repeat_simple.sh \
 	repeat_while_alternative.sh \
 	parser_prios.sh \

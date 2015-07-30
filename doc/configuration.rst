@@ -27,6 +27,54 @@ log messages.
 
 Each line in rulebase file is evaluated separately.
 
+Rulebase Versions
+-----------------
+This documentation is for liblognorm version 2 and above. Version 2 is a
+complete rewrite of liblognorm which offers many enhanced features but
+is incompatible to some pre-v2 rulebase commands. For details, see
+compatiblity document.
+
+Note that liblognorm v2 contains a full copy of the v1 engine. As such
+it is fully compatible to old rulebases. In order to use the new v2
+engine, you need to explicitely opt in. To do so, you need to add
+the line::
+
+    version=2
+
+to the top of your rulebase file. Currently, it is very important that
+
+ * the line is given exactly as above
+ * no whitespace within the sequence is permitted (e.g. "version = 2"
+   is invalid)
+ * no whitepace or comment after the "2" is permitted
+   (e.g. "version=2 # comment") is invalid
+ * this line **must** be the **very** first line of the file; this
+   also means there **must** not be any comment or empty lines in
+   front of it
+
+Only if the version indicator is properly detected, the v2 engine is
+used. Otherwise, the v1 engine is used. So if you use v2 features but
+got the version line wrong, you'll end up with error messages from the
+v1 engine.
+
+The v2 engine understands almost all v1 parsers, and most importantly all
+that are typically used. It does not understand these parsers:
+
+ * tokenized
+ * recursive
+ * descent
+ * regex
+ * interpret
+ * suffixed
+ * named_suffixed
+
+The recursive and descent parsers should be replaced by user-defined types
+in. The tokenized parsers should be replaced by repeat. For the others,
+currently there exists no replacement (but will be added when v2 heads
+towards the first final release). If you need any of these parsers, you need
+to use the v1 engine. That of course means you cannot use the v2 enhancements,
+so converting as much as possible makes sense.
+
 Commentaries
 ------------
 
@@ -39,10 +87,45 @@ Note that the comment character MUST be in the first column of the line.
 
 Empty lines are just skipped, they can be inserted for readability.
 
+User-Defined Types
+------------------
+
+If the line starts with ``type=``, then it contains a user-defined type.
+You can use a user-defined type wherever you use a built-in type; they
+are equivalent. That also means you can use user-defined types in the
+definition of other user-defined types (they can be used recursively).
+The only restriction is that you must define a type **before** you can
+use it.
+
+This line has following format::
+
+    type=<typename>:<match description>
+
+Everything before the colon is treated as the type name. User-defined types
+must always start with "@". So "@mytype" is a valid name, whereas "mytype"
+is invalid and will lead to an error.
+
+After the colon, a match description should be
+given. It is exactly the same like the one given in rule lines (see below).
+
+A generic IP address type could look as follows::
+
+    type=@IPaddr:%ip:ipv4%
+    type=@IPaddr:%ip:ipv6%
+
+This creates a type "@IPaddr", which consists of either an IPv4 or IPv6
+address. Note how we use two different lines to create an alternative
+representation. This is how things generally work with types: you can use
+as many "type" lines for a single type as you need to define your object.
+Note that pure alternatives could also be defined via the "alternative"
+parser - which option to choose is left to the user. They are equivalent.
+The ability to use multiple type lines for definition, however, brings
+more power than just to define alternatives.
+
 Rules
 -----
 
-If the line starts with 'rule=', then it contains a rule. This line has
+If the line starts with ``rule=``, then it contains a rule. This line has
 following format::
 
     rule=[<tag1>[,<tag2>...]]:<match description>
@@ -53,13 +136,14 @@ given. It consists of string literals and field selectors. String literals
 should match exactly, whereas field selectors may match variable parts
 of a message.
 
-A rule could look like this::
+A rule could look like this (in legacy format)::
 
     rule=:%date:date-rfc3164% %host:word% %tag:char-to:\x3a%: no longer listening on %ip:ipv4%#%port:number%'
 
 This excerpt is a common rule. A rule always contains several different 
 "parts"/properties and reflects the structure of the message you want to 
 normalize (e.g. Host, IP, Source, Syslogtag...).
+
 
 Literals
 --------
@@ -72,11 +156,36 @@ in a string literal.
 Fields
 ------
 
-The structure of a field selector is as follows::
+There are different formats for field specification:
 
-    %<field name>:<field type>[:<additional information>]%
+ * legacy format
+ * condensed format
+ * full json format
 
-field name -> that name can be selected freely. It should be a description 
+Legacy Format
+#############
+Legay format is exactly identical to the v1 engine. This permits you to use
+existing v1 rulebases without any modification with the v2 engine, except for
+adding the ``version=2`` header line to the top of the file. Remember: some
+v1 types are not supported - if you are among the few who use them, you need
+to do some manual conversion. For almost all users, manual conversion should
+not be necessary.
+
+Legacy format is not documented here. If you want to use it, see the v1
+documentation.
+
+Condensed Format
+################
+The goal of this format is to be as brief as possible, permitting you an
+as-clear-as-possible view of your rule. It is very similar to legacy format
+and recommended to be used for simple types which do not need any parser
+parameters.
+
+Its structure is as follows::
+
+    %<field name>:<field type>[{<parameters>}]%
+
+**field name** -> that name can be selected freely. It should be a description 
 of what kind of information the field is holding, e.g. SRC is the field 
 contains the source IP address of the message. These names should also be 
 chosen carefully, since the field name can be used in every rule and 
@@ -84,13 +193,21 @@ therefore should fit for the same kind of information in different rules.
 
 If field name is "-", then this field is matched but not saved.
 
-field type -> selects the accordant parser, which are described below.
+**field type** -> selects the accordant parser, which are described below.
 
 Special characters that need to be escaped when used inside a field 
-description are "%" and ":". For example, this will match anything up to
-(but not including) a colon::
+description are "%" and ":". It is strongly recommended **not** to use them.
 
-    %variable:char-to:\x3a%
+**parameters** -> This is an optional set of parameters, given in pure JSON
+format. Parameters can be generic (e.g. "priority") or specific to a
+parser (e.g. "extradata"). Generic parameters are described below in their
+own section, parser-specific ones in the relevant type documentation.
+
+As an example, the "char-to" parser accepts a parameter named "extradata"
+which describes up to which character it shall match (the name "extradata"
+stems back to the legacy v1 system)::
+
+	%tag:char-to{"extradata":":"}%
 
 Whitespace, including LF, is permitted inside a field definition after
 the opening precent sign and before the closing one. This can be used to
@@ -102,7 +219,7 @@ section above could be rewritten as::
           % %
 	  host:word
 	  % %
-	  tag:char-to:\x3a
+	  tag:char-to{"extradata":":"}
 	  %: no longer listening on %
 	  ip:ipv4
 	  %#%
@@ -114,32 +231,136 @@ literal text. So e.g. in the second example line above "% %" we require
 a single SP as literal text. Note that any combination of your liking is
 valid, so it could also be written as::
 
-    rule=:%date:date-rfc3164% %host:word% % tag:char-to:\x3a
+    rule=:%date:date-rfc3164% %host:word% % tag:char-to{"extradata":":"}
           %: no longer listening on %  ip:ipv4  %#%  port:number  %'
 
-Additional information is dependent on the field type; only some field 
-types need additional information.
-    
+Full JSON Format
+################
+This format is best for complex definitions or if there are many parser
+parameters.
+
+Its structure is as follows::
+
+    %JSON%
+
+Where JSON is the configuration expressed in JSON. To get you started, let's
+rewrite above sample in pure JSON form::
+
+    rule=:%[ {"type":"date-rfc3164", "name":"date"},
+             {"type":"literal", "text:" "},
+             {"type":"char-to", "name":"host", "extradata":":"},
+             {"type":"literal", "text:": no longer listening on "},
+             {"type":"ipv4", "name":"ip"},
+             {"type":"literal", "text:"#"},
+             {"type":"number", "name":"port"}
+            ]%
+
+A couple of things to note:
+
+ * we express everything in this example in a *single* parser definition
+ * this is done by using a **JSON array**; whenever an array is used,
+   multiple parsers can be specified. They are exectued one after the
+   other in given order.
+ * literal text is matched here via explicit parser call; as specified
+   below, this is recommended only for specific use cases with the
+   current version of liblognorm
+ * parser parameters (both generic and parser-specific ones) are given
+   on the main JSON level
+ * the literal text shall not be stored inside an output variable; for
+   this reason no name attribute is given (we could also have used
+   ``"name":"-"`` which achives the same effect but is more verbose).
+
+With the literal parser calls replaced by actual literals, the sample
+looks like this::
+
+    rule=:%{"type":"date-rfc3164", "name":"date"}
+          % %
+           {"type":"char-to", "name":"host", "extradata":":"}
+	  % no longer listening on %
+            {"type":"ipv4", "name":"ip"}
+	  %#%
+            {"type":"number", "name":"port"}
+          %
+
+Which format you use and how you exactly use it is up to you.
+
+Some guidelines:
+
+ * using the "literal" parser in JSON should be avoided currently; the
+   experimental version does have some rough edges where conflicts
+   in literal processing will not be properly handled. This should not
+   be an issue in "closed environments", like "repeat", where no such
+   conflict can occur.
+ * otherwise, JSON is perfect for very complex things (like nesting of
+   parsers - it is **not** suggested to use any other format for these
+   kinds of things.
+ * if a field needs to be matched but the result of that match is not
+   needed, omit the "name" attribute; specifically avoid using
+   the more verbose ``"name":"-"``.
+ * it is a good idea to start each defintion with ``"type":"..."``
+   as this provides a good quick overview over what is being defined.
+ 
+Mandatory Parameters
+....................
+
+type
+~~~~
+The field type, selects the parser to use. See "fields" below for description.
+
+Optional Generic Parameters
+...........................
+
+name
+~~~~
+The field name to use. If "-" is used, the field is matched, but not stored.
+In this case, you can simply **not** specify a field name, which is the
+preferred way of doing this.
+
+priority
+~~~~~~~~
+The priority to assign to this parser. Priorities are numerical values in the
+range from 0 (highest) to 65535 (lowest). If multiple parsers could match at
+a given character position of a log line, parsers are tried in priority order.
+Different priorities can lead to different parsing. For example, if the
+greedy "rest" type is assigned priority 0, and no other parser is assigned the
+same priority, no other parser will ever match (because "rest" is very greedy
+and always matches the rest of the message).
+
+Note that liblognorm internally
+has a parser-specific priority, which is selected by the program developer based
+on the specificallity of a type. If the user assigns equal priorities, parsers are
+executed based on the parser-specific priority.
+
+The default priority value is 30,000.
+
 Field types
 -----------
+We have legacy and regular field types. Pre-v2, we did not have user-defined types.
+As such, there was a relatively large number of parsers that handled very similar
+cases, for example for strings. These parsers still work and may even provide
+best performance in extreme cases. In v2, we focus on fewer, but more
+generic parsers, which are then tailored via parameters.
+
+There is nothing bad about using legacy parsers and there is no
+plan to outphase them at any time in the future. We just wanted to
+let you know, especially if you wonder about some "wereid" parsers.
+In v1, parsers could have only a single paramter, which was called
+"extradata" at that time. This is why some of the legacy parsers
+require or support a parameter named "extradata" and do not use a
+better name for it (internally, the legacy format creates a
+v2 parser defintion with "extradata" being populated from the
+legacy "extradata" part of the configuration).
 
 number
 ######
 
 One or more decimal digits.
 
-::
-
-    %port:number%
 
 float
 #####
 
 A floating-pt number represented in non-scientific form.
-
-::
-
-    %pause_time:float%
 
 hexnumber
 #########
@@ -149,16 +370,10 @@ A hexadecimal number as seen by this parser begins with the string
 space. Any interleaving non-hex digits will cause non-detection. The
 rules are strict to avoid false positives.
 
-::
-
-    %session:hexnumber%
-
 kernel-timestamp
 ################
 
-Parses a linux kernel timestamp, which has the format
-
-::
+Parses a linux kernel timestamp, which has the format::
 
     [ddddd.dddddd]
 
@@ -169,9 +384,6 @@ more than 12 digits, which seems more than sufficient (we may reduce
 the max count if misdetections occur). The part after the period
 has to have exactly 6 digits.
 
-::
-
-    %session:hexnumber%
 
 whitespace
 ##########
@@ -183,12 +395,9 @@ is not known. The current parsing position MUST be on a whitspace,
 else the parser does not match.
 
 Remeber that to just parse but not preserve the field contents, the
-dash ("-") is used as field name. This is almost always expected
-with the *whitespace* syntax.
-
-::
-
-    %-:whitespace%
+dash ("-") is used as field name in compact format or the "name" 
+parameter is simply omitted in JSON format. This is almost always
+expected with the *whitespace* type.
 
 word
 ####    
@@ -196,20 +405,11 @@ word
 One or more characters, up to the next space (\\x20), or
 up to end of line.
 
-::
-
-    %host:word%
-
 string-to
 ######### 
 
 One or more characters, up to the next string given in
-extra data.
-
-::
-
-    %field_name:string-to:Auth%
-    %field_name:string-to:Auth\x25%
+"extradata".
 
 alpha
 #####   
@@ -217,51 +417,48 @@ alpha
 One or more alphabetic characters, up to the next whitspace, punctuation,
 decimal digit or control character.
 
-::
-
-    %host:alpha%
-
 char-to
 ####### 
 
-One or more characters, up to the next character given in
-extra data. Additional data must contain one or more characters, which
-can be escaped. If multiple characters are given, any of them will match.
+One or more characters, up to the next character(s) given in
+extradata.
 
-::
+Parameters
+..........
 
-    %field_name:char-to:,%
-    %field_name:char-to:\x25%
+extradata
+~~~~~~~~~~
+
+This is a mandatory parameter. It contains one or more characters, each of
+which terminates the match.
+
 
 char-sep
 ########
 
-Zero or more characters, up to the next character given in extra data, or 
-up to end of line. Additional data must contain one or more characters,
-which can be escaped. If multiple characters are given, any of them will
-match.
+Zero or more characters, up to the next character(s) given in extradata.
 
-::
+Parameters
+..........
 
-    %field_name:char-sep:,%
-    %field_name:char-sep:\x25%
+extradata
+~~~~~~~~~~
+
+This is a mandatory parameter. It contains one or more characters, each of
+which terminates the match.
 
 rest
 ####
 
-Zero or more characters till end of line. Must always be at end of the 
+Zero or more characters untill end of line. Must always be at end of the 
 rule, even though this condition is currently **not** checked. In any case,
 any definitions after *rest* are ignored.
 
 Note that the *rest* syntax should be avoided because it generates
-a very broad match. To mitigate this effect, the rest parser is always
-only invoked if no other parser or string literal matches.
-
-::
-
-    %field_name:rest%
-
-See also `Rainer's blog posting on the "rest" parser <http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html>`_. 
+a very broad match. If it needs to be used, the user shall assign it
+the lowest priority among his parser definitions. Note that the
+parser-sepcific priority is also lowest, so by default it will only
+match if nothing else matches.
 
 quoted-string
 #############   
@@ -269,48 +466,26 @@ quoted-string
 Zero or more characters, surrounded by double quote marks.
 Quote marks are stripped from the match.
 
-::
-
-    %field_name:quoted-string%
-
 op-quoted-string
 ################   
-
 
 Zero or more characters, possibly surrounded by double quote marks.
 If the first character is a quote mark, operates like quoted-string. Otherwise, operates like "word"
 Quote marks are stripped from the match.
 
-::
-
-    %field_name:quoted-string%
-
 date-iso
 ########    
-
 Date in ISO format ('YYYY-MM-DD').
-
-::
-
-    %field-name:date-iso%
 
 time-24hr
 #########   
 
 Time of format 'HH:MM:SS', where HH is 00..23.
 
-::
-
-    %time:time-24hr%
-
 time-12hr
 #########   
 
 Time of format 'HH:MM:SS', where HH is 00..12.
-
-::
-
-    %time:time-12hr%
 
 duration
 ########   
@@ -324,9 +499,6 @@ Examples for durations are "12:05:01", "0:00:01" and "37:59:59" but not
 "00:60:00" (HH and MM must still be within the usual range for
 minutes and seconds).
 
-::
-
-    %session_lasted:duration%
 
 date-rfc3164
 ############
@@ -335,10 +507,6 @@ Valid date/time in RFC3164 format, i.e.: 'Oct 29 09:47:08'.
 This parser implements several quirks to match malformed
 timestamps from some devices.
 
-::
-
-    %date:date-rfc3164%
-
 date-rfc5424
 ############
 
@@ -346,18 +514,11 @@ Valid date/time in RFC5424 format, i.e.:
 '1985-04-12T19:20:50.52-04:00'.
 Slightly different formats are allowed.
 
-::
-
-    %date:date-rfc5424%
 
 ipv4
 ####
 
 IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
-
-::
-
-    %ip-src:ipv4%
 
 ipv6
 ####
@@ -372,10 +533,6 @@ To avoid false positives, there must be either a whitespace
 character after the IPv6 address or the end of string must be
 reached.
 
-::
-
-    %ip-src:ipv6%
-
 mac48
 #####
 
@@ -385,10 +542,6 @@ separated by hyphens (-) or colons (:), in transmission order
 (e.g. 01-23-45-67-89-ab or 01:23:45:67:89:ab ).
 This form is also commonly used for EUI-64.
 from: http://en.wikipedia.org/wiki/MAC_address
-
-::
-
-    %mac:mac48%
 
 cef
 ###
@@ -403,7 +556,7 @@ extracted into a container called "Extensions" beneath it.
 Example
 .......
 
-Rule::
+Rule (compact format)::
 
     rule=:%f:cef'
 
@@ -443,9 +596,6 @@ If someone has a definitive reference or a sample set to contribute
 to the project, please let us know and we will check if we need to
 add additional transformations.
 
-::
-
-    %fields:checkpoint-lea%
 
 cisco-interface-spec
 ####################
@@ -478,7 +628,7 @@ broader parser which would potentially match many things that are
 As this object extracts multiple subelements, it create a JSON
 structure. 
 
-Let's for example look at this definiton::
+Let's for example look at this definiton (compact format)::
 
     %ifaddr:cisco-interface-spec%
 
@@ -493,357 +643,6 @@ Then the resulting JSON will be as follows::
 Subcomponents that are not given in the to-be-normalized string are
 also not present in the resulting JSON.
 
-tokenized
-#########
-
-Values of any field-type separated by some sort of token. 
-It returns json array of tokens when matched.
-Additional arguments are tokenizing subsequence, followed by 
-expected type of single token.
-
-Here is an expression that'd match IPv4 addresses separated 
-by ', ' (comma + space). Given string "192.168.1.2, 192.168.1.3, 192.168.1.4"
-it would produce: { my_ips: [ "192.168.1.2", "192.168.1.3", "192.168.1.4" ] }
-
-::
-
-    %my_ips:tokenized:, :ipv4%
-
-However, it can be made multi-level deep by chaining. 
-The expression below for instance, would match numbers 
-sepated by '#' which occur in runs separated by ' : ' 
-which occur in runs separated by ', '. 
-So given "10, 20 : 30#40#50 : 60#70#80, 90 : 100"
-it would produce: { some_nos: [ [ [ "10" ] ], [ [ "20" ], [ "30", "40", "50" ], 
-[ "60", "70", "80" ] ], [ [ "90" ], [ "100" ] ] ] }
-
-::
-   
-   %some_nos:tokenized:, :tokenized: \x3a :tokenized:#:number%
-
-Note how colon (:) is used unescaped when using as field-pattern, but is escaped when 
-used as tokenizer subsequence. The same would appply to use of % character.
-
-recursive
-#########
-
-Value that matches some other rule defined in the same rulebase. Its called
-recursive because it invokes the entire parser-tree again.
-
-The invocation below will call the entire ruleset again and put the parsed
-content under the key 'foo'.
-
-::
-
-    %foo:recursive%
-
-However, matching initial fragment of text requires the remaining 
-(suffix-fragment) portion of it to be matched and given back to 
-original field so it can be matched by remaining portion of rule
-which follows the matched fragmet(remember, it is being called to 
-match only a portion of text from another rule). 
-
-Additional argument can be passed to pick field-name to be used for 
-returning unmatched text. It is optional, and defaults to 'tail'. The
-example below uses 'remains' as the field name insteed of 'tail'.
-
-::
-
-    %foo:recursive:remains%
-
-Recursive fields are often useful in combination with tokenized field.
-This ruleset for instance, will match multiple IPv4 addresses or 
-Subnets in expected message.
-
-::
-
-    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%tail:rest%
-    rule=:%ip_addr:ipv4%%tail:rest%
-    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive% to %server_ip:ipv4%
-
-Given "blocked inbound via: 192.168.1.1 from: 1.2.3.4, 16.17.18.0/8, 12.13.14.15, 19.20.21.24/3 to 192.168.1.5"
-would produce: 
-
-.. code-block:: json
-
-  {
-  "addresses": [
-    {"ip_addr": "1.2.3.4"}, 
-    {"subnet_addr": "16.17.18.0", "subnet_mask": "8"}, 
-    {"ip_addr": "12.13.14.15"}, 
-    {"subnet_addr": "19.20.21.24", "subnet_mask": "3"}], 
-  "server_ip": "192.168.1.5",
-  "via_ip": "192.168.1.1"}
-
-Notice how 'tail' field is used in first two rules to capture unmatched 
-text, which is then matched against the remaining portion of rule.
-This example can be rewritten to use arbitrary field-name to capture 
-unmatched portion of text. The example below is rewritten to use field 
-'remains' to capture it insteed of 'tail'.
-
-::
-
-    rule=:%subnet_addr:ipv4%/%subnet_mask:number%%remains:rest%
-    rule=:%ip_addr:ipv4%%remains:rest%
-    rule=:blocked inbound via: %via_ip:ipv4% from: %addresses:tokenized:, :recursive:remains% to %server_ip:ipv4%
-
-descent
-#######
-
-Value that matches some other rule defined in a different rulebase. Its called
-descent because it descends down to a child rulebase and invokes the entire 
-parser-tree again. Its like recursive, except it calls a different rulebase for
-recursive parsing(as opposed to recursive which calls itself). It takes two 
-arguments, first is the file name and second is optional argument explained 
-below.
-
-The invocation below will call the ruleset in /foo/bar.rulebase and put the 
-parsed content under the key 'foo'.
-
-::
-
-    %foo:descent:/foo/bar.rulebase%
-
-Like recursive, matching initial fragment of text requires the remaining 
-(suffix-fragment) portion of it to be matched and given back to 
-original field(this is explained in detail in documentation for recursive 
-field).
-
-Additional argument can be passed to pick field-name to be used for 
-returning unmatched text. It is optional, and defaults to 'tail'. The
-example below uses 'remains' as the field name insteed of 'tail'.
-
-::
-
-    %foo:descent:/foo/bar.rulebase:remains%
-
-Like recursive, descent field is often useful in combination with tokenized 
-field. The usage example for this would look very similar to that of recursive 
-(with field declaration changing to include rulebase path).
-
-This brings with it the overhead of having to maintain multiple rulebase files, 
-but also helps alleviate complexity when a single ruleset becomes too complex.
-
-regex
-#####
-
-Field matched by a given regex.
-
-This internally uses PCRE (http://www.pcre.org/).
-
-Note that regex based field is slower and computationally heavier
-compared to other statically supported field-types. Because of potential
-performance penalty, support for regex is disabled by default. It can be enabled
-by providing appropriate options to tooling/library/scripting layer that interfaces with
-liblognorm (for instance, by using '-oallowRegex' as a commandline arg with lognormalizer
-or using 'allowRegex="on"' in rsyslog module load statement). In many cases use of regex
-can be avoided by use of 'recursive' field.
-
-Additional arguments are regular-expression (mandatory), followed by 2 optional arguments,
-namely consume-group and return-group. Consume-group identifies the matched-subsequence
-which will be treated as part of string consumed by the field, and the return-group is the 
-part of string which the field returns (that is, the picked value for the field). Both 
-consume-group and return-group default to 0(which is the portion matched by entire expression). 
-If consume-group number is provided, return-group number defaults to consume-group as well.
-
-Special characters occuring in regular-expression must be escaped.
-
-Here is an example of regex based field declaration (with default consume and return group), 
-which is equivallent to native field-type 'word'.
-
-::
-
-    %a_word:regex:[^ ]+%
-
-Here is an expression that'd extract a numeric-sequence surrounded by some relevant text,
-some of which we want to consume as a part of matching this field, and parts which we 
-want to leave for next field to consume. With input "sales 200k with margin 6%"
-this should produce: { margin_pct: "6", sale_worth: "200" }
-
-::
-
-    %sale_worth:regex:(sales (\d+)k with) margin:1:2% %margin_pct:regex:margin (\d+)\x25:0:1%
-
-It can sometimes be useful in places where eger matching by native field-type-definitions
-become a problem, such as trying to extract hostnames from this string "hostnames are foo.bar,
-bar.baz, baz.quux". Using %hostnames:tokenized:, :word% doesn't work, becuase word ends up 
-consuming the comma as well. So the using regex here can be helpful.
-
-::
-
-   hostnames are %hostnames:tokenized:, :regex:[^, ]+%
-
-Note that consume-group must match content starting at the begining of string, else it wouldn't
-be considererd matching anything at all.
-
-interpret
-#########
-
-Meta field-type to re-interpret matched content as any supported type.
-
-This field doesn't match text on its own, it just re-interprets the matched content and
-passes it out as desired type. The matcher field-type is passed as one of the arguments to 
-it.
-
-It needs 2 additional options, the first is desired type that matched content should 
-be re-interpreted to, and second is actual field-declaration which is used to match the content.
-
-Special characters such as percent(%) and colon(:) occuring as a part of arguments to 
-field-declaration must be escaped similar to first-class usage of the field.
-
-Here is an example that shows how reinterpret field can be used to extract an integer from 
-matched content.
-
-::
-
-    %count:interpret:int:word%
-
-Here is a more elaborate example which extracts multiple integer and double values. 
-(Note how latency_percentile field uses escaping, its no different from directly calling char-to).
-
-::
-
-    record count for shard [%shard:interpret:base16int:char-to:]%] is %record_count:interpret:base10int:number% and %latency_percentile:interpret:float:char-to:\x25%\x25ile latency is %latency:interpret:float:word% %latency_unit:word%
-
-Given text "record count for shard [3F] is 50000 and 99.99%ile latency is 2.1 seconds" the 
-above rule would produce the following:
-
-.. code-block:: json
-
-  {"shard": 63, 
-   "record_count": 50000, 
-   "latency_percentile": 99.99, 
-   "latency": 2.1, 
-   "latency_unit" : "seconds"}
-
-To contrast this with a interpret-free version, the rule(without interpret) would look like:
-
-::
-
-    record count for shard [%shard:char-to:]%] is %record_count:number% and %latency_percentile:char-to:\x25%\x25ile latency is %latency:word% %latency_unit:word%
-
-And would produce:
-
-.. code-block:: json
-
-  {"shard": "3F", 
-   "record_count": "50000", 
-   "latency_percentile": "99.99", 
-   "latency": "2.1", 
-   "latency_unit" : "seconds"}
-
-Interpret fields is generally useful when generated json needs to be consumed by an indexing-system
-of some kind (eg. database), because ordering and indexing mechanism of a string is very different from
-that of a number or a boolean, and keeping it in its native type allows for powerful aggregation and 
-querying.
-
-Here is a table of supported interpretation:
-
-+-----------+----------------------+---------------+----------------+
-| type      | description          | matched value | returned value |
-+-----------+----------------------+---------------+----------------+
-| int       | integer value        | "100"         | 100            |
-+-----------+----------------------+---------------+----------------+
-| base10int | integer value        | "100"         | 100            |
-+-----------+----------------------+---------------+----------------+
-| base16int | integer value        | "3F"          | 163            |
-+-----------+----------------------+---------------+----------------+
-| float     | floating point value | "19.35"       | 19.35          |
-+-----------+----------------------+---------------+----------------+
-| bool      | boolean value        | "true"        | true           |
-+-----------+----------------------+---------------+----------------+
-|           |                      | "false"       | false          |
-+-----------+----------------------+---------------+----------------+
-|           |                      | "yes"         | true           |
-+-----------+----------------------+---------------+----------------+
-|           |                      | "no"          | false          |
-+-----------+----------------------+---------------+----------------+
-|           |                      | "TRUE"        | true           |
-+-----------+----------------------+---------------+----------------+
-|           |                      | "FALSE"       | false          |
-+-----------+----------------------+---------------+----------------+
-
-suffixed
-########
-
-Value that can be matched by any available field-type but also has one
-of many suffixes which must be captured alongwith, for the captured data
-to be used sensibly.
-
-The invocation below will capture units alongwith quantity.
-
-::
-
-    %free_space:suffixed:,:b,kb,mb,gb:number%
-
-It takes 3 arguments. First is delimiter for possible-suffixes enumeration,
-second is the enumeration itself (separated by declared delimiter) and third
-captures type to be used to parse the value itself.
-
-It returns an object with key "value" which holds the parsed value and
-a key "suffix" which captures which one of the provided suffixes was found
-after it.
-
-Here is an example that parses suffixed values:
-
-::
-
-    rule=:reclaimed %eden_reclaimed:suffixed:,:b,kb,mb,gb:number% from eden
-
-Given text "reclaimed 115mb from eden" the 
-above rule would produce:
-
-.. code-block:: json
-
-  {
-    "eden_reclaimed":
-      {
-        "value": "115", 
-        "suffix": "mb"
-      }
-  }
-
-It can be used with interpret to actually get numeric values, and field-type
-named_suffix field can be used if the default keys used are not sensible.
-
-named_suffixed
-##############
-
-Works exactly like suffixed, but allows user to specify key-litterals for "value"
-and "suffix" fields.
-
-The invocation below will capture units alongwith quantity.
-
-::
-
-    %free_space:named_suffixed:mem:unit:,:b,kb,mb,gb:number%
-
-It takes 5 arguments. First is the litteral to be used as key for parsed-value,
-second is key-litteral for suffix, and list three which exactly match field-type
-suffixed. Third is delimiter for possible-suffixes enumeration,
-fourth is the enumeration itself (separated by declared delimiter)
-and fifth captures type to be used to parse the value itself.
-
-Here is an example that parses suffixed values:
-
-::
-
-    rule=:reclaimed %eden_reclaimed:named_suffixed:mem:unit:,:b,kb,mb,gb:number% from eden
-
-Given text "reclaimed 115mb from eden" the 
-above rule would produce:
-
-.. code-block:: json
-
-  {
-    "eden_reclaimed":
-      {
-        "mem": "115", 
-        "unit": "mb"
-      }
-  }
-
-
 iptables
 ########    
 
@@ -851,10 +650,6 @@ Name=value pairs, separated by spaces, as in Netfilter log messages.
 Name of the selector is not used; names from the line are 
 used instead. This selector always matches everything till 
 end of the line. Cannot match zero characters.
-
-::
-
-    %-:iptables%
 
 cisco-interface-spec
 ####################
@@ -883,14 +678,10 @@ Note that any white space after the actual JSON
 is considered **to be part of the JSON**. So you cannot filter on whitespace
 after the JSON.
 
-::
-
-    %data:json%
-
 Example
 .......
 
-Rule::
+Rule (compact format)::
 
     rule=:%field1:json%interim text %field2:json%'
 
@@ -905,6 +696,136 @@ Result::
 Note also that the space before "interim" must **not** be given in the
 rule, as it is consumed by the JSON parser. However, the space after
 "text" is required.
+
+alternative
+###########
+
+This type permits to specify alternative ways of parsing within a single
+definition. This can make writing rule bases easier. It also permits the
+v2 engine to create a more efficient parsing data structure resulting in
+better performance (to be noticed only in extreme cases, though).
+
+An example explains this parser best::
+
+    rule=:a %
+            {"type":"alternative",
+	     "parser": [
+	                {"name":"num", "type":"number"},
+			{"name":"hex", "type":"hexnumber"}
+		       ]
+	    }% b
+
+This rule matches messages like these::
+
+   a 1234 b
+   a 0xff b
+
+Note that the "parser" parameter here needs to be provided with an array
+of *alternatives*. In this case, the JSON array is **not** interpreted as
+a sequence. Note, though that you can nest defintions by using custom types.
+ 
+repeat
+######
+This parser is used to extract a repeated sequence with the same pattern.
+
+An example explains this parser best::
+
+    rule=:a %
+            {"name":"numbers", "type":"repeat",
+                "parser":[
+                           {"type":"number", "name":"n1"},
+                           {"type":"literal", "text":":"},
+	                   {"type":"number", "name":"n2"}
+	                 ],
+	        "while":[
+	                   {"type":"literal", "text":", "}
+	                ]
+             }% b
+
+This matches lines like this::
+    
+    a 1:2, 3:4, 5:6, 7:8 b
+
+and will generate this JSON::
+
+    { "numbers": [
+                   { "n2": "2", "n1": "1" },
+		   { "n2": "4", "n1": "3" },
+		   { "n2": "6", "n1": "5" },
+		   { "n2": "8", "n1": "7" }
+		 ]
+    }
+
+As can be seen, there are two parameters to "alternative". The parser
+parameter specifies which type should be repeatedly parsed out of
+the input data. We could use a single parser for that, but in the example
+above we parse a sequence. Note the nested array in the "parser" parameter.
+
+If we just wanted to match a single list of numbers like::
+
+    a 1, 2, 3, 4 b
+
+we could use this definition::
+
+    rule=:a %
+            {"name":"numbers", "type":"repeat",
+                "parser":
+                         {"type":"number", "name":"n"},
+	        "while":
+	                 {"type":"literal", "text":", "}
+             }% b
+
+Note that in this example we also removed the redundant single-element
+array in "while".
+
+The "while" parameter tells "repeat" how long to do repeat processing. It
+is specified by any parser, including a nested sequence of parser (array).
+As long as the "while" part matches, the repetition is continued. If it no
+longer matches, "repeat" processing is successfully completed. Note that
+the "parser" parameter **must** match at least once, otherwise "repeat"
+fails.
+
+In the above sample, "while" mismatches after "4", because no ", " follows.
+Then, the parser termiantes, and according to definition the literal " b"
+is matched, which will result in a successful rule match (note: the "a ",
+" b" literals are just here for explanatory purposes and could be any
+other rule element).
+
+Sometimes we need to deal with malformed messages. For example, we
+could have a sequence like this::
+
+    a 1:2, 3:4,5:6, 7:8 b
+
+Note the missing space after "4,". To handle such cases, we can nest the
+"alternative" parser inside "while"::
+
+    rule=:a %
+            {"name":"numbers", "type":"repeat",
+                "parser":[
+                           {"type":"number", "name":"n1"},
+                           {"type":"literal", "text":":"},
+	                   {"type":"number", "name":"n2"}
+	                 ],
+                "while": {
+                            "type":"alternative", "parser": [
+                                    {"type":"literal", "text":", "},
+                                    {"type":"literal", "text":","}
+                             ]
+                         }
+             }% b
+
+This definition handles numbers being delemited by either ", " or ",".
+
+For people with programming skills, the "repeat" parser is described
+by this pseudocode::
+
+    do
+        parse via parsers given in "parser"
+	if parsing fails
+	    abort "repeat" unsuccessful
+	parse via parsers given in "while"
+    while the "while" parsers parsed successfully
+    if not aborted, flag "repeat" as successful
 
 cee-syslog
 ##########
@@ -922,10 +843,6 @@ In other words: the message must consist of a single JSON object only,
 prefixed by the "@cee:" cookie.
 
 Note that the cee cookie is case sensitive, so "@CEE:" is **NOT** valid.
-
-::
-
-    %data:cee-syslog%
 
 Prefixes
 --------
@@ -945,7 +862,7 @@ Prefix can be reset to default (empty value) by the line::
 You can define a prefix for devices that produce the same header in each 
 message. We assume, that you have your rules sorted by device. In such a 
 case you can take the header of the rules and use it with the prefix 
-variable. Here is a example of a rule for IPTables::
+variable. Here is a example of a rule for IPTables (legacy format, to be converted later)::
 
     prefix=%date:date-rfc3164% %host:word% %tag:char-to:-\x3a%:
     rule=:INBOUND%INBOUND:char-to:-\x3a%: IN=%IN:word% PHYSIN=%PHYSIN:word% OUT=%OUT:word% PHYSOUT=%PHYSOUT:word% SRC=%source:ipv4% DST=%destination:ipv4% LEN=%LEN:number% TOS=%TOS:char-to: % PREC=%PREC:word% TTL=%TTL:number% ID=%ID:number% DF PROTO=%PROTO:word% SPT=%SPT:number% DPT=%DPT:number% WINDOW=%WINDOW:number% RES=0x00 ACK SYN URGP=%URGP:number%
@@ -1023,4 +940,5 @@ Examples
 --------
 
 Look at :doc:`sample rulebase <sample_rulebase>` for configuration 
-examples and matching log lines. 
+examples and matching log lines. Note that the examples are currently
+in legacy format, only.
