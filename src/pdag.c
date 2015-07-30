@@ -207,7 +207,11 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	json_object_object_get_ex(prscnf, "name", &json);
-	name = strdup((json == NULL) ? "-" : json_object_get_string(json));
+	if(json == NULL || !strcmp(json_object_get_string(json), "-")) {
+		name = NULL;
+	} else {
+		name = strdup(json_object_get_string(json));
+	}
 
 	json_object_object_get_ex(prscnf, "priority", &json);
 	const int assignedPrio = json_object_get_int(json);
@@ -217,8 +221,9 @@ ln_newParser(ln_ctx ctx,
 	 * that we can pass the remaining parameters to the parser.
 	 */
 	json_object_object_del(prscnf, "type");
-	json_object_object_del(prscnf, "name");
 	json_object_object_del(prscnf, "priority");
+	if(name != NULL)
+		json_object_object_del(prscnf, "name");
 
 	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
@@ -314,7 +319,7 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 		  )
 			goto done;
 		// TODO: think about names if literal is actually to be parsed!
-		// check name == "-"?
+		// check name == NULL?
 		// also check if isTerminal!
 
 		/* ok, we have two literals in a row, let's compact the nodes */
@@ -810,7 +815,7 @@ done:
 }
 
 
-// TODO: remove once all parsers properly generate JSON
+/* Do some fixup to the json that we cannot do on a lower layer */
 static int
 fixJSON(struct ln_pdag *dag,
 	struct json_object **value,
@@ -821,12 +826,12 @@ fixJSON(struct ln_pdag *dag,
 	int r = LN_WRONGPARSER;
 
 	ln_dbgprintf(dag->ctx, "in  field name '%s', json: '%s', value: '%s'", prs->name, json_object_to_json_string(json), json_object_to_json_string(*value));
-	if(!strcmp(prs->name, "-")) {
+	if(prs->name ==  NULL) {
 		if (*value != NULL) {
 			/* Free the unneeded value */
 			json_object_put(*value);
 		}
-	} else if(!strcmp(prs->name, ".")) {
+	} else if(prs->name != NULL && !strcmp(prs->name, ".")) {
 		if(json_object_get_type(*value) == json_type_object) {
 			json_object_object_foreach(*value, key, val) {
 				ln_dbgprintf(dag->ctx, "key: %s, json: %s", key, json_object_to_json_string(val));
@@ -876,10 +881,11 @@ tryParser(struct ln_pdag *dag,
 		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
 				    pParsed, *value, &endNode);
 		*pParsed -= *offs;
-		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s", prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
+		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s",
+			prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
-			offs, prs->parser_data, pParsed, strcmp(prs->name, "-") ? value : NULL);
+			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
 		ln_dbgprintf(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
 	return r;

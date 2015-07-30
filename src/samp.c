@@ -263,8 +263,6 @@ newLiteralParserJSONConf(char lit)
 	buf[0] = lit;
 	struct json_object *val;
 	struct json_object *prscnf = json_object_new_object();
-	val = json_object_new_string("-");
-	json_object_object_add(prscnf, "name", val);
 
 	val = json_object_new_string("literal");
 	json_object_object_add(prscnf, "type", val);
