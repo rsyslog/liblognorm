@@ -593,6 +593,7 @@ done:
 	return r;
 }
 
+static int ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag, const int mode, json_object *const prscnf, struct ln_pdag **nextnode);
 
 /**
  * add parsers to current pdag. This is used
@@ -605,38 +606,53 @@ static int
 ln_pdagAddParsers(ln_ctx ctx,
 	json_object *const prscnf,
 	const int mode,
-	struct ln_pdag **pdag)
+	struct ln_pdag **pdag,
+	struct ln_pdag **p_nextnode)
 {
 	int r = LN_BADCONFIG;
-	struct ln_pdag *nextnode = NULL;
+	struct ln_pdag *dag = *pdag;
+	struct ln_pdag *nextnode = *p_nextnode;
 	
 	const int lenarr = json_object_array_length(prscnf);
 	for(int i = 0 ; i < lenarr ; ++i) {
 		struct json_object *const curr_prscnf =
 			json_object_array_get_idx(prscnf, i);
 		ln_dbgprintf(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
-		CHKR(ln_pdagAddParserInstance(ctx, curr_prscnf, *pdag, &nextnode));
+		if(json_object_get_type(curr_prscnf) == json_type_array) {
+			struct ln_pdag *local_dag = dag;
+			CHKR(ln_pdagAddParserInternal(ctx, &local_dag, mode,
+						      curr_prscnf, &nextnode));
+			if(mode == PRS_ADD_MODE_SEQ) {
+				dag = local_dag;
+			}
+		} else {
+			CHKR(ln_pdagAddParserInstance(ctx, curr_prscnf, dag, &nextnode));
+		}
 		if(mode == PRS_ADD_MODE_SEQ) {
-			*pdag = nextnode;
+			dag = nextnode;
+			*p_nextnode = nextnode;
 			nextnode = NULL;
 		}
 	}
 
 	if(mode != PRS_ADD_MODE_SEQ)
-		*pdag = nextnode;
+		dag = nextnode;
+	*pdag = dag;
 	r = 0;
 done:
 	return r;
 }
 
 /* add a json parser config object. Note that this object may contain
- * multiple parser instances.
+ * multiple parser instances. Additionally, moves the pdag object to
+ * the next node, which is either newly created or previously existed.
  */
-int
-ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
+static int
+ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag, 
+	const int mode, json_object *const prscnf, struct ln_pdag **nextnode)
 {
 	int r = LN_BADCONFIG;
-	struct ln_pdag *nextnode = NULL;
+	struct ln_pdag *dag = *pdag;
 	
 	if(json_object_get_type(prscnf) == json_type_object) {
 		/* check for special types we need to handle here */
@@ -652,22 +668,35 @@ ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
 					json_type_to_name(json_object_get_type(json)));
 				goto done;
 			}
-			CHKR(ln_pdagAddParsers(ctx, json, PRS_ADD_MODE_ALTERNATIVE, pdag));
+			CHKR(ln_pdagAddParsers(ctx, json, PRS_ADD_MODE_ALTERNATIVE, &dag, nextnode));
 		} else {
-			CHKR(ln_pdagAddParserInstance(ctx, prscnf, *pdag, &nextnode));
-			*pdag = nextnode;
+			CHKR(ln_pdagAddParserInstance(ctx, prscnf, dag, nextnode));
+			if(mode == PRS_ADD_MODE_SEQ)
+				dag = *nextnode;
 		}
 	} else if(json_object_get_type(prscnf) == json_type_array) {
-		CHKR(ln_pdagAddParsers(ctx, prscnf, PRS_ADD_MODE_SEQ, pdag));
+		CHKR(ln_pdagAddParsers(ctx, prscnf, PRS_ADD_MODE_SEQ, &dag, nextnode));
 	} else {
 		ln_errprintf(ctx, 0, "bug: prscnf object of wrong type. Object: '%s'",
 			json_object_to_json_string(prscnf));
 		goto done;
 	}
+	*pdag = dag;
 
 done:
 	json_object_put(prscnf);
 	return r;
+}
+
+/* add a json parser config object. Note that this object may contain
+ * multiple parser instances. Additionally, moves the pdag object to
+ * the next node, which is either newly created or previously existed.
+ */
+int
+ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
+{
+	struct ln_pdag *nextnode = NULL;
+	return ln_pdagAddParserInternal(ctx, pdag, PRS_ADD_MODE_SEQ, prscnf, &nextnode);
 }
 
 
