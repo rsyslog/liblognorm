@@ -80,7 +80,7 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("char-sep", CharSeparated, 32)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
-
+#define DFLT_USR_PARSER_PRIO 30000 /**< default priority if user has not specified it */
 static inline const char *
 parserName(const prsid_t id)
 {
@@ -214,7 +214,8 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	json_object_object_get_ex(prscnf, "priority", &json);
-	const int assignedPrio = json_object_get_int(json);
+	const int assignedPrio = (json == NULL) ? DFLT_USR_PARSER_PRIO :
+						  json_object_get_int(json);
 	ln_dbgprintf(ctx, "assigned priority is %d", assignedPrio);
 
 	/* we need to remove already processed items from the config, so
