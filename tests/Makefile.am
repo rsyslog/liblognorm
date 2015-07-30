@@ -17,6 +17,7 @@ TESTS_SHELLSCRIPTS = \
 	field_mac48.sh \
 	field_name_value.sh \
 	field_kernel_timestamp.sh \
+	field_strings.sh \
 	field_whitespace.sh \
 	field_rest.sh \
 	field_json.sh \

@@ -116,6 +116,11 @@ int ln_parseRest(const char *str, size_t strlen, size_t *offs, const ln_fieldLis
 int ln_parseOpQuotedString(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 /** 
+ * Parse a quoted string with escape sequences.
+ */
+int ln_parseEscapedString(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
+/** 
  * Parse a quoted string.
  */
 int ln_parseQuotedString(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);

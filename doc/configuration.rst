@@ -200,6 +200,18 @@ up to end of line.
 
     %host:word%
 
+string
+######
+
+Parses a bash-style string, with quoting and escaping.
+Characters can be escaped by preceding them with a backslash (\\).
+Additionally, inside double quotes, two consecutive double quote
+characters are converted to one double quote in the resulting string.
+
+::
+
+    %field-name:string%
+
 string-to
 ######### 
 
