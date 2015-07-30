@@ -33,6 +33,7 @@ TESTS_SHELLSCRIPTS = \
 	repeat_very_simple.sh \
 	repeat_simple.sh \
 	repeat_while_alternative.sh \
+	repeat_alternative_nested.sh \
 	parser_prios.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \
