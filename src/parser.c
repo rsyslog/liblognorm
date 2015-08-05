@@ -806,6 +806,51 @@ done:
 }
 
 
+/* check if a char is valid inside a name of a NameValue list
+ * The set of valid characters may be extended if there is good
+ * need to do so. We have selected the current set carefully, but
+ * may have overlooked some cases.
+ */
+static inline int
+isValidNameChar(const char c)
+{
+	return (isalnum(c)
+		|| c == '.'
+		|| c == '_'
+		|| c == '-'
+		) ? 1 : 0;
+}
+/**
+ * Parse a name.
+ * A name is a word that is composed of alphanumerics, hyphens, underscores or periods.
+ * The parser dones if there is no alpha character at all.
+ */
+PARSER(Name)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* search end of word */
+	while(i < strLen && isValidNameChar(c[i])) 
+		i++;
+
+	if(i == *offs) {
+		goto done;
+	}
+
+	/* success, persist */
+	*parsed = i - *offs;
+	r = 0; /* success */
+done:
+	return r;
+}
+
+
 /**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
@@ -2518,20 +2563,6 @@ done:
 }
 
 
-/* check if a char is valid inside a name of a NameValue list
- * The set of valid characters may be extended if there is good
- * need to do so. We have selected the current set carefully, but
- * may have overlooked some cases.
- */
-static inline int
-isValidNameChar(const char c)
-{
-	return (isalnum(c)
-		|| c == '.'
-		|| c == '_'
-		|| c == '-'
-		) ? 1 : 0;
-}
 /* helper to NameValue parser, parses out a a single name=value pair 
  *
  * name must be alphanumeric characters, value must be non-whitespace

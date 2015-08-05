@@ -183,6 +183,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseWord;
 	} else if(!es_strconstcmp(*str, "alpha")) {
 		node->parser = ln_parseAlpha;
+	} else if(!es_strconstcmp(*str, "name")) {
+		node->parser = ln_parseName;
 	} else if(!es_strconstcmp(*str, "rest")) {
 		node->parser = ln_parseRest;
 	} else if(!es_strconstcmp(*str, "op-quoted-string")) {
