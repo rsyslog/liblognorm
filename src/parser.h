@@ -93,6 +93,11 @@ int ln_parseStringTo(const char *str, size_t strlen, size_t *offs, const ln_fiel
  */
 int ln_parseAlpha(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
+/** 
+ * Parser for Alphanumeric words (composed of letters and numbers; not punct, ctrl, space).
+ */
+int ln_parseAlnum(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
+
 
 /** 
  * Parse everything up to a specific character.

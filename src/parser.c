@@ -807,6 +807,36 @@ done:
 
 
 /**
+ * Parse an alphanumeric word.
+ * An alphanumeric word is composed of characters for which isalnum() returns true.
+ */
+PARSER(Alnum)
+	const char *c;
+	size_t i;
+
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	c = str;
+	i = *offs;
+
+	/* search end of word */
+	while(i < strLen && isalnum(c[i])) 
+		i++;
+
+	if(i == *offs) {
+		goto done;
+	}
+
+	/* success, persist */
+	*parsed = i - *offs;
+	r = 0; /* success */
+done:
+	return r;
+}
+
+
+/**
  * Parse everything up to a specific character.
  * The character must be the only char inside extra data passed to the parser.
  * It is a program error if strlen(ed) != 1. It is considered a format error if
