@@ -1,11 +1,12 @@
 - the lognormalizer tool now defaults to json output format
 - API changes
-  * ln_loadSamples() --> ln_loadRulebase()
-- loading of samples at runtime is no longer possible. This is due to
-  the fact that the parse DAG is compiled into the most efficient form
-  and thereafter read-only. If urgently needed, we could change the code
-  so that the unoptimized form is kept (memory intense) and a re-compile
-  happens after each addition (time intense).
+  * ln_loadSamples() replaced by ln_loadRulebase() and no longer exists
+  * ln_loadSample() does no longer exist
+    loading of samples at runtime is no longer possible. This is due to
+    the fact that the parse DAG is compiled into the most efficient form
+    and thereafter read-only. If urgently needed, we could change the code
+    so that the unoptimized form is kept (memory intense) and a re-compile
+    happens after each addition (time intense).
 - the plain old iptables parser is no longer supported. Sorry for that,
   but keeping it would have caused violation of layers. It can be
   replaced by the new one
