@@ -298,7 +298,6 @@ ln_buildPTree(struct ln_ptree *tree, es_str_t *str, size_t offs)
 	unsigned short ipfix;
 
 	assert(tree != NULL);
-fprintf(stderr, "tree %p\n", tree);
 	ln_dbgprintf(tree->ctx, "buildPTree: begin at %p, offs %zu", tree, offs);
 	c = es_getBufAddr(str);
 
