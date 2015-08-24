@@ -13,6 +13,7 @@ user_test_LDFLAGS = -no-install
 TESTS_SHELLSCRIPTS = \
 	parser_whitespace.sh \
 	parser_LF.sh \
+	missing_line_ending.sh \
 	field_hexnumber.sh \
 	field_mac48.sh \
 	field_name_value.sh \
@@ -54,6 +55,7 @@ REGEXP_TESTS = \
 	field_regex_while_regex_support_is_disabled.sh
 
 EXTRA_DIST = exec.sh \
+	missing_line_ending.rb \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
 	$(json_eq_self_sources) \

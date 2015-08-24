@@ -3,7 +3,9 @@
 . $srcdir/exec.sh
 
 test_def $0 "dmac48 syntax"
-add_rule 'rule=:%field:mac48%'
+# we need to use a canned file, as we cannot easily reproduce the
+# malformed lines
+cp missing_line_ending.rb $(rulebase_file_name)
 
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
@@ -20,4 +22,4 @@ execute 'f0:f6:1c:xf:cc:a2'
 assert_output_json_eq '{ "originalmsg": "f0:f6:1c:xf:cc:a2", "unparsed-data": "f0:f6:1c:xf:cc:a2" }'
 
 
-cleanup_tmp_files
+#cleanup_tmp_files
