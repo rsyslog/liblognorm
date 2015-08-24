@@ -2,10 +2,10 @@
 # This file is part of the liblognorm project, released under ASL 2.0
 . $srcdir/exec.sh
 
-test_def $0 "missing line ending"
+test_def $0 "missing line ending (v1)"
 # we need to use a canned file, as we cannot easily reproduce the
 # malformed lines
-cp missing_line_ending.rb $(rulebase_file_name)
+cp missing_line_ending_v1.rb $(rulebase_file_name)
 
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'

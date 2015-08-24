@@ -73,6 +73,7 @@ TESTS_SHELLSCRIPTS = \
 
 # now come tests for the legacy (v1) engine
 TESTS_SHELLSCRIPTS += \
+	missing_line_ending_v1.sh \
 	field_hexnumber_v1.sh \
 	field_mac48_v1.sh \
 	field_name_value_v1.sh \
@@ -117,6 +118,7 @@ REGEXP_TESTS = \
 
 EXTRA_DIST = exec.sh \
 	missing_line_ending.rb \
+	missing_line_ending_v1.rb \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
 	$(json_eq_self_sources) \
