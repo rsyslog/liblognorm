@@ -787,6 +787,37 @@ done:
 }
 
 
+/* this checks if in a multi-line rule, the next line seems to be a new
+ * rule, which would meand we have some unmatched percent signs inside
+ * our rule (what we call a "runaway rule"). This can easily happen and
+ * is otherwise hard to debug, so let's see if it is the case...
+ * @return 1 if this is a runaway rule, 0 if not
+ */
+static int
+chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
+{
+	int r = 1;
+	fpos_t fpos;
+	char buf[6];
+
+	fgetpos(repo, &fpos);
+	if(fread(buf, sizeof(char), sizeof(buf)-1, repo) != 5)
+		goto done;
+	buf[5] = '\0';
+	if(!strcmp(buf, "rule=")) {
+		ln_errprintf(ctx, 0, "line %d has 'rule=' at begin of line, which "
+			"does look like a typo in the previous lines (unmatched "
+			"%% character) and is forbidden. If valid, please re-foramt "
+			"the rule to start with other characters. Rule ignored.",
+			linenbr);
+		goto done;
+	}
+
+	r = 0;
+done:
+	fsetpos(repo, &fpos);
+	return r;
+}
 struct ln_samp *
 ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
 {
@@ -807,6 +838,13 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 				done = 1; /* last line missing LF, still process it! */
 		} else if(c == '\n') {
 			++linenbr;
+			if(inParser) {
+				if(chkRunawayRule(ctx, repo, linenbr)) {
+					/* ignore previous rule */
+					inParser = 0;
+					i = 0;
+				}
+			}
 			if(!inParser && i != 0)
 				done = 1;
 		} else if(c == '#' && i == 0) {

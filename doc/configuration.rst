@@ -117,6 +117,17 @@ valid, so it could also be written as::
     rule=:%date:date-rfc3164% %host:word% % tag:char-to:\x3a
           %: no longer listening on %  ip:ipv4  %#%  port:number  %'
 
+To prevent a typical user error, continuation lines are **not** permitted
+to start with ``rule=``. There are some obscure cases where this could
+be a valid rule, and it can be re-formatted in that case. Moreoften, this
+is the result of a missing percent sign, as in this sample::
+
+     rule=:test%field:word ... missing percent sign ...
+     rule=:%f:word%
+
+If we would permit ``rule=`` at start of continuation line, these kinds
+of problems would be very hard to detect.
+
 Additional information is dependent on the field type; only some field 
 types need additional information.
     
