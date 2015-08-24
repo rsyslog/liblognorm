@@ -26,6 +26,7 @@ json_eq_LDFLAGS = -no-install
 # implementation is further developed.
 TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
+	missing_line_ending.sh \
 	names.sh \
 	seq_simple.sh \
 	alternative_simple.sh \
@@ -115,6 +116,7 @@ REGEXP_TESTS = \
 	field_regex_while_regex_support_is_disabled.sh
 
 EXTRA_DIST = exec.sh \
+	missing_line_ending.rb \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
 	$(json_eq_self_sources) \

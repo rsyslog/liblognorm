@@ -803,7 +803,10 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 		int c = fgetc(repo);
 		if(c == EOF) {
 			*isEof = 1;
-			goto done;
+			if(i == 0)
+				goto done;
+			else
+				done = 1; /* last line missing LF, still process it! */
 		} else if(c == '\n') {
 			++linenbr;
 			if(!inParser && i != 0)
