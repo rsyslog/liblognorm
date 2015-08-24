@@ -29,6 +29,7 @@ TESTS_SHELLSCRIPTS = \
 	missing_line_ending.sh \
 	names.sh \
 	seq_simple.sh \
+	runaway_rule.sh \
 	alternative_simple.sh \
 	alternative_nested.sh \
 	repeat_very_simple.sh \
@@ -74,6 +75,7 @@ TESTS_SHELLSCRIPTS = \
 # now come tests for the legacy (v1) engine
 TESTS_SHELLSCRIPTS += \
 	missing_line_ending_v1.sh \
+	runaway_rule_v1.sh \
 	field_hexnumber_v1.sh \
 	field_mac48_v1.sh \
 	field_name_value_v1.sh \
