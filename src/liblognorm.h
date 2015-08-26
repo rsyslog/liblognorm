@@ -194,20 +194,6 @@ int ln_setErrMsgCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *coo
  */
 void ln_enableDebug(ln_ctx ctx, int i);
 
-/**
- * Reads a sample stored in buffer buf and creates a new ln_samp object
- * out of it.
- *
- * @note
- * It is the caller's responsibility to delete the newly
- * created ln_samp object if it is no longer needed.
- *
- * @param[ctx] ctx current library context
- * @param[buf] NULL terminated cstr containing the contents of the sample
- * @return Returns zero on success, something else otherwise.
- */
-int
-ln_loadSample(ln_ctx ctx, const char *buf);
 
 /**
  * Load a (log) sample file.
