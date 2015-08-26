@@ -2568,7 +2568,21 @@ PARSER_Parse(Repeat)
 		if(json_arr == NULL) {
 			json_arr = json_object_new_array();
 		}
-		json_object_array_add(json_arr, parsed_value);
+
+		/* check for name=".", which means we need to place the
+		 * value only into to array.
+		 */
+		struct json_object *toAdd = parsed_value;
+		json_object_object_foreach(parsed_value, key, val) {
+			if(!strcmp(key, ".")) {
+				json_object_get(val); /* inc refcount! */
+				toAdd = val;
+			}
+		}
+
+		json_object_array_add(json_arr, toAdd);
+		if(toAdd != parsed_value)
+			json_object_put(parsed_value);
 		ln_dbgprintf(ctx, "arr: %s", json_object_to_json_string(json_arr));
 
 		/* now check if we shall continue */
