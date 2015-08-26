@@ -2538,6 +2538,39 @@ done:
 }
 
 
+/* helper to repeat parser constructor: checks that dot field name
+ * is only present if there is one field inside the "parser" list.
+ * returns 1 if ok, 0 otherwise.
+ */
+static int
+chkNoDupeDotInParserDefs(ln_ctx ctx, struct json_object *parsers)
+{
+	int r = 1;
+	int nParsers = 0;
+	int nDots = 0;
+	if(json_object_get_type(parsers) == json_type_array) {
+		const int maxparsers = json_object_array_length(parsers);
+		for(int i = 0 ; i < maxparsers ; ++i) {
+			++nParsers;
+			struct json_object *const parser
+				= json_object_array_get_idx(parsers, i);
+			struct json_object *const fname
+				= json_object_object_get(parser, "name");
+			if(fname != NULL) {
+				if(!strcmp(json_object_get_string(fname), "."))
+					++nDots;
+			}
+		}
+	}
+	if(nParsers > 1 && nDots > 0) {
+		ln_errprintf(ctx, 0, "'repeat' parser supports dot name only "
+			"if single parser is used in 'parser' part, invalid "
+			"construct: %s", json_object_get_string(parsers));
+			r = 0;
+	}
+	return r;
+}
+
 /**
  * "repeat" special parser.
  */
@@ -2618,6 +2651,10 @@ PARSER_Construct(Repeat)
 
 	json_object_object_foreach(json, key, val) {
 		if(!strcmp(key, "parser")) {
+			if(chkNoDupeDotInParserDefs(ctx, val) != 1) {
+				r = LN_BADCONFIG;
+				goto done;
+			}
 			endnode = data->parser = ln_newPDAG(ctx); 
 			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
@@ -2628,7 +2665,6 @@ PARSER_Construct(Repeat)
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
 		} else if(!strcasecmp(key, "option.permitMismatchInParser")) {
-			errno = 0;
 			data->permitMismatchInParser = json_object_get_boolean(val);
 		} else {
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
