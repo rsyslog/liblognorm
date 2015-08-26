@@ -933,9 +933,7 @@ tryParser(struct ln_pdag *dag,
  * @param[in/out] json ... that is being created during normalization
  * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
- * @return number of characters left unparsed by following the subdag, negative if
- *         the to-be-parsed message is shorter than the rule sample by this number of
- *         characters.
+ * @return regular liblognorm error code (0->OK, something else->error)
  * TODO: can we use parameter block to prevent pushing params to the stack?
  */
 int

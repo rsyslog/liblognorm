@@ -34,6 +34,7 @@ TESTS_SHELLSCRIPTS = \
 	alternative_nested.sh \
 	repeat_very_simple.sh \
 	repeat_simple.sh \
+	repeat_mismatch_in_while.sh \
 	repeat_while_alternative.sh \
 	repeat_alternative_nested.sh \
 	parser_prios.sh \

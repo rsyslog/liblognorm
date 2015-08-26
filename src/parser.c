@@ -2555,6 +2555,8 @@ PARSER_Parse(Repeat)
 		strtoffs = longest_path;
 		ln_dbgprintf(ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, longest_path, json_object_to_json_string(parsed_value));
+		if(r != 0)
+			goto done;
 
 		if(json_arr == NULL) {
 			json_arr = json_object_new_array();
@@ -2580,6 +2582,7 @@ PARSER_Parse(Repeat)
 		*value = json_arr;
 	}
 	r = 0; /* success */
+done:
 	return r;
 }
 PARSER_Construct(Repeat)
