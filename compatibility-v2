@@ -1,6 +1,5 @@
 - the lognormalizer tool now defaults to json output format
 - API changes
-  * ln_loadSamples() replaced by ln_loadRulebase() and no longer exists
   * ln_loadSample() does no longer exist
     loading of samples at runtime is no longer possible. This is due to
     the fact that the parse DAG is compiled into the most efficient form
