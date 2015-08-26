@@ -838,6 +838,21 @@ by this pseudocode::
     while the "while" parsers parsed successfully
     if not aborted, flag "repeat" as successful
 
+Parameters
+..........
+
+option.permitMismatchInParser
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If set to "True", permits repeat to accept as successful even when
+the parser processing failed. This by default is false, and can be
+set to true to cover some border cases, where the while part cannot
+definitely detect the end of processing. An example of such a border
+case is a listing of flags, being terminated by a double space where
+each flag is delimited by single spaces. For example, Cisco products
+generate such messages (note the flags part)::
+
+    Aug 18 13:18:45 192.168.0.1 %ASA-6-106015: Deny TCP (no connection) from 10.252.88.66/443 to 10.79.249.222/52746 flags RST  on interface outside
+
 cee-syslog
 ##########
 This parses cee syslog from the message. This format has been defined

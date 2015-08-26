@@ -96,6 +96,7 @@ int ln_combineData_Literal(void *const org, void *const add);
 struct data_Repeat {
 	ln_pdag *parser;
 	ln_pdag *while_cond;
+	int permitMismatchInParser;
 };
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */

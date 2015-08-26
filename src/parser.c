@@ -2555,8 +2555,15 @@ PARSER_Parse(Repeat)
 		strtoffs = longest_path;
 		ln_dbgprintf(ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, longest_path, json_object_to_json_string(parsed_value));
-		if(r != 0)
-			goto done;
+
+		if(r != 0) {
+			if(data->permitMismatchInParser) {
+				r = 0;
+				goto success;
+			} else {
+				goto done;
+			}
+		}
 
 		if(json_arr == NULL) {
 			json_arr = json_object_new_array();
@@ -2574,6 +2581,7 @@ PARSER_Parse(Repeat)
 			strtoffs = longest_path;
 	} while(r == 0);
 
+success:
 	/* success, persist */
 	*parsed = strtoffs - *offs;
 	if(value == NULL) {
@@ -2605,6 +2613,9 @@ PARSER_Construct(Repeat)
 			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
+		} else if(!strcasecmp(key, "option.permitMismatchInParser")) {
+			errno = 0;
+			data->permitMismatchInParser = json_object_get_boolean(val);
 		} else {
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
