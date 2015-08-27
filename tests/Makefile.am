@@ -120,8 +120,6 @@ REGEXP_TESTS = \
 	field_regex_while_regex_support_is_disabled.sh
 
 EXTRA_DIST = exec.sh \
-	missing_line_ending.rb \
-	missing_line_ending_v1.rb \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
 	$(json_eq_self_sources) \

@@ -57,6 +57,12 @@ add_rule() {
     echo $1 >> $rb_file
 }
 
+add_rule_no_LF() {
+    local rb_file=$(rulebase_file_name $2)
+    echo -n $1 >> $rb_file
+}
+
+
 cleanup_tmp_files() {
     rm -f test.out *.rulebase 
 }

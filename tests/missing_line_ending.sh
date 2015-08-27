@@ -3,9 +3,10 @@
 . $srcdir/exec.sh
 
 test_def $0 "missing line ending"
-# we need to use a canned file, as we cannot easily reproduce the
-# malformed lines
-cp missing_line_ending.rb $(rulebase_file_name)
+
+reset_rules
+add_rule 'version=2'
+add_rule_no_LF 'rule=:%field:mac48%'
 
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
