@@ -19,6 +19,10 @@
 	  user-defined data types instead.
 	- the suffixed parser and friends are no longer supported. A
 	  replacement is currently being developed.
+	- the regexp parser is no longer supported and needs to be
+	  replaced by other liblognorm features
+	  for details on this decision see:
+	  https://github.com/rsyslog/liblognorm/issues/143
 
   To signify that a rule base file contains v2 format, it must contain
   the line

@@ -70,8 +70,12 @@ that are typically used. It does not understand these parsers:
 
 The recursive and descent parsers should be replaced by user-defined types
 in. The tokenized parsers should be replaced by repeat. For the others,
-currently there exists no replacement (but will be added when v2 heads
-towards the first final release). If you need any of these parsers, you need
+currently there exists no replacement, but will the exception of regex,
+will be added based on demand. If you think regex support is urgently
+needed, please read our
+`related issue on github, <https://github.com/rsyslog/liblognorm/issues/143>`_
+where you can also cast
+you ballot in favor of it. If you need any of these parsers, you need
 to use the v1 engine. That of course means you cannot use the v2 enhancements,
 so converting as much as possible makes sense.
 
