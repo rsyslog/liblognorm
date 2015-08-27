@@ -77,16 +77,6 @@ PARSERDEF_NO_DATA(CEF);
 PARSERDEF_NO_DATA(CheckpointLEA);
 PARSERDEF_NO_DATA(NameValue);
 
-#ifdef FEATURE_REGEXP
-/** 
- * Get field matching regex
- */
-PARSERDEF_NO_DATA(Regex(const char *str, size_t strlen, size_t *offs, const ln_parser_t *const node, size_t *parsed, struct json_object **value);
-
-void* regex_parser_data_constructor(ln_parser_t *const node, ln_ctx ctx);
-void regex_parser_data_destructor(void** dataPtr);
-#endif
-
 #undef PARSERDEF_NO_DATA
 
 /* utility functions */
