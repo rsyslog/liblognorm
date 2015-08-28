@@ -28,6 +28,7 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
 	missing_line_ending.sh \
 	names.sh \
+	include.sh \
 	seq_simple.sh \
 	runaway_rule.sh \
 	alternative_simple.sh \

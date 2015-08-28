@@ -1,4 +1,6 @@
 /* samp.c -- code for ln_samp objects.
+ * This code handles rulebase processing. Rulebases have been called
+ * "sample bases" in the early days of liblognorm, thus the name.
  *
  * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
  *
@@ -29,6 +31,7 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 
 #include "json_compatibility.h"
 #include "liblognorm.h"
@@ -37,6 +40,8 @@
 #include "internal.h"
 #include "parser.h"
 #include "pdag.h"
+#include "v1_liblognorm.h"
+#include "v1_ptree.h"
 
 
 /**
@@ -819,10 +824,50 @@ processAnnotate(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 done:	return r;
 }
 
-struct ln_samp *
+/**
+ * Process include directive. This permits to add unlimited layers
+ * of include files.
+ *
+ * @param[in] ctx current context
+ * @param[in] buf line buffer, a C-string
+ * @param[in] offs offset where annotation starts
+ * @returns 0 on success, something else otherwise
+ */
+static inline int
+processInclude(ln_ctx ctx, const char *buf, const size_t offs)
+{
+	int r;
+	char *const fname = strdup(buf+offs);
+	size_t lenfname = strlen(fname);
+
+	/* trim string - not optimized but also no need to */
+	for(size_t i = lenfname - 1 ; i > 0 ; --i) {
+		if(isspace(fname[i])) {
+			fname[i] = '\0';
+			--lenfname;
+		}
+	}
+
+	CHKR(ln_loadSamples(ctx, fname));
+
+done:
+	ln_dbgprintf(ctx, "include returns %d", r);
+	return r;
+}
+
+/**
+ * Reads a rule (sample) stored in buffer buf and creates a new ln_samp object
+ * out of it, which it adds to the pdag (if required).
+ *
+ * @param[ctx] ctx current library context
+ * @param[buf] cstr buffer containing the string contents of the sample
+ * @param[lenBuf] length of the sample contained within buf
+ * @return standard error code
+ */
+static int
 ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 {
-	struct ln_samp *samp = NULL;
+	int r = 0;
 	es_str_t *typeStr = NULL;
 	size_t offs;
 
@@ -839,6 +884,8 @@ ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 		if(processType(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
 		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
+	} else if(!es_strconstcmp(typeStr, "include")) {
+		CHKR(processInclude(ctx, buf, offs));
 	} else {
 		char *str;
 		str = es_str2cstr(typeStr, NULL);
@@ -850,8 +897,7 @@ ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 done:
 	if(typeStr != NULL)
 		es_deleteStr(typeStr);
-
-	return samp;
+	return r;
 }
 
 
@@ -888,10 +934,22 @@ done:
 }
 
 
-struct ln_samp *
+/**
+ * Read a rule (sample) from repository (sequentially).
+ *
+ * Reads a sample starting with the current file position and
+ * creates a new ln_samp object out of it, which it adds to the
+ * pdag.
+ *
+ * @param[in] ctx current library context
+ * @param[in] repo repository descriptor
+ * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occured.
+ * @return standard error code
+ */
+static int
 ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
 {
-	struct ln_samp *samp = NULL;
+	int r = 0;
 	char buf[64*1024]; /**< max size of rule - TODO: make configurable */
 
 	int linenbr = 1;
@@ -938,8 +996,88 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 	buf[i] = '\0';
 
 	ln_dbgprintf(ctx, "read rule base line: '%s'", buf);
-	ln_processSamp(ctx, buf, i);
+	CHKR(ln_processSamp(ctx, buf, i));
 
 done:
-	return samp;
+	return r;
 }
+
+/* check rulebase format version. Returns 2 if this is v2 rulebase,
+ * 1 for any pre-v2 and -1 if there was a problem reading the file.
+ */
+static int
+checkVersion(FILE *const fp)
+{
+	char buf[64];
+
+	if(fgets(buf, sizeof(buf), fp) == NULL)
+		return -1;
+	if(!strcmp(buf, "version=2\n")) {
+		return 2;
+	} else {
+		return 1;
+	}
+}
+
+/* we have a v1 rulebase, so let's do all stuff that we need
+ * to make that ole piece of ... work.
+ */
+static int
+doOldCruft(ln_ctx ctx, const char *file)
+{
+	int r = -1;
+	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
+		free(ctx);
+		r = -1;
+		goto done;
+	}
+	r = ln_v1_loadSamples(ctx, file);
+done:
+	return r;
+}
+
+/* @return 0 if all is ok, 1 if an error occured */
+int
+ln_sampLoad(ln_ctx ctx, const char *file)
+{
+	int r = 1;
+	FILE *repo;
+	int isEof = 0;
+
+	ln_dbgprintf(ctx, "opening rulebase file '%s'", file);
+	if(file == NULL) goto done;
+	if((repo = fopen(file, "r")) == NULL) {
+		ln_errprintf(ctx, errno, "cannot open file %s", file);
+		goto done;
+	}
+	const int version = checkVersion(repo);
+	ln_dbgprintf(ctx, "rulebase version is %d\n", version);
+	if(version == -1) {
+		ln_errprintf(ctx, errno, "error determing version of %s", file);
+		goto done;
+	}
+	if(ctx->version != 0 && version != ctx->version) {
+		ln_errprintf(ctx, errno, "rulebase '%s' must be version %d, but is version %d "
+			" - can not be processed", file, ctx->version, version);
+		goto done;
+	}
+	ctx->version = version;
+	if(ctx->version == 1) {
+		fclose(repo);
+		r = doOldCruft(ctx, file);
+		goto done;
+	}
+
+	/* now we are in our native code */
+	while(!isEof) {
+		CHKR(ln_sampRead(ctx, repo, &isEof));
+	}
+	fclose(repo);
+	r = 0;
+
+	ln_pdagOptimize(ctx);
+done:
+	ln_dbgprintf(ctx, "sampLoad returns %d", r);
+	return r;
+}
+

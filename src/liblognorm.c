@@ -36,8 +36,6 @@
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"
 
-#define ERR_ABORT {r = 1; goto done; }
-
 #define CHECK_CTX \
 	if(ctx->objID != LN_ObjID_CTX) { \
 		r = -1; \
@@ -143,77 +141,12 @@ done:
 	return r;
 }
 
-
-/* check rulebase format version. Returns 2 if this is v2 rulebase,
- * 1 for any pre-v2 and -1 if there was a problem reading the file.
- */
-static int
-checkVersion(FILE *const fp)
-{
-	char buf[64];
-
-	if(fgets(buf, sizeof(buf), fp) == NULL)
-		return -1;
-	if(!strcmp(buf, "version=2\n")) {
-		return 2;
-	} else {
-		return 1;
-	}
-}
-
-/* we have a v1 rulebase, so let's do all stuff that we need
- * to make that ole piece of ... work.
- */
-static int
-doOldCruft(ln_ctx ctx, const char *file)
-{
-	int r = -1;
-	if((ctx->ptree = ln_newPTree(ctx, NULL)) == NULL) {
-		free(ctx);
-		r = -1;
-		goto done;
-	}
-	r = ln_v1_loadSamples(ctx, file);
-done:
-	return r;
-}
-
 int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
-	FILE *repo;
-	struct ln_samp *samp;
-	int isEof = 0;
-
 	CHECK_CTX;
-	if(file == NULL) ERR_ABORT;
-	if((repo = fopen(file, "r")) == NULL) {
-		ln_errprintf(ctx, errno, "cannot open file %s", file);
-		ERR_ABORT;
-	}
-	ctx->version = checkVersion(repo);
-	ln_dbgprintf(ctx, "rulebase version is %d\n", ctx->version);
-	if(ctx->version == -1) {
-		ln_errprintf(ctx, errno, "error determing version of %s", file);
-		ERR_ABORT;
-	}
-	if(ctx->version == 1) {
-		fclose(repo);
-		r = doOldCruft(ctx, file);
-		goto done;
-	}
-
-	/* now we are in our native code */
-	while(!isEof) {
-		if((samp = ln_sampRead(ctx, repo, &isEof)) == NULL) {
-			/* TODO: what exactly to do? */
-		}
-	}
-	fclose(repo);
-
-	ln_pdagOptimize(ctx);
+	r = ln_sampLoad(ctx, file);
 done:
 	return r;
 }
-

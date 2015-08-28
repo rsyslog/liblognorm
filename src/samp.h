@@ -8,7 +8,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of liblognorm.
  *
@@ -20,7 +20,7 @@
  * This library is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
+ * Lesser General PublicCH License for more details.
  *
  * You should have received a copy of the GNU Lesser General Public
  * License along with this library; if not, write to the Free Software
@@ -41,46 +41,7 @@ struct ln_samp {
 	es_str_t *msg;
 };
 
-/**
- * Reads a sample stored in buffer buf and creates a new ln_samp object
- * out of it.
- *
- * @note
- * It is the caller's responsibility to delete the newly
- * created ln_samp object if it is no longer needed.
- *
- * @param[ctx] ctx current library context
- * @param[buf] cstr buffer containing the string contents of the sample
- * @param[lenBuf] length of the sample contained within buf
- * @return Newly create object or NULL if an error occured.
- */
-struct ln_samp *
-ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf);
-
-
-/**
- * Read a sample from repository (sequentially).
- *
- * Reads a sample starting with the current file position and
- * creates a new ln_samp object out of it.
- *
- * @note
- * It is the caller's responsibility to delete the newly
- * created ln_samp object if it is no longer needed.
- *
- * @param[in] ctx current library context
- * @param[in] repo repository descriptor
- * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occured.
- * @return Newly create object or NULL if an error or EOF occured.
- */
-struct ln_samp *
-ln_sampRead(ln_ctx ctx, FILE *repo, int *isEof);
-
-
-/**
- * Free ln_samp object.
- */
-void
-ln_sampFree(ln_ctx ctx, struct ln_samp *samp);
+void ln_sampFree(ln_ctx ctx, struct ln_samp *samp);
+int ln_sampLoad(ln_ctx ctx, const char *file);
 
 #endif /* #ifndef LIBLOGNORM_SAMPLES_H_INCLUDED */
