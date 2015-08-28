@@ -126,6 +126,41 @@ parser - which option to choose is left to the user. They are equivalent.
 The ability to use multiple type lines for definition, however, brings
 more power than just to define alternatives.
 
+Includes
+--------
+Especially with user-defined types includes come handy. With an include,
+you can include definitions already made elsewhere into the current
+rule set (just like the "include" directive works in many programming
+languages). An include is done by a line starting with ``include=``
+where the rest of the line is the actual file name, just like in this
+example::
+
+   include=/var/lib/liblognorm/stdtypes.rb
+
+The definition is included right at the position where it occurs.
+Processing of the original file is continued when the included file
+has been fully processed. Includes can be nested.
+
+To facilitate repositories of common rules, liblognorm honors the
+
+::
+
+   LIBLOGNORM_RULEBASES
+
+environment variable. If it is set, and if the rulebase file cannot
+be found, liblognorm tries to locate it inside the path pointed to by
+``LIBLOGNORM_RULEBASES``. Assuming we have::
+
+   export LIBLOGNORM_RULEBASES=/var/lib/loblognorm
+
+The above example can be re-written as follows::
+
+   include=stdtypes.rb
+
+Note, however, that if ``stdtypes.rb`` exist in the current working
+directory, that file will be loaded insted of the one from 
+``/var/lib/liblognorm``.
+
 Rules
 -----
 
