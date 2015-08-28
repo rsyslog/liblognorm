@@ -29,6 +29,7 @@ TESTS_SHELLSCRIPTS = \
 	missing_line_ending.sh \
 	names.sh \
 	include.sh \
+	include_RULEBASES.sh \
 	seq_simple.sh \
 	runaway_rule.sh \
 	alternative_simple.sh \

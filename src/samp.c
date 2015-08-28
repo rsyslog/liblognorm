@@ -851,7 +851,6 @@ processInclude(ln_ctx ctx, const char *buf, const size_t offs)
 	CHKR(ln_loadSamples(ctx, fname));
 
 done:
-	ln_dbgprintf(ctx, "include returns %d", r);
 	return r;
 }
 
@@ -1036,6 +1035,39 @@ done:
 	return r;
 }
 
+/* try to open a rulebase file. This also tries to see if we need to
+ * load it from some pre-configured alternative location.
+ * @returns open file pointer or NULL in case of error
+ */
+static FILE *
+tryOpenRBFile(ln_ctx ctx, const char *const file)
+{
+	FILE *repo = NULL;
+
+	if((repo = fopen(file, "r")) != NULL)
+		goto done;
+	const int eno1 = errno;
+
+	const char *const rb_lib = getenv("LIBLOGNORM_RULEBASES");
+	if(rb_lib == NULL) {
+		ln_errprintf(ctx, eno1, "cannot open rulebase '%s'", file);
+		goto done;
+	}
+
+	char *fname;
+	asprintf(&fname, "%s/%s", rb_lib, file);
+	if((repo = fopen(fname, "r")) == NULL) {
+		const int eno2 = errno;
+		ln_errprintf(ctx, eno1, "cannot open rulebase '%s'", file);
+		ln_errprintf(ctx, eno2, "also tried to locate %s via "
+			"rulebase directory without success. Expanded "
+			"name was '%s'", file, fname);
+	}
+
+done:
+	return repo;
+}
+
 /* @return 0 if all is ok, 1 if an error occured */
 int
 ln_sampLoad(ln_ctx ctx, const char *file)
@@ -1044,12 +1076,10 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	FILE *repo;
 	int isEof = 0;
 
-	ln_dbgprintf(ctx, "opening rulebase file '%s'", file);
+	ln_dbgprintf(ctx, "loading rulebase file '%s'", file);
 	if(file == NULL) goto done;
-	if((repo = fopen(file, "r")) == NULL) {
-		ln_errprintf(ctx, errno, "cannot open file %s", file);
+	if((repo = tryOpenRBFile(ctx, file)) == NULL)
 		goto done;
-	}
 	const int version = checkVersion(repo);
 	ln_dbgprintf(ctx, "rulebase version is %d\n", version);
 	if(version == -1) {
@@ -1077,7 +1107,6 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 
 	ln_pdagOptimize(ctx);
 done:
-	ln_dbgprintf(ctx, "sampLoad returns %d", r);
 	return r;
 }
 
