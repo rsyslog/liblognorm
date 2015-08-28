@@ -147,9 +147,14 @@ To facilitate repositories of common rules, liblognorm honors the
 
    LIBLOGNORM_RULEBASES
 
-environment variable. If it is set, and if the rulebase file cannot
-be found, liblognorm tries to locate it inside the path pointed to by
-``LIBLOGNORM_RULEBASES``. Assuming we have::
+environment variable. If it is set liblognorm tries to locate the file
+inside the path pointed to by ``LIBLOGNORM_RULEBASES`` in the following
+case: 
+
+* the provided file cannot be found
+* the provided file name is not an absolute path (does not start with "/")
+
+So assuming we have::
 
    export LIBLOGNORM_RULEBASES=/var/lib/loblognorm
 
@@ -160,6 +165,10 @@ The above example can be re-written as follows::
 Note, however, that if ``stdtypes.rb`` exist in the current working
 directory, that file will be loaded insted of the one from 
 ``/var/lib/liblognorm``.
+
+This use facilitates building a library of standard type definitions. Note
+the the liblognorm project also ships type definitions for common
+scenarios.
 
 Rules
 -----

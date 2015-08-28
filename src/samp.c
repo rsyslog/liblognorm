@@ -1049,13 +1049,13 @@ tryOpenRBFile(ln_ctx ctx, const char *const file)
 	const int eno1 = errno;
 
 	const char *const rb_lib = getenv("LIBLOGNORM_RULEBASES");
-	if(rb_lib == NULL) {
+	if(rb_lib == NULL || *file == '/') {
 		ln_errprintf(ctx, eno1, "cannot open rulebase '%s'", file);
 		goto done;
 	}
 
 	char *fname;
-	asprintf(&fname, "%s/%s", rb_lib, file);
+	asprintf(&fname, (rb_lib[strlen(rb_lib)-1] == '/') ? "%s%s" : "%s/%s", rb_lib, file);
 	if((repo = fopen(fname, "r")) == NULL) {
 		const int eno2 = errno;
 		ln_errprintf(ctx, eno1, "cannot open rulebase '%s'", file);

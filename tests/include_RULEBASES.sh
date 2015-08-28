@@ -12,13 +12,14 @@ add_rule 'version=2' inc
 add_rule 'rule=:%field:mac48%' inc
 
 mv inc.rulebase /tmp
-export LIBLOGNORM_RULEBASES=/tmp
 
+export LIBLOGNORM_RULEBASES=/tmp
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
 
-# single test is sufficient, because that only works if the include
-# worked ;)
+export LIBLOGNORM_RULEBASES=/tmp/
+execute 'f0:f6:1c:5f:cc:a2'
+assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
 
 rm /tmp/inc.rulebase
 cleanup_tmp_files
