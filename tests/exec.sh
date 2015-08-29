@@ -48,17 +48,17 @@ rulebase_file_name() {
 }
 
 reset_rules() {
-    local rb_file=$(rulebase_file_name $1)
+    rb_file=$(rulebase_file_name $1)
     rm -f $rb_file
 }
 
 add_rule() {
-    local rb_file=$(rulebase_file_name $2)
+    rb_file=$(rulebase_file_name $2)
     echo $1 >> $rb_file
 }
 
 add_rule_no_LF() {
-    local rb_file=$(rulebase_file_name $2)
+    rb_file=$(rulebase_file_name $2)
     echo -n $1 >> $rb_file
 }
 
