@@ -211,7 +211,7 @@ up to end of line.
 
     %host:word%
 
-string
+escaped-string
 ######
 
 Parses a bash-style string, with quoting and escaping.
@@ -221,7 +221,7 @@ characters are converted to one double quote in the resulting string.
 
 ::
 
-    %field-name:string%
+    %field-name:escaped-string%
 
 string-to
 ######### 

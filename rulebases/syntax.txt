@@ -63,10 +63,10 @@ Matches:		One or more characters, up to the next space (\x20), or
 Extra data:		Not used
 Example:		%field_name:word%
 
-Field type:		'string'
+Field type:		'escaped-string'
 Matches:		A bash-style string, with quoting and escaping.
 Extra data:		Not used
-Example:		%field-name:string%
+Example:		%field-name:escaped-string%
 Notes:			Characters can be escaped by preceding them with a backslash (\).
 				Additionally, inside double quotes, two consecutive double quote
 				characters are converted to one double quote in the resulting string.

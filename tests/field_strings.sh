@@ -36,7 +36,7 @@ assert_output_json_eq '{ "word": "\"test-\"\"result\"\"\"" }'
 
 reset_rules
 
-add_rule 'rule=:%str:string% end'
+add_rule 'rule=:%str:escaped-string% end'
 execute 'test-result end'
 assert_output_json_eq '{ "str": "test-result" }'
 execute '"test-result" end'
@@ -64,7 +64,7 @@ assert_output_json_eq '{ "originalmsg": "\"GET \/www.testsite.com\/RenderProduct
 
 reset_rules
 
-add_rule 'rule=:"%-:word% /%-:char-to:/%%-:word% %-:char-to:"%" %referer:string% end'
+add_rule 'rule=:"%-:word% /%-:char-to:/%%-:word% %-:char-to:"%" %referer:escaped-string% end'
 execute "$logportion"' end'
 assert_output_json_eq '{"referer": "http:\/\/w.tt.com\/cat#{\"sQuery\":\"true\",\"oc\":\"Giant 12\",\"tx\":\"\"}"}'
 
