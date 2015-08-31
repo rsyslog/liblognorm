@@ -56,10 +56,17 @@ static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg 
 static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_syslog;
 
 void
+errCallBack(void __attribute__((unused)) *cookie, const char *msg,
+	    size_t __attribute__((unused)) lenMsg)
+{
+	fprintf(stderr, "liblognorm error: %s\n", msg);
+}
+
+void
 dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
-	printf("liblognorm: %s\n", msg);
+	fprintf(stderr, "liblognorm: %s\n", msg);
 }
 
 void complain(const char *errmsg)
@@ -74,7 +81,7 @@ void complain(const char *errmsg)
 static inline void
 outputEvent(struct json_object *json)
 {
-	char *cstr;
+	char *cstr = NULL;
 	es_str_t *str = NULL;
 
 	switch(outfmt) {
@@ -96,7 +103,7 @@ outputEvent(struct json_object *json)
 	}
 	if (str != NULL)
 		cstr = es_str2cstr(str, NULL);
-	if(verbose > 0) printf("normalized: '%s'\n", cstr);
+	if(verbose > 0) fprintf(stderr, "normalized: '%s'\n", cstr);
 	printf("%s\n", cstr);
 	if (str != NULL)
 		free(cstr);
@@ -148,7 +155,7 @@ normalize(void)
 		buf[strlen(buf)-1] = '\0';
 		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
 			buf[strlen(buf)-1] = '\0';
-		if(verbose > 0) printf("To normalize: '%s'\n", buf);
+		if(verbose > 0) fprintf(stderr, "To normalize: '%s'\n", buf);
 		ln_normalize(ctx, buf, strlen(buf), &json);
 		if(json != NULL) {
 			if(eventHasTag(json, mandatoryTagCstr)) {
@@ -281,15 +288,19 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
+	ln_setErrMsgCB(ctx, errCallBack, NULL);
 	if(verbose) {
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
 	}
 
-	ln_loadSamples(ctx, repository);
+	if(ln_loadSamples(ctx, repository)) {
+		fprintf(stderr, "fatal error: cannot load rulebase\n");
+		exit(1);
+	}
 
 	if(verbose > 0)
-		printf("number of tree nodes: %d\n", ctx->nNodes);
+		fprintf(stderr, "number of tree nodes: %d\n", ctx->nNodes);
 
 	if(fpDOT != NULL) {
 		genDOT();

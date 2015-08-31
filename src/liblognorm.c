@@ -26,6 +26,7 @@
  */
 #include "config.h"
 #include <string.h>
+#include <errno.h>
 
 #include "json_compatibility.h"
 #include "liblognorm.h"
@@ -130,6 +131,19 @@ done:
 
 
 int
+ln_setErrMsgCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie)
+{
+	int r = 0;
+
+	CHECK_CTX;
+	ctx->errmsgCB = cb;
+	ctx->errmsgCookie = cookie;
+done:
+	return r;
+}
+
+
+int
 ln_loadSample(ln_ctx ctx, const char *buf)
 {
     // Something bad happened - no new sample
@@ -144,19 +158,22 @@ int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
-	struct ln_sampRepos *repo;
+	FILE *repo;
 	struct ln_samp *samp;
 	int isEof = 0;
 
 	CHECK_CTX;
 	if(file == NULL) ERR_ABORT;
-	if((repo = ln_sampOpen(ctx, file)) == NULL) ERR_ABORT;
+	if((repo = fopen(file, "r")) == NULL) {
+		ln_errprintf(ctx, errno, "cannot open file %s", file);
+		ERR_ABORT;
+	}
 	while(!isEof) {
 		if((samp = ln_sampRead(ctx, repo, &isEof)) == NULL) {
 			/* TODO: what exactly to do? */
 		}
 	}
-	ln_sampClose(ctx, repo);
+	fclose(repo);
 
 done:
 	return r;

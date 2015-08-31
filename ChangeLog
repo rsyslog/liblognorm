@@ -1,11 +1,57 @@
 ----------------------------------------------------------------------
-Version 1.1.2, 2015-03-??
+Version 1.1.3, 2015-??-??
+- make work on Solaris
+- check for runaway rules.
+  A runaway rule is one that has unmatched percent signs and thus
+  is not terminated properly at its end. This also means we no longer
+  accept "rule=" at the first column of a continuation line, which is
+  no problem (see doc for more information).
+- fix: process last line if it misses the terminating LF
+  This problem occurs with the very last line of a rulebase (at EOF).
+  If it is not properly terminated (LF missing), it is silently ignored.
+  Previous versions did obviously process lines in this case. While
+  technically this is invalid input, we can't outrule that such rulebases
+  exist. For example, they do in the rsyslog testbench, which made
+  us aware of the problem (see https://github.com/rsyslog/rsyslog/issues/489 )
+  I think the proper way of addressing this is to process such lines without
+  termination, as many other tools do as well.
+  closes https://github.com/rsyslog/liblognorm/issues/135
+----------------------------------------------------------------------
+Version 1.1.2, 2015-07-20
+- permit newline inside parser definition
+- new parser "cisco-interface-spec"
+- new parser "json" to process json parts of the message
+- new parser "mac48" to process mac layer addresses
+- new parser "name-value-list" (currently inofficial, experimental)
 - some parsers did incorrectly report success when an error occurred
   this was caused by inconsistencies between various macros. We have
   changed the parser-generation macros to match the semantics of the
   broader CHKN/CHKR macros and also restructured/simplified the 
   parser generation macros.
   closes https://github.com/rsyslog/liblognorm/issues/41
+- call "rest" parser only if nothing else matches.
+  Versions prior to 1.1.2 did execute "rest" during regular parser
+  processing, and thus parser matches have been more or less random.
+  With 1.1.2 this is now always the last parser called. This may cause
+  problems with existing rulesets, HOWEVER, adding any other rule or
+  changing the load order would also have caused problems, so there
+  really is no compatibility to preserve.
+  see also:
+  http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
+- new API to support error callbacks 
+  This permits callers to forward messages in regard to e.g. wrong rule
+  bases to their users, which is very useful and actually missing in the
+  previous code base. So far, we only have few error messages.
+  However, we will review the code and add more. The important part is
+  that callers can begin to use the new API and thus will benefit when
+  we add more error messages.
+- testbench is now enabled by default
+- bugfix: misadressing on some constant values
+  see also https://github.com/rsyslog/liblognorm/pull/67
+  Thanks to github user ontholerian for the patch
+- bugfix: add missing function prototypes
+  This could potentially lead to problems on some platforms,
+  especially those with 64 bit pointers.
 ----------------------------------------------------------------------
 Version 1.1.1, 2015-03-09
 - fixed library version numbering

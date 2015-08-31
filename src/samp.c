@@ -37,35 +37,6 @@
 #include "internal.h"
 #include "parser.h"
 
-struct ln_sampRepos*
-ln_sampOpen(ln_ctx __attribute((unused)) ctx, const char *name)
-{
-	struct ln_sampRepos *repo = NULL;
-	FILE *fp;
-
-	if((fp = fopen(name, "r")) == NULL)
-		goto done;
-
-	if((repo = calloc(1, sizeof(struct ln_sampRepos))) == NULL) {
-		fclose(fp);
-		goto done;
-	}
-
-	repo->fp = fp;
-
-done:
-	return repo;
-}
-
-
-void
-ln_sampClose(ln_ctx __attribute((unused)) ctx, struct ln_sampRepos *repo)
-{
-	if(repo->fp != NULL)
-		fclose(repo->fp);
-	free(repo);
-}
-
 
 /**
  * Construct a sample object.
@@ -142,6 +113,9 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	node->parser_data_destructor = NULL;
 	CHKN(node->name = es_newStr(16));
 
+	/* skip leading whitespace in field name */
+	while(i < lenBuf && isspace(buf[i]))
+		++i;
 	while(i < lenBuf && buf[i] != ':') {
 		CHKR(es_addChar(&node->name, buf[i++]));
 	}
@@ -164,13 +138,23 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 	}
 	++i; /* skip ':' */
 
-	/* parse and process type
-	 * Note: if we have a CEE dictionary, this part can be optional!
-	 */
+	/* parse and process type (trailing whitespace must be trimmed) */
 	es_emptyStr(*str);
-	while(i < lenBuf && buf[i] != ':' && buf[i] != '%') {
+ 	size_t j = i;
+	/* scan for terminator */
+	while(j < lenBuf && buf[j] != ':' && buf[j] != '%')
+		++j;
+	/* now trim trailing space backwards */
+	size_t next = j;
+	--j;
+	while(j >= i && isspace(buf[j]))
+		--j;
+	/* now copy */
+	while(i <= j) {
 		CHKR(es_addChar(str, buf[i++]));
 	}
+	/* finally move i to consumed position */
+	i = next;
 
 	if(i == lenBuf) {
 		FAIL(LN_INVLDFDESCR);
@@ -193,6 +177,8 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseWhitespace;
 	} else if(!es_strconstcmp(*str, "ipv4")) {
 		node->parser = ln_parseIPv4;
+	} else if(!es_strconstcmp(*str, "ipv6")) {
+		node->parser = ln_parseIPv6;
 	} else if(!es_strconstcmp(*str, "word")) {
 		node->parser = ln_parseWord;
 	} else if(!es_strconstcmp(*str, "alpha")) {
@@ -213,17 +199,33 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
 		node->parser = ln_parseTime12hr;
 	} else if(!es_strconstcmp(*str, "duration")) {
 		node->parser = ln_parseDuration;
+	} else if(!es_strconstcmp(*str, "cisco-interface-spec")) {
+		node->parser = ln_parseCiscoInterfaceSpec;
+	} else if(!es_strconstcmp(*str, "json")) {
+		node->parser = ln_parseJSON;
+	} else if(!es_strconstcmp(*str, "cee-syslog")) {
+		node->parser = ln_parseCEESyslog;
+	} else if(!es_strconstcmp(*str, "mac48")) {
+		node->parser = ln_parseMAC48;
+	} else if(!es_strconstcmp(*str, "name-value-list")) {
+		node->parser = ln_parseNameValue;
+	} else if(!es_strconstcmp(*str, "cef")) {
+		node->parser = ln_parseCEF;
+	} else if(!es_strconstcmp(*str, "checkpoint-lea")) {
+		node->parser = ln_parseCheckpointLEA;
+	} else if(!es_strconstcmp(*str, "v2-iptables")) {
+		node->parser = ln_parsev2IPTables;
 	} else if(!es_strconstcmp(*str, "iptables")) {
 		node->parser = NULL;
 		node->isIPTables = 1;
 	} else if(!es_strconstcmp(*str, "string-to")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseStringTo;
 	} else if(!es_strconstcmp(*str, "char-to")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseCharTo;
 	} else if(!es_strconstcmp(*str, "char-sep")) {
-		// TODO: check extra data!!!! (very important)
+		/* TODO: check extra data!!!! (very important) */
 		node->parser = ln_parseCharSeparated;
 	} else if(!es_strconstcmp(*str, "tokenized")) {
 		node->parser = ln_parseTokenized;
@@ -259,7 +261,7 @@ ln_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t **st
         node->parser_data_destructor = suffixed_parser_data_destructor;
     } else {
 		cstr = es_str2cstr(*str, NULL);
-		ln_dbgprintf(ctx, "ERROR: invalid field type '%s'", cstr);
+		ln_errprintf(ctx, 0, "invalid field type '%s'", cstr);
 		free(cstr);
 		FAIL(LN_INVLDFDESCR);
 	}
@@ -368,7 +370,7 @@ done:	return r;
 static inline int
 addSampToTree(ln_ctx ctx, es_str_t *rule, struct json_object *tagBucket)
 {
-	int r;
+	int r = -1;
 	struct ln_ptree* subtree;
 	es_str_t *str = NULL;
 	es_size_t i;
@@ -414,7 +416,7 @@ done:
 static inline int
 getLineType(const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **str)
 {
-	int r;
+	int r = -1;
 	es_size_t i;
 
 	*str = es_newStr(16);
@@ -771,7 +773,7 @@ ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
 		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
 	} else {
-		// TODO error reporting
+		/* TODO error reporting */
 		char *str;
 		str = es_str2cstr(typeStr, NULL);
 		ln_dbgprintf(ctx, "invalid record type detected: '%s'", str);
@@ -787,36 +789,89 @@ done:
 }
 
 
-struct ln_samp *
-ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof)
+/* this checks if in a multi-line rule, the next line seems to be a new
+ * rule, which would meand we have some unmatched percent signs inside
+ * our rule (what we call a "runaway rule"). This can easily happen and
+ * is otherwise hard to debug, so let's see if it is the case...
+ * @return 1 if this is a runaway rule, 0 if not
+ */
+static int
+chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
 {
-	struct ln_samp *samp = NULL;
-	int done = 0;
-	char buf[10*1024]; /**< max size of rule */ // TODO: make configurable
-	es_size_t lenBuf;
+	int r = 1;
+	fpos_t fpos;
+	char buf[6];
 
-	/* we ignore empty lines and lines that begin with "#" */
-	while(!done) {
-		if(feof(repo->fp)) {
-			*isEof = 1;
-			goto done;
-		}
-
-		buf[0] = '\0'; /* fgets does not empty its buffer! */
-		if (fgets(buf, sizeof(buf), repo->fp) != NULL) {
-            lenBuf = strlen(buf);
-            if(lenBuf == 0 || buf[0] == '#' || buf[0] == '\n')
-                continue;
-            if(buf[lenBuf - 1] == '\n') {
-                buf[lenBuf - 1] = '\0';
-                lenBuf--;
-            }
-            done = 1; /* we found a valid line */
-		}
+	fgetpos(repo, &fpos);
+	if(fread(buf, sizeof(char), sizeof(buf)-1, repo) != 5)
+		goto done;
+	buf[5] = '\0';
+	if(!strcmp(buf, "rule=")) {
+		ln_errprintf(ctx, 0, "line %d has 'rule=' at begin of line, which "
+			"does look like a typo in the previous lines (unmatched "
+			"%% character) and is forbidden. If valid, please re-foramt "
+			"the rule to start with other characters. Rule ignored.",
+			linenbr);
+		goto done;
 	}
 
+	r = 0;
+done:
+	fsetpos(repo, &fpos);
+	return r;
+}
+struct ln_samp *
+ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
+{
+	struct ln_samp *samp = NULL;
+	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
+
+	int linenbr = 1;
+	size_t i = 0;
+	int inParser = 0;
+	int done = 0;
+	while(!done) {
+		int c = fgetc(repo);
+		if(c == EOF) {
+			*isEof = 1;
+			if(i == 0)
+				goto done;
+			else
+				done = 1; /* last line missing LF, still process it! */
+		} else if(c == '\n') {
+			++linenbr;
+			if(inParser) {
+				if(chkRunawayRule(ctx, repo, linenbr)) {
+					/* ignore previous rule */
+					inParser = 0;
+					i = 0;
+				}
+			}
+			if(!inParser && i != 0)
+				done = 1;
+		} else if(c == '#' && i == 0) {
+			/* note: comments are only supported at beginning of line! */
+			/* skip to end of line */
+			do {
+				c = fgetc(repo);
+			} while(c != EOF && c != '\n');
+			++linenbr;
+			i = 0; /* back to beginning */
+		} else {
+			if(c == '%')
+				inParser = (inParser) ? 0 : 1;
+			buf[i++] = c;
+			if(i >= sizeof(buf)) {
+				ln_errprintf(ctx, 0, "line %d is too long", linenbr);
+				ln_dbgprintf(ctx, "line %d is too long", linenbr);
+				goto done;
+			}
+		}
+	}
+	buf[i] = '\0';
+
 	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
-    ln_processSamp(ctx, buf, lenBuf);
+	ln_processSamp(ctx, buf, i);
 
 done:
 	return samp;

@@ -35,42 +35,11 @@
 
 
 /**
- * Object that represents a sample repository (file).
- *
- * Doing this via an objects helps with abstraction and future
- * changes inside the module (which are anticipated).
- */
-struct ln_sampRepos {
-	FILE *fp;
-};
-
-/**
  * A single log sample.
  */
 struct ln_samp {
 	es_str_t *msg;
 };
-
-/**
- * Open a Sample Repository.
- *
- * @param[in] ctx current library context
- * @param[in] name file name
- * @return repository object or NULL if failure
- */
-struct ln_sampRepos *
-ln_sampOpen(ln_ctx ctx, const char *name);
-
-
-/**
- * Close sample file.
- *
- * @param[in] ctx current library context
- * @param[in] fd file descriptor of open sample file
- */
-void
-ln_sampClose(ln_ctx ctx, struct ln_sampRepos *repo);
-
 
 /**
  * Reads a sample stored in buffer buf and creates a new ln_samp object
@@ -105,7 +74,7 @@ ln_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf);
  * @return Newly create object or NULL if an error or EOF occured.
  */
 struct ln_samp *
-ln_sampRead(ln_ctx ctx, struct ln_sampRepos *repo, int *isEof);
+ln_sampRead(ln_ctx ctx, FILE *repo, int *isEof);
 
 
 /**

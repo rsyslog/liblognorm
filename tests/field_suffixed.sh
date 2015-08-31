@@ -1,6 +1,8 @@
 # added 2015-02-25 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
-source ./exec.sh $0 "field with one of many possible suffixes"
+. $srcdir/exec.sh
+
+test_def $0 "field with one of many possible suffixes"
 
 add_rule 'rule=:gc reclaimed %eden_free:suffixed:,:b,kb,mb,gb:number% eden [surviver: %surviver_used:suffixed:;:kb;mb;gb;b:number%/%surviver_size:suffixed:|:b|kb|mb|gb:float%]'
 execute 'gc reclaimed 559mb eden [surviver: 95b/30.2mb]'
@@ -51,4 +53,8 @@ reset_rules
 add_rule 'rule=:eden:surviver:old-gen available-capacity: %available_memory:named_suffixed:size:unit:,:mb,gb:tokenized:\x3a:interpret:int:number%'
 execute 'eden:surviver:old-gen available-capacity: 400:40:1024mb'
 assert_output_json_eq '{"available_memory": {"size": [400, 40, 1024], "unit":"mb"}}'
+
+
+
+cleanup_tmp_files
 

@@ -34,9 +34,11 @@ To keep your rulebase tidy, you can use commentaries. Start a commentary
 with "#" like in many other configurations. It should look like this::
 
     # The following prefix and rules are for firewall logs
+    
+Note that the comment character MUST be in the first column of the line.
 
 Empty lines are just skipped, they can be inserted for readability.
-    
+
 Rules
 -----
 
@@ -89,6 +91,42 @@ description are "%" and ":". For example, this will match anything up to
 (but not including) a colon::
 
     %variable:char-to:\x3a%
+
+Whitespace, including LF, is permitted inside a field definition after
+the opening precent sign and before the closing one. This can be used to
+make complex rules more readable. So the example rule from the overview
+section above could be rewritten as::
+
+    rule=:%
+          date:date-rfc3164
+          % %
+	  host:word
+	  % %
+	  tag:char-to:\x3a
+	  %: no longer listening on %
+	  ip:ipv4
+	  %#%
+	  port:number
+	  %'
+
+When doing this, note well that whitespace IS important inside the
+literal text. So e.g. in the second example line above "% %" we require
+a single SP as literal text. Note that any combination of your liking is
+valid, so it could also be written as::
+
+    rule=:%date:date-rfc3164% %host:word% % tag:char-to:\x3a
+          %: no longer listening on %  ip:ipv4  %#%  port:number  %'
+
+To prevent a typical user error, continuation lines are **not** permitted
+to start with ``rule=``. There are some obscure cases where this could
+be a valid rule, and it can be re-formatted in that case. Moreoften, this
+is the result of a missing percent sign, as in this sample::
+
+     rule=:test%field:word ... missing percent sign ...
+     rule=:%f:word%
+
+If we would permit ``rule=`` at start of continuation line, these kinds
+of problems would be very hard to detect.
 
 Additional information is dependent on the field type; only some field 
 types need additional information.
@@ -233,16 +271,19 @@ which can be escaped.
 rest
 ####
 
-Zero or more characters till end of line. Should be always at end of the 
-rule.
+Zero or more characters till end of line. Must always be at end of the 
+rule, even though this condition is currently **not** checked. In any case,
+any definitions after *rest* are ignored.
 
 Note that the *rest* syntax should be avoided because it generates
-a very broad match. If used, it is impossible to match on a specific 
-character that is on the same position where *rest* is used.
+a very broad match. To mitigate this effect, the rest parser is always
+only invoked if no other parser or string literal matches.
 
 ::
 
     %field_name:rest%
+
+See also `Rainer's blog posting on the "rest" parser <http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html>`_. 
 
 quoted-string
 #############   
@@ -339,6 +380,140 @@ IPv4 address, in dot-decimal notation (AAA.BBB.CCC.DDD).
 ::
 
     %ip-src:ipv4%
+
+ipv6
+####
+
+IPv6 address, in textual notation as specified in RFC4291.
+All formats specified in section 2.2 are supported, including
+embedded IPv4 address (e.g. "::13.1.68.3"). Note that a 
+**pure** IPv4 address ("13.1.68.3") is **not** valid and as
+such not recognized.
+
+To avoid false positives, there must be either a whitespace
+character after the IPv6 address or the end of string must be
+reached.
+
+::
+
+    %ip-src:ipv6%
+
+mac48
+#####
+
+The standard (IEEE 802) format for printing MAC-48 addresses in
+human-friendly form is six groups of two hexadecimal digits,
+separated by hyphens (-) or colons (:), in transmission order
+(e.g. 01-23-45-67-89-ab or 01:23:45:67:89:ab ).
+This form is also commonly used for EUI-64.
+from: http://en.wikipedia.org/wiki/MAC_address
+
+::
+
+    %mac:mac48%
+
+cef
+###
+
+This parses ArcSight Comment Event Format (CEF) as described in 
+the "Implementing ArcSight CEF" manual revision 20 (2013-06-15).
+
+It matches a format that closely follows the spec. The header fields
+are extracted into the field name container, all extension are
+extracted into a container called "Extensions" beneath it.
+
+Example
+.......
+
+Rule::
+
+    rule=:%f:cef'
+
+Data::
+
+    CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a value cc=field 3
+
+Result::
+
+    {
+      "f": {
+        "DeviceVendor": "Vendor",
+        "DeviceProduct": "Product",
+        "DeviceVersion": "Version",
+        "SignatureID": "Signature ID",
+        "Name": "some name",
+        "Severity": "Severity",
+        "Extensions": {
+          "aa": "field1",
+          "bb": "this is a value",
+          "cc": "field 3"
+        }
+      }
+    }
+
+checkpoint-lea
+##############
+
+This supports the LEA on-disk format. Unfortunately, the format
+is underdocumented, the Checkpoint docs we could get hold of just
+describe the API and provide a field dictionary. In a nutshell, what
+we do is extract field names up to the colon and values up to the
+semicolon. No escaping rules are known to us, so we assume none
+exists (and as such no semicolon can be part of a value).
+
+If someone has a definitive reference or a sample set to contribute
+to the project, please let us know and we will check if we need to
+add additional transformations.
+
+::
+
+    %fields:checkpoint-lea%
+
+cisco-interface-spec
+####################
+
+A Cisco interface specifier, as for example seen in PIX or ASA.
+The format contains a number of optional parts and is described
+as follows (in ABNF-like manner where square brackets indicate
+optional parts):
+
+::
+
+  [interface:]ip/port [SP (ip2/port2)] [[SP](username)]
+
+Samples for such a spec are:
+
+ * outside:192.168.52.102/50349
+ * inside:192.168.1.15/56543 (192.168.1.112/54543)
+ * outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
+ * outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ * inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
+ * 192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
+
+Note that the current verision of liblognorm does not permit sole
+IP addresses to be detected as a Cisco interface spec. However, we
+are reviewing more Cisco message and need to decide if this is
+to be supported. The problem here is that this would create a much
+broader parser which would potentially match many things that are
+**not** Cisco interface specs.
+
+As this object extracts multiple subelements, it create a JSON
+structure. 
+
+Let's for example look at this definiton::
+
+    %ifaddr:cisco-interface-spec%
+
+and assume the following message is to be parsed::
+
+ outside:192.168.1.13/50179 (192.168.1.13/50179) (LOCAL\some.user)
+
+Then the resulting JSON will be as follows::
+
+{ "ifaddr": { "interface": "outside", "ip": "192.168.1.13", "port": "50179", "ip2": "192.168.1.13", "port2": "50179", "user": "LOCAL\\some.user" } }
+
+Subcomponents that are not given in the to-be-normalized string are
+also not present in the resulting JSON.
 
 tokenized
 #########
@@ -702,6 +877,77 @@ end of the line. Cannot match zero characters.
 ::
 
     %-:iptables%
+
+cisco-interface-spec
+####################
+
+This is an experimental parser. It is used to detect Cisco Interface
+Specifications. A sample of them is:
+
+::
+
+   outside:176.97.252.102/50349
+
+Note that this parser does not yet extract the individual parts
+due to the restrictions in current liblognorm. This is planned for
+after a general algorithm overhaul.
+
+In order to match, this syntax must start on a non-whitespace char
+other than colon.
+
+json
+####
+This parses native JSON from the message. All data up to the first non-JSON
+is parsed into the field. There may be any other field after the JSON,
+including another JSON section.
+
+Note that any white space after the actual JSON
+is considered **to be part of the JSON**. So you cannot filter on whitespace
+after the JSON.
+
+::
+
+    %data:json%
+
+Example
+.......
+
+Rule::
+
+    rule=:%field1:json%interim text %field2:json%'
+
+Data::
+
+   {"f1": "1"} interim text {"f2": 2}
+
+Result::
+
+   { "field2": { "f2": 2 }, "field1": { "f1": "1" } }
+
+Note also that the space before "interim" must **not** be given in the
+rule, as it is consumed by the JSON parser. However, the space after
+"text" is required.
+
+cee-syslog
+##########
+This parses cee syslog from the message. This format has been defined
+by Mitre CEE as well as Project Lumberjack.
+
+This format essentially is JSON with additional restrictions:
+
+ * The message must start with "@cee:"
+ * an JSON **object** must immediately follow (whitespace before it permitted,
+   but a JSON array is **not** permitted)
+ * after the JSON, there must be no other non-whitespace characters.
+
+In other words: the message must consist of a single JSON object only, 
+prefixed by the "@cee:" cookie.
+
+Note that the cee cookie is case sensitive, so "@CEE:" is **NOT** valid.
+
+::
+
+    %data:cee-syslog%
 
 Prefixes
 --------

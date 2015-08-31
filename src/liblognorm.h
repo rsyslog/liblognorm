@@ -71,6 +71,8 @@
 #define LN_BADPARSERSTATE -500
 #define LN_WRONGPARSER -1000
 
+#define LN_RB_LINE_TOO_LONG -1001
+
 /**
  * The library context descriptor.
  * This is used to permit multiple independent instances of the
@@ -172,6 +174,16 @@ ln_setCtxOpts(ln_ctx ctx, int allow_regex);
  */
 int ln_setDebugCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie);
 
+/**
+ * Set a error message handler (callback).
+ *
+ * If set, this is used to emit error messages of interest to the user, e.g.
+ * on failures during rulebase load. It is suggested that a caller uses this
+ * feedback to aid its users in resolving issues.
+ * Its semantics are otherwise exactly the same like ln_setDebugCB().
+ */
+int ln_setErrMsgCB(ln_ctx ctx, void (*cb)(void*, const char*, size_t), void *cookie);
+
 
 /**
  * enable or disable debug mode.
@@ -238,5 +250,14 @@ int ln_loadSamples(ln_ctx ctx, const char *file);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object **json_p);
+
+/* here we add some stuff from the compatibility layer. A separate include
+ * would be cleaner, but would potentially require changes all over the
+ * place. So doing it here is better. The respective replacement
+ * functions should usually be found under ./compat -- rgerhards, 2015-05-20
+ */
+#ifndef HAVE_STRNDUP
+char * strndup(const char *s, size_t n);
+#endif
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

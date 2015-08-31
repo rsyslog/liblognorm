@@ -1,0 +1,7 @@
+- API changes
+  * ln_loadSamples() --> ln_loadRulebase()
+- loading of sample at runtime is no longer possible. This is due to
+  the fact that the parse DAG is compiled into the most efficient form
+  and thereafter read-only. If urgently needed, we could change the code
+  so that the unoptimized form is kept (memory intense) and a re-compile
+  happens after each addition (time intense).
