@@ -2692,3 +2692,205 @@ PARSER_Destruct(Repeat)
 	free(pdata);
 }
 
+
+/* string escaping modes */
+#define ST_ESC_NONE 0
+#define ST_ESC_BACKSLASH 1
+#define ST_ESC_DOUBLE 2
+#define ST_ESC_BOTH 3
+struct data_String {
+	enum { ST_QUOTE_AUTO = 0, ST_QUOTE_NONE = 1, ST_QUOTE_REQD = 2 }
+		quoteMode;
+	struct {
+		unsigned strip_quotes : 1;
+		unsigned esc_md : 2;
+	} flags;
+	char qchar_begin;
+	char qchar_end;
+};
+/**
+ * generic string parser
+ */
+PARSER_Parse(String)
+	assert(str != NULL);
+	assert(offs != NULL);
+	assert(parsed != NULL);
+	struct data_String *const data = (struct data_String*) pdata;
+	size_t i = *offs;
+	int bHaveQuotes = 0;
+	int bHadEndQuote = 0;
+	int bHadEscape = 0;
+
+	if(i == strLen) goto done;
+
+	if((data->quoteMode == ST_QUOTE_AUTO) && (str[i] == data->qchar_begin)) {
+		bHaveQuotes = 1;
+		++i;
+	} else if(data->quoteMode == ST_QUOTE_REQD) {
+		if(str[i] == data->qchar_begin) {
+			bHaveQuotes = 1;
+			++i;
+		} else {
+			goto done;
+		}
+	}
+
+	/* scan string */
+	while(i < strLen) {
+		if(bHaveQuotes) {
+			if(str[i] == data->qchar_end) {
+				if(data->flags.esc_md == ST_ESC_DOUBLE
+				   || data->flags.esc_md == ST_ESC_BOTH) {
+					/* may be escaped, need to check! */
+					if(i+1 < strLen
+					   && str[i+1] == data->qchar_end) {
+						bHadEscape = 1;
+					   	++i;
+					} else { /* not escaped -> terminal */
+						bHadEndQuote = 1;
+						break;
+					}
+				} else {
+					bHadEndQuote = 1;
+					break;
+				}
+			}
+		} else {
+			if(str[i] == ' ')
+				break;
+		}
+		if(   str[i] == '\\'
+		   && i+1 < strLen
+		   && (data->flags.esc_md == ST_ESC_BACKSLASH
+		       || data->flags.esc_md == ST_ESC_BOTH) ) {
+			bHadEscape = 1;
+			i++; /* skip esc char */
+		}
+		i++;
+	}
+
+	if(bHaveQuotes && !bHadEndQuote)
+		goto done;
+
+	if(i == *offs)
+		goto done;
+
+	/* success, persist */
+	*parsed = i - *offs;
+	if(bHadEndQuote)
+		++(*parsed); /* skip quote */
+	if(value != NULL) {
+		size_t strt;
+		size_t len;
+		if(bHaveQuotes && data->flags.strip_quotes) {
+			strt = *offs + 1;
+			len = *parsed - 2; /* del begin AND end quote! */
+		} else {
+			strt = *offs;
+			len = *parsed;
+		}
+		char *const cstr = strndup(str+strt, len);
+		if(bHadEscape) {
+			/* need to post-process string... */
+			for(size_t j = 0 ; cstr[j] != '\0' ; j++) {
+				if( (
+				        cstr[j] == data->qchar_end
+				     && cstr[j+1] == data->qchar_end
+				     && (data->flags.esc_md == ST_ESC_DOUBLE
+				         || data->flags.esc_md == ST_ESC_BOTH)
+				    )
+				  ||
+				    (
+				        cstr[j] == '\\'
+				     && (data->flags.esc_md == ST_ESC_BACKSLASH
+				         || data->flags.esc_md == ST_ESC_BOTH)
+				    ) ) {
+					/* we need to remove the escape character */
+					memmove(cstr+j, cstr+j+1, len-j);
+				}
+			}
+		}
+		*value = json_object_new_string(cstr);
+		free(cstr);
+	}
+	r = 0; /* success */
+done:
+	return r;
+}
+
+PARSER_Construct(String)
+{
+	int r = 0;
+	struct json_object *opt;
+	struct data_String *const data = (struct data_String*) calloc(1, sizeof(struct data_String));
+	data->quoteMode = ST_QUOTE_AUTO;
+	data->flags.strip_quotes = 1;
+	data->flags.esc_md = ST_ESC_BOTH;
+	data->qchar_begin = '"';
+	data->qchar_end = '"';
+	
+	json_object_object_foreach(json, key, val) {
+		if(!strcasecmp(key, "quoting.mode")) {
+			const char *const optval = json_object_get_string(val);
+			if(!strcasecmp(optval, "auto")) {
+				data->quoteMode = ST_QUOTE_AUTO;
+			} else if(!strcasecmp(optval, "none")) {
+				data->quoteMode = ST_QUOTE_NONE;
+			} else if(!strcasecmp(optval, "required")) {
+				data->quoteMode = ST_QUOTE_REQD;
+			} else {
+				ln_errprintf(ctx, 0, "invalid quoting.mode for string parser: %s",
+					optval);
+				r = LN_BADCONFIG;
+				goto done;
+			}
+		} else if(!strcasecmp(key, "quoting.escape.mode")) {
+			const char *const optval = json_object_get_string(val);
+			if(!strcasecmp(optval, "none")) {
+				data->flags.esc_md = ST_ESC_NONE;
+			} else if(!strcasecmp(optval, "backslash")) {
+				data->flags.esc_md = ST_ESC_BACKSLASH;
+			} else if(!strcasecmp(optval, "double")) {
+				data->flags.esc_md = ST_ESC_DOUBLE;
+			} else if(!strcasecmp(optval, "both")) {
+				data->flags.esc_md = ST_ESC_BOTH;
+			} else {
+				ln_errprintf(ctx, 0, "invalid quoting.escape.mode for string "
+					"parser: %s", optval);
+				r = LN_BADCONFIG;
+				goto done;
+			}
+		} else if(!strcasecmp(key, "quoting.char.begin")) {
+			const char *const optval = json_object_get_string(val);
+			if(strlen(optval) != 1) {
+				ln_errprintf(ctx, 0, "quoting.char.begin must "
+					"be exactly one character but is: '%s'", optval);
+				r = LN_BADCONFIG;
+				goto done;
+			}
+			data->qchar_begin = *optval;
+		} else if(!strcasecmp(key, "quoting.char.end")) {
+			const char *const optval = json_object_get_string(val);
+			if(strlen(optval) != 1) {
+				ln_errprintf(ctx, 0, "quoting.char.end must "
+					"be exactly one character but is: '%s'", optval);
+				r = LN_BADCONFIG;
+				goto done;
+			}
+			data->qchar_end = *optval;
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
+				 json_object_to_json_string(val));
+		}
+	}
+
+	if(data->quoteMode == ST_QUOTE_NONE)
+		data->flags.esc_md = ST_ESC_NONE;
+	*pdata = data;
+done:
+	return r;
+}
+PARSER_Destruct(String)
+{
+	free(pdata);
+}

@@ -59,6 +59,7 @@ PARSERDEF(Literal);
 PARSERDEF(CharTo);
 PARSERDEF(CharSeparated);
 PARSERDEF(Repeat);
+PARSERDEF(String);
 PARSERDEF_NO_DATA(Rest);
 PARSERDEF_NO_DATA(OpQuotedString);
 PARSERDEF_NO_DATA(QuotedString);

@@ -458,8 +458,79 @@ dash ("-") is used as field name in compact format or the "name"
 parameter is simply omitted in JSON format. This is almost always
 expected with the *whitespace* type.
 
+string
+######
+
+This is a highly customizable parser that can be used to extract
+many types of strings. It is meant to be used for most cases. It
+is suggested that specific string types are created as user-defined
+types using this parser.
+
+This parser supports:
+
+* various quoting modes for strings
+* escape character processing
+
+Parameters
+..........
+
+quoting.mode
+~~~~~~~~~~~~
+Specifies how the string is quoted. Possible modes:
+
+* **none** - no quoting is permitted
+* **required** - quotes must be present
+* **auto** - quotes are permitted, but not required
+
+Not!>!/
+parameters.
+
+Default is ``auto``.
+
+quoting.escape.mode
+~~~~~~~~~~~~~~~~~~~
+
+Specifies how quote character escaping is handled. Possible modes:
+
+* **none** - there are no escapes, quote characters are *not* permitted in value
+* **double** - the ending quote character is duplicated to indicate
+  a single quote without termination of the value (e.g. ``""``)
+* **backslash** - a backslash is prepended to the quote character (e.g ``\"``)
+* **both** - both double and backslash escaping can happen and are supported
+
+Note that turning on ``backslash`` mode (or ``both``) has the side-effect that
+backslash escaping is enabled in general. This usually is what you want
+if this option is selected (e.g. otherwise you could no longer represent
+backslash).
+
+quoting.char.begin
+~~~~~~~~~~~~~~~~~~
+
+Sets the begin quote character.
+
+Default is ".
+
+quoting.char.end
+~~~~~~~~~~~~~~~~
+
+Sets the end quote character.
+
+Default is ".
+
+Note that setting the begin and end quote character permits you to
+support more quoting modes. For example, brackets and braces are
+used by some software for quoting. To handle such string, you can for
+example use a configuration like this::
+
+   rule=:a %f:string{"quoting.char.begin":"[", "quoting.char.end":"]"}% b
+
+which matches strings like this::
+
+   a [test test2] b
+
+
 word
-####    
+####
 
 One or more characters, up to the next space (\\x20), or
 up to end of line.
@@ -486,7 +557,7 @@ Parameters
 ..........
 
 extradata
-~~~~~~~~~~
+~~~~~~~~~
 
 This is a mandatory parameter. It contains one or more characters, each of
 which terminates the match.

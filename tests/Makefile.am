@@ -44,6 +44,7 @@ TESTS_SHELLSCRIPTS = \
 	parser_whitespace_jsoncnf.sh \
 	parser_LF.sh \
 	parser_LF_jsoncnf.sh \
+	field_string.sh \
 	field_hexnumber.sh \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
