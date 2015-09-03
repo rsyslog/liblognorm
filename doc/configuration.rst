@@ -528,6 +528,51 @@ which matches strings like this::
 
    a [test test2] b
 
+matching.permitted
+~~~~~~~~~~~~~~~~~~
+
+This allows to specify a set of characters permitted in the to-be-parsed
+field. It is primarily a utility to extract things like programming-language
+like names (e.g. consisting of letters, digits and a set of special characters
+only), alphanumeric or alphabetic strings.
+
+If this parameter is not specified, all characters are permitted. If it
+is specified, only the configured characters are permitted.
+
+Note that this option reliably only works on US-ASCII data. Multi-byte
+character encodings may lead to strange results.
+
+There are two ways to specify permitted characters. The simple one is to
+specify them directly for the parameter::
+
+  rule=:%f:string{"matching.permitted":"abc"}%
+
+This only supports literal characters and all must be given as a single
+parameter. For more advanced use cases, an array of permitted characters
+can be provided::
+
+  rule=:%f:string{"matching.permitted":[
+		       {"class":"digit"},
+		       {"chars":"xX"}
+                          ]}%
+
+Here, ``class`` is a specify for the usual character classes, with
+support for:
+
+* digit
+* hexdigit
+* alpha
+* alnum
+
+In contrast, ``chars`` permits to specify literal characters. Both
+``class`` as well as ``chars`` may be specified multiple times inside
+the array. For example, the ``alnum`` class could also be permitted as
+follows::
+
+  rule=:%f:string{"matching.permitted":[
+		       {"class":"digit"},
+		       {"class":"alpha"}
+                          ]}%
 
 word
 ####

@@ -2707,7 +2707,84 @@ struct data_String {
 	} flags;
 	char qchar_begin;
 	char qchar_end;
+	char perm_chars[256]; // TODO: make this bit-wise, so we need  only 32 bytes
 };
+static inline void
+stringSetPermittedChar(struct data_String *const data, char c, int val)
+{
+#if 0
+	const int i = (unsigned) c / 8;
+	const int shft = (unsigned) c % 8;
+	const unsigned mask = ~(1 << shft);
+	perm_arr[i] = (perm_arr[i] & (0xff 
+#endif
+	data->perm_chars[(unsigned)c] = val;
+}
+static inline int
+stringIsPermittedChar(struct data_String *const data, char c)
+{
+	return data->perm_chars[(unsigned)c];
+}
+static void
+stringAddPermittedCharArr(struct data_String *const data,
+	const char *const optval)
+{
+	const size_t nchars = strlen(optval);
+	for(size_t i = 0 ; i < nchars ; ++i) {
+		stringSetPermittedChar(data, optval[i], 1);
+	}
+}
+static void
+stringAddPermittedFromTo(struct data_String *const data,
+	const unsigned char from,
+	const unsigned char to)
+{
+	assert(from <= to);
+	for(size_t i = from ; i <= to ; ++i) {
+		stringSetPermittedChar(data, (char) i, 1);
+	}
+}
+static inline void
+stringAddPermittedChars(struct data_String *const data,
+	struct json_object *const val)
+{
+	const char *const optval = json_object_get_string(val);
+	if(optval == NULL)
+		return;
+	stringAddPermittedCharArr(data, optval);
+}
+static void
+stringAddPermittedCharsViaArray(ln_ctx ctx, struct data_String *const data,
+	struct json_object *const arr)
+{
+	const int nelem = json_object_array_length(arr);
+	for(int i = 0 ; i < nelem ; ++i) {
+		struct json_object *const elem
+			= json_object_array_get_idx(arr, i);
+		json_object_object_foreach(elem, key, val) {
+			if(!strcasecmp(key, "chars")) {
+				stringAddPermittedChars(data, val);
+			} else if(!strcasecmp(key, "class")) {
+				const char *const optval = json_object_get_string(val);
+				if(!strcasecmp(optval, "digit")) {
+					stringAddPermittedCharArr(data, "0123456789");
+				} else if(!strcasecmp(optval, "hexdigit")) {
+					stringAddPermittedCharArr(data, "0123456789aAbBcCdDeEfF");
+				} else if(!strcasecmp(optval, "alpha")) {
+					stringAddPermittedFromTo(data, 'a', 'z');
+					stringAddPermittedFromTo(data, 'A', 'Z');
+				} else if(!strcasecmp(optval, "alnum")) {
+					stringAddPermittedCharArr(data, "0123456789");
+					stringAddPermittedFromTo(data, 'a', 'z');
+					stringAddPermittedFromTo(data, 'A', 'Z');
+				} else {
+					ln_errprintf(ctx, 0, "invalid character class '%s'",
+						optval);
+				}
+			}
+		}
+	}
+}
 /**
  * generic string parser
  */
@@ -2755,10 +2832,8 @@ PARSER_Parse(String)
 					break;
 				}
 			}
-		} else {
-			if(str[i] == ' ')
-				break;
 		}
+
 		if(   str[i] == '\\'
 		   && i+1 < strLen
 		   && (data->flags.esc_md == ST_ESC_BACKSLASH
@@ -2766,6 +2841,12 @@ PARSER_Parse(String)
 			bHadEscape = 1;
 			i++; /* skip esc char */
 		}
+
+		/* terminating conditions */
+		if(!bHaveQuotes && str[i] == ' ')
+			break;
+		if(!stringIsPermittedChar(data, str[i]))
+			break;
 		i++;
 	}
 
@@ -2773,6 +2854,10 @@ PARSER_Parse(String)
 		goto done;
 
 	if(i == *offs)
+		goto done;
+
+	const size_t trmChkIdx = (bHaveQuotes) ? i+1 : i;
+	if(str[trmChkIdx] != ' ')
 		goto done;
 
 	/* success, persist */
@@ -2821,13 +2906,13 @@ done:
 PARSER_Construct(String)
 {
 	int r = 0;
-	struct json_object *opt;
 	struct data_String *const data = (struct data_String*) calloc(1, sizeof(struct data_String));
 	data->quoteMode = ST_QUOTE_AUTO;
 	data->flags.strip_quotes = 1;
 	data->flags.esc_md = ST_ESC_BOTH;
 	data->qchar_begin = '"';
 	data->qchar_end = '"';
+	memset(data->perm_chars, 0xff, sizeof(data->perm_chars));
 	
 	json_object_object_foreach(json, key, val) {
 		if(!strcasecmp(key, "quoting.mode")) {
@@ -2878,6 +2963,17 @@ PARSER_Construct(String)
 				goto done;
 			}
 			data->qchar_end = *optval;
+		} else if(!strcasecmp(key, "matching.permitted")) {
+			memset(data->perm_chars, 0x00, sizeof(data->perm_chars));
+			if(json_object_is_type(val, json_type_string)) {
+				stringAddPermittedChars(data, val);
+			} else if(json_object_is_type(val, json_type_array)) {
+				stringAddPermittedCharsViaArray(ctx, data, val);
+			} else {
+				ln_errprintf(ctx, 0, "matching.permitted is invalid "
+					"object type, given as '%s",
+					 json_object_to_json_string(val));
+			}
 		} else {
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
