@@ -845,6 +845,8 @@ PARSER_Construct(StringTo)
 
 	*pdata = data;
 done:
+	if(r != 0)
+		free(data);
 	return r;
 }
 PARSER_Destruct(StringTo)
@@ -954,6 +956,8 @@ PARSER_Construct(CharTo)
 	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
 done:
+	if(r != 0)
+		free(data);
 	return r;
 }
 PARSER_Destruct(CharTo)
@@ -1021,6 +1025,8 @@ PARSER_Construct(Literal)
 
 	*pdata = data;
 done:
+	if(r != 0)
+		free(data);
 	return r;
 }
 PARSER_Destruct(Literal)
@@ -1108,6 +1114,8 @@ PARSER_Construct(CharSeparated)
 	data->n_term_chars = strlen(data->term_chars);
 	*pdata = data;
 done:
+	if(r != 0)
+		free(data);
 	return r;
 }
 PARSER_Destruct(CharSeparated)

@@ -230,6 +230,7 @@ ln_newParser(ln_ctx ctx,
 	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
 		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
+		free((void*)name);
 		goto done;
 	}
 
