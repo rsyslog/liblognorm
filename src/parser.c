@@ -2591,7 +2591,6 @@ PARSER_Parse(Repeat)
 
 		if(r != 0) {
 			if(data->permitMismatchInParser) {
-				r = 0;
 				goto success;
 			} else {
 				goto done;
