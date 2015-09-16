@@ -44,4 +44,8 @@ struct ln_samp {
 void ln_sampFree(ln_ctx ctx, struct ln_samp *samp);
 int ln_sampLoad(ln_ctx ctx, const char *file);
 
+/* dual-use funtions for v1 engine */
+void ln_sampSkipCommentLine(ln_ctx ctx, FILE * const __restrict__ repo);
+int ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo);
+
 #endif /* #ifndef LIBLOGNORM_SAMPLES_H_INCLUDED */

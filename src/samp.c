@@ -906,29 +906,62 @@ done:
 }
 
 
+/* note: comments are only supported at beginning of line! */
+/* skip to end of line */
+void
+ln_sampSkipCommentLine(ln_ctx ctx, FILE * const __restrict__ repo)
+{
+	int c;
+	do {
+		c = fgetc(repo);
+	} while(c != EOF && c != '\n');
+	++ctx->conf_ln_nbr;
+}
+
+
 /* this checks if in a multi-line rule, the next line seems to be a new
  * rule, which would meand we have some unmatched percent signs inside
  * our rule (what we call a "runaway rule"). This can easily happen and
  * is otherwise hard to debug, so let's see if it is the case...
  * @return 1 if this is a runaway rule, 0 if not
  */
-static int
-chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
+int
+ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 {
 	int r = 1;
 	fpos_t fpos;
 	char buf[6];
+	int cont = 1;
+	int read;
 
 	fgetpos(repo, &fpos);
-	if(fread(buf, sizeof(char), sizeof(buf)-1, repo) != 5)
-		goto done;
-	buf[5] = '\0';
-	if(!strcmp(buf, "rule=")) {
-		ln_errprintf(ctx, 0, "line has 'rule=' at begin of line, which "
-			"does look like a typo in the previous lines (unmatched "
-			"%% character) and is forbidden. If valid, please re-foramt "
-			"the rule to start with other characters. Rule ignored.");
-		goto done;
+	while(cont) {
+		fpos_t inner_fpos;
+		fgetpos(repo, &inner_fpos);
+		if((read = fread(buf, sizeof(char), sizeof(buf)-1, repo)) == 0)
+			goto done;
+		if(buf[0] == '\n') {
+			fsetpos(repo, &inner_fpos);
+			fread(buf, sizeof(char), 1, repo); /* skip '\n' */
+			continue;
+		} else if(buf[0] == '#') {
+			fsetpos(repo, &inner_fpos);
+			const unsigned conf_ln_nbr_save = ctx->conf_ln_nbr;
+			ln_sampSkipCommentLine(ctx, repo);
+			ctx->conf_ln_nbr = conf_ln_nbr_save;
+			continue;
+		}
+		if(read != 5)
+			goto done; /* cannot be a rule= line! */
+		cont = 0; /* no comment, so we can decide */
+		buf[5] = '\0';
+		if(!strncmp(buf, "rule=", 5)) {
+			ln_errprintf(ctx, 0, "line has 'rule=' at begin of line, which "
+				"does look like a typo in the previous lines (unmatched "
+				"%% character) and is forbidden. If valid, please re-format "
+				"the rule to start with other characters. Rule ignored.");
+			goto done;
+		}
 	}
 
 	r = 0;
@@ -970,7 +1003,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 		} else if(c == '\n') {
 			++ctx->conf_ln_nbr;
 			if(inParser) {
-				if(chkRunawayRule(ctx, repo)) {
+				if(ln_sampChkRunawayRule(ctx, repo)) {
 					/* ignore previous rule */
 					inParser = 0;
 					i = 0;
@@ -979,12 +1012,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 			if(!inParser && i != 0)
 				done = 1;
 		} else if(c == '#' && i == 0) {
-			/* note: comments are only supported at beginning of line! */
-			/* skip to end of line */
-			do {
-				c = fgetc(repo);
-			} while(c != EOF && c != '\n');
-			++ctx->conf_ln_nbr;
+			ln_sampSkipCommentLine(ctx, repo);
 			i = 0; /* back to beginning */
 		} else {
 			if(c == '%')

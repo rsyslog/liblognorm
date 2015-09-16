@@ -32,6 +32,7 @@ TESTS_SHELLSCRIPTS = \
 	include_RULEBASES.sh \
 	seq_simple.sh \
 	runaway_rule.sh \
+	runaway_rule_comment.sh \
 	alternative_simple.sh \
 	alternative_nested.sh \
 	repeat_very_simple.sh \
@@ -81,6 +82,7 @@ TESTS_SHELLSCRIPTS = \
 TESTS_SHELLSCRIPTS += \
 	missing_line_ending_v1.sh \
 	runaway_rule_v1.sh \
+	runaway_rule_comment_v1.sh \
 	field_hexnumber_v1.sh \
 	field_mac48_v1.sh \
 	field_name_value_v1.sh \

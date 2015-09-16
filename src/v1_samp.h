@@ -28,8 +28,8 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
-#ifndef LIBLOGNORM_SAMPLES_H_INCLUDED
-#define	LIBLOGNORM_SAMPLES_H_INCLUDED
+#ifndef LIBLOGNORM_V1_SAMPLES_H_INCLUDED
+#define	LIBLOGNORM_V1_SAMPLES_H_INCLUDED
 #include <stdio.h>	/* we need es_size_t */
 #include <libestr.h>
 
@@ -100,4 +100,4 @@ ln_fieldList_t*
 ln_v1_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs,
 				   es_str_t **str, int* ret);
 
-#endif /* #ifndef LIBLOGNORM_SAMPLES_H_INCLUDED */
+#endif /* #ifndef LIBLOGNORM_V1_SAMPLES_H_INCLUDED */
