@@ -123,6 +123,15 @@ ln_errprintf(const ln_ctx ctx, const int eno, const char *fmt, ...)
 		msg = buf;
 	}
 
+	if(ctx->conf_file != NULL) {
+		/* error during config processing, add line info */
+		const char *const m = strdup(msg);
+		lenBuf = snprintf(finalbuf, sizeof(finalbuf), "rulebase file %s[%d]: %s",
+			ctx->conf_file, ctx->conf_ln_nbr, m);
+		msg = finalbuf;
+		free((void*) m);
+	}
+
 	ctx->errmsgCB(ctx->dbgCookie, msg, lenBuf);
 	ln_dbgprintf(ctx, "%s", msg);
 done:	return;

@@ -796,7 +796,7 @@ done:
  * @return 1 if this is a runaway rule, 0 if not
  */
 static int
-chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
+chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 {
 	int r = 1;
 	fpos_t fpos;
@@ -807,11 +807,10 @@ chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
 		goto done;
 	buf[5] = '\0';
 	if(!strcmp(buf, "rule=")) {
-		ln_errprintf(ctx, 0, "line %d has 'rule=' at begin of line, which "
+		ln_errprintf(ctx, 0, "line has 'rule=' at begin of line, which "
 			"does look like a typo in the previous lines (unmatched "
 			"%% character) and is forbidden. If valid, please re-foramt "
-			"the rule to start with other characters. Rule ignored.",
-			linenbr);
+			"the rule to start with other characters. Rule ignored.");
 		goto done;
 	}
 
@@ -828,7 +827,6 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 	struct ln_v1_samp *samp = NULL;
 	char buf[10*1024]; /**< max size of rule - TODO: make configurable */
 
-	int linenbr = 1;
 	size_t i = 0;
 	int inParser = 0;
 	int done = 0;
@@ -841,9 +839,9 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 			else
 				done = 1; /* last line missing LF, still process it! */
 		} else if(c == '\n') {
-			++linenbr;
+			++ctx->conf_ln_nbr;
 			if(inParser) {
-				if(chkRunawayRule(ctx, repo, linenbr)) {
+				if(chkRunawayRule(ctx, repo)) {
 					/* ignore previous rule */
 					inParser = 0;
 					i = 0;
@@ -857,22 +855,21 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 			do {
 				c = fgetc(repo);
 			} while(c != EOF && c != '\n');
-			++linenbr;
+			++ctx->conf_ln_nbr;
 			i = 0; /* back to beginning */
 		} else {
 			if(c == '%')
 				inParser = (inParser) ? 0 : 1;
 			buf[i++] = c;
 			if(i >= sizeof(buf)) {
-				ln_errprintf(ctx, 0, "line %d is too long", linenbr);
-				ln_dbgprintf(ctx, "line %d is too long", linenbr);
+				ln_errprintf(ctx, 0, "line is too long");
 				goto done;
 			}
 		}
 	}
 	buf[i] = '\0';
 
-	ln_dbgprintf(ctx, "read sample line: '%s'", buf);
+	ln_dbgprintf(ctx, "read rulebase line[~%d]: '%s'", ctx->conf_ln_nbr, buf);
 	ln_v1_processSamp(ctx, buf, i);
 
 done:

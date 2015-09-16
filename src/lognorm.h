@@ -72,6 +72,9 @@ struct ln_ctx_s {
 	 */
 	struct ln_ptree *ptree;
 	/* end old cruft */
+	/* things for config processing / error message during it */
+	const char *conf_file;		/**< currently open config file or NULL, if none */
+	unsigned int conf_ln_nbr;	/**< current config file line number */
 };
 
 void ln_dbgprintf(ln_ctx ctx, char *fmt, ...) __attribute__((format(printf, 2, 3)));

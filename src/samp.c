@@ -837,8 +837,10 @@ static inline int
 processInclude(ln_ctx ctx, const char *buf, const size_t offs)
 {
 	int r;
+	const char *const conf_file_save = ctx->conf_file;
 	char *const fname = strdup(buf+offs);
 	size_t lenfname = strlen(fname);
+	const unsigned conf_ln_nbr_save = ctx->conf_ln_nbr;
 
 	/* trim string - not optimized but also no need to */
 	for(size_t i = lenfname - 1 ; i > 0 ; --i) {
@@ -851,6 +853,10 @@ processInclude(ln_ctx ctx, const char *buf, const size_t offs)
 	CHKR(ln_loadSamples(ctx, fname));
 
 done:
+	free(fname);
+	ctx->conf_file = conf_file_save;
+	ctx->conf_ln_nbr = conf_ln_nbr_save;
+
 	return r;
 }
 
@@ -907,7 +913,7 @@ done:
  * @return 1 if this is a runaway rule, 0 if not
  */
 static int
-chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
+chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 {
 	int r = 1;
 	fpos_t fpos;
@@ -918,11 +924,10 @@ chkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const int linenbr)
 		goto done;
 	buf[5] = '\0';
 	if(!strcmp(buf, "rule=")) {
-		ln_errprintf(ctx, 0, "line %d has 'rule=' at begin of line, which "
+		ln_errprintf(ctx, 0, "line has 'rule=' at begin of line, which "
 			"does look like a typo in the previous lines (unmatched "
 			"%% character) and is forbidden. If valid, please re-foramt "
-			"the rule to start with other characters. Rule ignored.",
-			linenbr);
+			"the rule to start with other characters. Rule ignored.");
 		goto done;
 	}
 
@@ -951,7 +956,6 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 	int r = 0;
 	char buf[64*1024]; /**< max size of rule - TODO: make configurable */
 
-	int linenbr = 1;
 	size_t i = 0;
 	int inParser = 0;
 	int done = 0;
@@ -964,9 +968,9 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 			else
 				done = 1; /* last line missing LF, still process it! */
 		} else if(c == '\n') {
-			++linenbr;
+			++ctx->conf_ln_nbr;
 			if(inParser) {
-				if(chkRunawayRule(ctx, repo, linenbr)) {
+				if(chkRunawayRule(ctx, repo)) {
 					/* ignore previous rule */
 					inParser = 0;
 					i = 0;
@@ -980,21 +984,21 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 			do {
 				c = fgetc(repo);
 			} while(c != EOF && c != '\n');
-			++linenbr;
+			++ctx->conf_ln_nbr;
 			i = 0; /* back to beginning */
 		} else {
 			if(c == '%')
 				inParser = (inParser) ? 0 : 1;
 			buf[i++] = c;
 			if(i >= sizeof(buf)) {
-				ln_errprintf(ctx, 0, "line %d is too long", linenbr);
+				ln_errprintf(ctx, 0, "line is too long");
 				goto done;
 			}
 		}
 	}
 	buf[i] = '\0';
 
-	ln_dbgprintf(ctx, "read rule base line: '%s'", buf);
+	ln_dbgprintf(ctx, "read rulebase line[~%d]: '%s'", ctx->conf_ln_nbr, buf);
 	CHKR(ln_processSamp(ctx, buf, i));
 
 done:
