@@ -1058,7 +1058,7 @@ tryOpenRBFile(ln_ctx ctx, const char *const file)
 		goto done;
 	}
 
-	char *fname;
+	char *fname = NULL;
 	asprintf(&fname, (rb_lib[strlen(rb_lib)-1] == '/') ? "%s%s" : "%s/%s", rb_lib, file);
 	if((repo = fopen(fname, "r")) == NULL) {
 		const int eno2 = errno;
@@ -1067,6 +1067,7 @@ tryOpenRBFile(ln_ctx ctx, const char *const file)
 			"rulebase directory without success. Expanded "
 			"name was '%s'", file, fname);
 	}
+	free(fname);
 
 done:
 	return repo;
