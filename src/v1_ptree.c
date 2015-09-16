@@ -436,8 +436,8 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 	es_addBuf(&str, (char*) prefixBase(tree), tree->lenPrefix);
 	cstr = es_str2cstr(str, NULL);
 	es_deleteStr(str);
-	ln_dbgprintf(tree->ctx, "%ssubtree%s %p (prefix: '%s', children: %d literals, %d fields)",
-		     indent, tree->flags.isTerminal ? " TERM" : "", tree, cstr, nChildLit, nChildField);
+	ln_dbgprintf(tree->ctx, "%ssubtree%s %p (prefix: '%s', children: %d literals, %d fields) [visited %u backtracked %u terminated %u]",
+		     indent, tree->flags.isTerminal ? " TERM" : "", tree, cstr, nChildLit, nChildField, tree->stats.visited, tree->stats.backtracked, tree->stats.terminated);
 	free(cstr);
 	/* display char subtrees */
 	for(i = 0 ; i < 256 ; ++i) {
@@ -664,6 +664,7 @@ ln_v1_normalizeRec(struct ln_ptree *tree, const char *str, size_t strLen, size_t
 	char *namestr;
 	struct json_object *value;
 	
+	++tree->stats.visited;
 	if(offs >= strLen) {
 		*endNode = tree;
 		r = -tree->lenPrefix;
@@ -719,6 +720,7 @@ ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 				}
 				ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d",
 						offs, left);
+				++tree->stats.backtracked;
 				if(left < r)
 					r = left;
 			}
@@ -771,6 +773,7 @@ ln_dbgprintf(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 				if(left > 0 && left < r)
 					r = left;
 				ln_dbgprintf(tree->ctx, "%zu nonmatch, backtracking required, left=%d, r now %d", offs, left, r);
+				++tree->stats.backtracked;
 			}
 		}
 		node = node->next;
@@ -805,7 +808,7 @@ ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 	 * literal evaluation, otherwise "rest" can never be overriden by other rules.
 	 */
 	if(restMotifNode != NULL) {
-		ln_dbgprintf(tree->ctx, "rule has rest motif, forcing match via it\n");
+		ln_dbgprintf(tree->ctx, "rule has rest motif, forcing match via it");
 		value = NULL;
 		restMotifNode->parser(str, strLen, &i, restMotifNode, &parsed, &value);
 #		ifndef NDEBUG
@@ -839,6 +842,8 @@ ln_dbgprintf(tree->ctx, "%zu got return %d", offs, r);
 	}
 done:
 	ln_dbgprintf(tree->ctx, "%zu returns %d", offs, r);
+	if(r == 0 && *endNode == tree)
+		++tree->stats.terminated;
 	return r;
 }
 

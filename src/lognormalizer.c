@@ -372,6 +372,10 @@ int main(int argc, char *argv[])
 
 	normalize();
 
+		ln_setDebugCB(ctx, dbgCallBack, NULL);
+		ln_enableDebug(ctx, 1);
+	ln_displayPTree(ctx->ptree, 0);
+
 exit:
 	if (ctx) ln_exitCtx(ctx);
 	if (encFmt != NULL)

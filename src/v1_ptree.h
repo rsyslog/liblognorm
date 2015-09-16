@@ -87,6 +87,11 @@ struct ln_ptree {
 		unsigned char *ptr;	/**< use if data element is too large */
 		unsigned char data[16]; /**< fast lookup for small string */
 	} prefix;	/**< a common prefix string for all of this node */
+	struct {
+		unsigned visited;
+		unsigned backtracked;	/**< incremented when backtracking was initiated */
+		unsigned terminated;
+	} stats;	/**< usage statistics */
 };
 
 

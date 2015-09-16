@@ -836,6 +836,9 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 	ln_dbgprintf(ctx, "read rulebase line[~%d]: '%s'", ctx->conf_ln_nbr, buf);
 	ln_v1_processSamp(ctx, buf, i);
 
+ln_dbgprintf(ctx, "---------------------------------------");
+ln_displayPTree(ctx->ptree, 0);
+ln_dbgprintf(ctx, "=======================================");
 done:
 	return samp;
 }
