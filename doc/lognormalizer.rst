@@ -36,6 +36,22 @@ Print only successfully parsed messages.
 
 ::
 
+    -P
+
+Print only messages **not** successfully parsed.
+
+::
+
+    -L
+
+Add line number information to events not successfully parsed. This
+is meant as a troubleshooting aid when working with unparsable events,
+as the information can be used to directly go to the line in question
+in the source data file. The line number is contained in a field
+named ``lognormalizer.line_nbr``.
+
+::
+
     -t <TAG>
     
 Print only those messages which have this tag.
