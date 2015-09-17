@@ -46,7 +46,10 @@
 static ln_ctx ctx;
 
 static int verbose = 0;
-static int parsedOnly = 0;	/**< output unparsed messages? */
+#define OUTPUT_PARSED_RECS 0x01
+#define OUTPUT_UNPARSED_RECS 0x02
+static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
+				/**< controls which records to output */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
@@ -142,6 +145,7 @@ normalize(void)
 	FILE *fp = stdin;
 	char buf[10*1024];
 	struct json_object *json = NULL;
+	long long unsigned numParsed = 0;
 	long long unsigned numUnparsed = 0;
 	long long unsigned numWrongTag = 0;
 	char *mandatoryTagCstr = NULL;
@@ -159,11 +163,18 @@ normalize(void)
 		if(json != NULL) {
 			if(eventHasTag(json, mandatoryTagCstr)) {
 				struct json_object *dummy;
-				if( parsedOnly == 1
-						&& json_object_object_get_ex(json, "unparsed-data", &dummy)) {
-					numUnparsed++;
+				const int parsed = !json_object_object_get_ex(json,
+					"unparsed-data", &dummy);
+				if(parsed) {
+					numParsed++;
+					if(recOutput & OUTPUT_PARSED_RECS) {
+						outputEvent(json);
+					}
 				} else {
-					outputEvent(json);
+					numUnparsed++;
+					if(recOutput & OUTPUT_UNPARSED_RECS) {
+						outputEvent(json);
+					}
 				}
 			} else {
 				numWrongTag++;
@@ -172,10 +183,12 @@ normalize(void)
 			json = NULL;
 		}
 	}
-	if(numUnparsed > 0)
+	if((recOutput & OUTPUT_PARSED_RECS) && numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
+	fprintf(stderr, "%llu records processed, %llu parsed, %llu unparsed\n",
+		numParsed+numUnparsed, numParsed, numUnparsed);
 	free(mandatoryTagCstr);
 }
 
@@ -211,6 +224,7 @@ fprintf(stderr,
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
+	"    -P           Print back only if the message has NOT been parsed succesfully\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
 	"    -v           Print debug. When used 3 times, prints parse tree\n"
 	"    -d           Print DOT file to stdout and exit\n"
@@ -233,7 +247,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:e:r:E:vpt:To:h")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:e:r:E:vpPt:To:h")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -266,7 +280,10 @@ int main(int argc, char *argv[])
 			encFmt = es_newStrFromCStr(optarg, strlen(optarg));
 			break;
 		case 'p':
-			parsedOnly = 1;
+			recOutput = OUTPUT_PARSED_RECS;
+			break;
+		case 'P':
+			recOutput = OUTPUT_UNPARSED_RECS;
 			break;
 		case 'T':
 			flatTags = 1;
