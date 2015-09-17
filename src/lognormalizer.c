@@ -50,6 +50,7 @@ static int verbose = 0;
 #define OUTPUT_UNPARSED_RECS 0x02
 static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
 				/**< controls which records to output */
+static int addErrLineNbr = 0;	/**< add line number info to unparsed events */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
@@ -137,6 +138,17 @@ eventHasTag(struct json_object *json, const char *tag)
 	return 0;
 }
 
+static void
+amendLineNbr(json_object *const json, const int line_nbr)
+{
+	
+	if(addErrLineNbr) {
+		struct json_object *jval;
+		jval = json_object_new_int(line_nbr);
+		json_object_object_add(json, "lognormalizer.line_nbr", jval);
+	}
+}
+
 /* normalize input data
  */
 void
@@ -149,12 +161,14 @@ normalize(void)
 	long long unsigned numUnparsed = 0;
 	long long unsigned numWrongTag = 0;
 	char *mandatoryTagCstr = NULL;
+	int line_nbr = 0;	/* must be int to keep compatible with older json-c */
 	
 	if (mandatoryTag != NULL) {
 		mandatoryTagCstr = es_str2cstr(mandatoryTag, NULL);
 	}
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
+		++line_nbr;
 		buf[strlen(buf)-1] = '\0';
 		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
 			buf[strlen(buf)-1] = '\0';
@@ -172,6 +186,7 @@ normalize(void)
 					}
 				} else {
 					numUnparsed++;
+					amendLineNbr(json, line_nbr);
 					if(recOutput & OUTPUT_UNPARSED_RECS) {
 						outputEvent(json);
 					}
@@ -225,6 +240,7 @@ fprintf(stderr,
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
 	"    -P           Print back only if the message has NOT been parsed succesfully\n"
+	"    -L           Add source file line number information to unparsed line output\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
 	"    -v           Print debug. When used 3 times, prints parse tree\n"
 	"    -d           Print DOT file to stdout and exit\n"
@@ -247,7 +263,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:e:r:E:vpPt:To:h")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:e:r:E:vpPt:To:hL")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -284,6 +300,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'P':
 			recOutput = OUTPUT_UNPARSED_RECS;
+			break;
+		case 'L':
+			addErrLineNbr = 1;
 			break;
 		case 'T':
 			flatTags = 1;
