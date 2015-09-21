@@ -30,3 +30,8 @@ test-driver
 test.out
 src/ln_test
 tests/options.sh
+compat/.deps
+compat/.libs
+*.la
+*.lo
+*.o

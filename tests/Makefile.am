@@ -75,8 +75,9 @@ TESTS_SHELLSCRIPTS = \
 	field_checkpoint-lea_jsoncnf.sh \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
-        field_float.sh \ 
-        field_float_jsoncnf.sh
+	field_float.sh \ 
+	field_float_jsoncnf.sh \
+	very_long_logline_jsoncnf.sh
 
 # now come tests for the legacy (v1) engine
 TESTS_SHELLSCRIPTS += \
@@ -96,7 +97,7 @@ TESTS_SHELLSCRIPTS += \
 	field_cef_v1.sh \
 	field_checkpoint-lea_v1.sh \
 	field_duration_v1.sh \
-        field_float_v1.sh \ 
+	field_float_v1.sh \ 
 	field_cee-syslog_v1.sh \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
@@ -109,7 +110,8 @@ TESTS_SHELLSCRIPTS += \
 	field_suffixed.sh \
 	field_suffixed_with_invalid_ruledef.sh \
 	field_cisco-interface-spec.sh \
-	field_float_with_invalid_ruledef.sh
+	field_float_with_invalid_ruledef.sh \
+	very_long_logline.sh
 
 
 #re-add to TESTS if needed: user_test
