@@ -2009,21 +2009,21 @@ PARSER(CiscoInterfaceSpec)
 	json_object *json;
 	if(bHaveInterface) {
 		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
-		json_object_object_add(*value, "interface", json);
+		json_object_object_add_ex(*value, "interface", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
-	json_object_object_add(*value, "ip", json);
+	json_object_object_add_ex(*value, "ip", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
-	json_object_object_add(*value, "port", json);
+	json_object_object_add_ex(*value, "port", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	if(bHaveIP2) {
 		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
-		json_object_object_add(*value, "ip2", json);
+		json_object_object_add_ex(*value, "ip2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
-		json_object_object_add(*value, "port2", json);
+		json_object_object_add_ex(*value, "port2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	if(bHaveUser) {
 		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
-		json_object_object_add(*value, "user", json);
+		json_object_object_add_ex(*value, "user", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 
 success: /* success, persist */

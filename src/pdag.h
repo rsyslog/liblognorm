@@ -104,6 +104,11 @@ struct ln_pdag {
 	} flags;
 	struct json_object *tags;	/**< tags to assign to events of this type */
 	int refcnt;			/**< reference count for deleting tracking */
+	struct {
+		unsigned visited;
+		unsigned backtracked;	/**< incremented when backtracking was initiated */
+		unsigned terminated;
+	} stats;	/**< usage statistics */
 };
 
 

@@ -169,11 +169,14 @@ normalize(void)
 
 	while((fgets(buf, sizeof(buf), fp)) != NULL) {
 		++line_nbr;
-		buf[strlen(buf)-1] = '\0';
-		if(strlen(buf) > 0 && buf[strlen(buf)-1] == '\r')
-			buf[strlen(buf)-1] = '\0';
+		size_t bufLen = strlen(buf) - 1;
+		buf[bufLen] = '\0';
+		if(bufLen > 0 && buf[bufLen-1] == '\r') {
+			buf[bufLen-1] = '\0';
+			--bufLen;
+		}
 		if(verbose > 0) fprintf(stderr, "To normalize: '%s'\n", buf);
-		ln_normalize(ctx, buf, strlen(buf), &json);
+		ln_normalize(ctx, buf, bufLen, &json);
 		if(json != NULL) {
 			if(eventHasTag(json, mandatoryTagCstr)) {
 				struct json_object *dummy;
@@ -377,6 +380,8 @@ int main(int argc, char *argv[])
 
 	if(ctx->ptree != NULL)
 		ln_displayPTree(ctx->ptree, 0);
+	else
+		ln_displayPDAG(ctx);
 
 exit:
 	if (ctx) ln_exitCtx(ctx);

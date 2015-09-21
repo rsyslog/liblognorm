@@ -39,11 +39,13 @@
 #include "internal.h"
 #include "parser.h"
 #include "samp.h"
+#include "helpers.h"
 
 #ifdef FEATURE_REGEXP
 #include <pcre.h>
 #include <errno.h>			
 #endif
+
 
 /* some helpers */
 static inline int
@@ -53,7 +55,7 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	size_t len = *lenBuf;
 	int i = 0;
 
-	while(len > 0 && isdigit(*p)) {
+	while(len > 0 && myisdigit(*p)) {
 		i = i * 10 + *p - '0';
 		++p;
 		--len;
@@ -247,9 +249,7 @@ PARSER_Parse(RFC5424Date)
 	*parsed = orglen - len;
 
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 
 	r = 0; /* success */
@@ -477,9 +477,7 @@ PARSER_Parse(RFC3164Date)
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -501,17 +499,14 @@ PARSER_Parse(Number)
 	assert(parsed != NULL);
 	c = str;
 
-	for (i = *offs; i < strLen && isdigit(c[i]); i++);
+	for (i = *offs; i < strLen && myisdigit(c[i]); i++);
 	if (i == *offs)
 		goto done;
 	
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-ln_dbgprintf(ctx, "number parsed '%s'", cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -540,7 +535,7 @@ PARSER_Parse(Float)
 		if (c[i] == '.') {
 			if (seen_point != 0) break;
 			seen_point = 1;
-		} else if (! isdigit(c[i])) {
+		} else if (! myisdigit(c[i])) {
 			break;
 		} 
 	}
@@ -550,9 +545,7 @@ PARSER_Parse(Float)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -595,7 +588,7 @@ PARSER_Parse(HexNumber)
 	if (i == *offs || !isspace(c[i]))
 		goto done;
 	if(maxval > 0 && val > maxval) {
-		ln_dbgprintf(ctx, "hexnumber parser: val too large (max %" PRIu64
+		LN_DBGPRINTF(ctx, "hexnumber parser: val too large (max %" PRIu64
 			     ", actual %" PRIu64 ")",
 			     maxval, val);
 		goto done;
@@ -604,9 +597,7 @@ PARSER_Parse(HexNumber)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -665,15 +656,15 @@ PARSER_Parse(KernelTimestamp)
 
 	i = *offs;
 	if(c[i] != '[' || i+LEN_KERNEL_TIMESTAMP > strLen
-	   || !isdigit(c[i+1])
-	   || !isdigit(c[i+2])
-	   || !isdigit(c[i+3])
-	   || !isdigit(c[i+4])
-	   || !isdigit(c[i+5])
+	   || !myisdigit(c[i+1])
+	   || !myisdigit(c[i+2])
+	   || !myisdigit(c[i+3])
+	   || !myisdigit(c[i+4])
+	   || !myisdigit(c[i+5])
 	   )
 		goto done;
 	i += 6;
-	for(int j = 0 ; j < 7 && i < strLen && isdigit(c[i]) ; )
+	for(int j = 0 ; j < 7 && i < strLen && myisdigit(c[i]) ; )
 		++i, ++j;	/* just scan */
 
 	if(i >= strLen || c[i] != '.')
@@ -682,12 +673,12 @@ PARSER_Parse(KernelTimestamp)
 	++i; /* skip over '.' */
 
 	if( i+7 > strLen
-	   || !isdigit(c[i+0])
-	   || !isdigit(c[i+1])
-	   || !isdigit(c[i+2])
-	   || !isdigit(c[i+3])
-	   || !isdigit(c[i+4])
-	   || !isdigit(c[i+5])
+	   || !myisdigit(c[i+0])
+	   || !myisdigit(c[i+1])
+	   || !myisdigit(c[i+2])
+	   || !myisdigit(c[i+3])
+	   || !myisdigit(c[i+4])
+	   || !myisdigit(c[i+5])
 	   || c[i+6] != ']'
 	   )
 		goto done;
@@ -696,9 +687,7 @@ PARSER_Parse(KernelTimestamp)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -731,9 +720,7 @@ PARSER_Parse(Whitespace)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -766,9 +753,7 @@ PARSER_Parse(Word)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -822,9 +807,7 @@ PARSER_Parse(StringTo)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -884,9 +867,7 @@ PARSER_Parse(Alpha)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -935,9 +916,7 @@ PARSER_Parse(CharTo)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0;
 done:
@@ -993,9 +972,7 @@ PARSER_Parse(Literal)
 	*parsed = j; /* we must always return how far we parsed! */
 	if(lit[j] == '\0') {
 		if(value != NULL) {
-			char *cstr = strndup(str+ *offs, *parsed);
-			*value = json_object_new_string(cstr);
-			free(cstr);
+			*value = json_object_new_string_len(str+(*offs), *parsed);
 		}
 		r = 0;
 	}
@@ -1093,9 +1070,7 @@ PARSER_Parse(CharSeparated)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 	return r;
@@ -1141,9 +1116,7 @@ PARSER_Parse(Rest)
 	/* success, persist */
 	*parsed = strLen - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0;
 	return r;
@@ -1235,9 +1208,7 @@ PARSER_Parse(QuotedString)
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1264,10 +1235,10 @@ PARSER_Parse(ISODate)
 		goto done;	/* if it is not 10 chars, it can't be an ISO date */
 
 	/* year */
-	if(!isdigit(c[i])) goto done;
-	if(!isdigit(c[i+1])) goto done;
-	if(!isdigit(c[i+2])) goto done;
-	if(!isdigit(c[i+3])) goto done;
+	if(!myisdigit(c[i])) goto done;
+	if(!myisdigit(c[i+1])) goto done;
+	if(!myisdigit(c[i+2])) goto done;
+	if(!myisdigit(c[i+3])) goto done;
 	if(c[i+4] != '-') goto done;
 	/* month */
 	if(c[i+5] == '0') {
@@ -1282,7 +1253,7 @@ PARSER_Parse(ISODate)
 	if(c[i+8] == '0') {
 		if(c[i+9] < '1' || c[i+9] > '9') goto done;
 	} else if(c[i+8] == '1' || c[i+8] == '2') {
-		if(!isdigit(c[i+9])) goto done;
+		if(!myisdigit(c[i+9])) goto done;
 	} else if(c[i+8] == '3') {
 		if(c[i+9] != '0' && c[i+9] != '1') goto done;
 	} else {
@@ -1292,9 +1263,7 @@ PARSER_Parse(ISODate)
 	/* success, persist */
 	*parsed = 10;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1419,21 +1388,21 @@ PARSER_Parse(CiscoInterfaceSpec)
 	json_object *json;
 	if(bHaveInterface) {
 		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
-		json_object_object_add(*value, "interface", json);
+		json_object_object_add_ex(*value, "interface", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
-	json_object_object_add(*value, "ip", json);
+	json_object_object_add_ex(*value, "ip", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
-	json_object_object_add(*value, "port", json);
+	json_object_object_add_ex(*value, "port", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	if(bHaveIP2) {
 		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
-		json_object_object_add(*value, "ip2", json);
+		json_object_object_add_ex(*value, "ip2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
-		json_object_object_add(*value, "port2", json);
+		json_object_object_add_ex(*value, "port2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	if(bHaveUser) {
 		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
-		json_object_object_add(*value, "user", json);
+		json_object_object_add_ex(*value, "user", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 
 success: /* success, persist */
@@ -1465,9 +1434,9 @@ PARSER_Parse(Duration)
 	i = *offs;
 
 	/* hour is a bit tricky */
-	if(!isdigit(c[i])) goto done;
+	if(!myisdigit(c[i])) goto done;
 	++i;
-	if(isdigit(c[i]))
+	if(myisdigit(c[i]))
 		++i;
 	if(c[i] == ':')
 		++i;
@@ -1478,17 +1447,15 @@ PARSER_Parse(Duration)
 		goto done;/* if it is not 5 chars from here, it can't be us */
 
 	if(c[i] < '0' || c[i] > '5') goto done;
-	if(!isdigit(c[i+1])) goto done;
+	if(!myisdigit(c[i+1])) goto done;
 	if(c[i+2] != ':') goto done;
 	if(c[i+3] < '0' || c[i+3] > '5') goto done;
-	if(!isdigit(c[i+4])) goto done;
+	if(!myisdigit(c[i+4])) goto done;
 
 	/* success, persist */
 	*parsed = (i + 5) - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1515,7 +1482,7 @@ PARSER_Parse(Time24hr)
 
 	/* hour */
 	if(c[i] == '0' || c[i] == '1') {
-		if(!isdigit(c[i+1])) goto done;
+		if(!myisdigit(c[i+1])) goto done;
 	} else if(c[i] == '2') {
 		if(c[i+1] < '0' || c[i+1] > '3') goto done;
 	} else {
@@ -1524,17 +1491,15 @@ PARSER_Parse(Time24hr)
 	/* TODO: the code below is a duplicate of 24hr parser - create common function */
 	if(c[i+2] != ':') goto done;
 	if(c[i+3] < '0' || c[i+3] > '5') goto done;
-	if(!isdigit(c[i+4])) goto done;
+	if(!myisdigit(c[i+4])) goto done;
 	if(c[i+5] != ':') goto done;
 	if(c[i+6] < '0' || c[i+6] > '5') goto done;
-	if(!isdigit(c[i+7])) goto done;
+	if(!myisdigit(c[i+7])) goto done;
 
 	/* success, persist */
 	*parsed = 8;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1562,7 +1527,7 @@ PARSER_Parse(Time12hr)
 
 	/* hour */
 	if(c[i] == '0') {
-		if(!isdigit(c[i+1])) goto done;
+		if(!myisdigit(c[i+1])) goto done;
 	} else if(c[i] == '1') {
 		if(c[i+1] < '0' || c[i+1] > '2') goto done;
 	} else {
@@ -1570,17 +1535,15 @@ PARSER_Parse(Time12hr)
 	}
 	if(c[i+2] != ':') goto done;
 	if(c[i+3] < '0' || c[i+3] > '5') goto done;
-	if(!isdigit(c[i+4])) goto done;
+	if(!myisdigit(c[i+4])) goto done;
 	if(c[i+5] != ':') goto done;
 	if(c[i+6] < '0' || c[i+6] > '5') goto done;
-	if(!isdigit(c[i+7])) goto done;
+	if(!myisdigit(c[i+7])) goto done;
 
 	/* success, persist */
 	*parsed = 8;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1603,12 +1566,12 @@ chkIPv4AddrByte(const char *str, size_t strLen, size_t *offs)
 	size_t i = *offs;
 
 	c = str;
-	if(i == strLen || !isdigit(c[i]))
+	if(i == strLen || !myisdigit(c[i]))
 		goto done;
 	val = c[i++] - '0';
-	if(i < strLen && isdigit(c[i])) {
+	if(i < strLen && myisdigit(c[i])) {
 		val = val * 10 + c[i++] - '0';
-		if(i < strLen && isdigit(c[i]))
+		if(i < strLen && myisdigit(c[i]))
 			val = val * 10 + c[i++] - '0';
 	}
 	if(val > 255)	/* cannot be a valid IP address byte! */
@@ -1652,9 +1615,7 @@ PARSER_Parse(IPv4)
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1762,9 +1723,7 @@ chk_ok:	/* we are finished parsing, check if things are ok */
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		char *cstr = strndup(str+ *offs, *parsed);
-		*value = json_object_new_string(cstr);
-		free(cstr);
+		*value = json_object_new_string_len(str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -2596,7 +2555,7 @@ PARSER_Parse(Repeat)
 		r = ln_normalizeRec(data->parser, str, strLen, strtoffs, 1,
 				    &longest_path, parsed_value, &endNode);
 		strtoffs = longest_path;
-		ln_dbgprintf(ctx, "repeat parser returns %d, parsed %zu, json: %s",
+		LN_DBGPRINTF(ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, longest_path, json_object_to_json_string(parsed_value));
 
 		if(r != 0) {
@@ -2625,13 +2584,13 @@ PARSER_Parse(Repeat)
 		json_object_array_add(json_arr, toAdd);
 		if(toAdd != parsed_value)
 			json_object_put(parsed_value);
-		ln_dbgprintf(ctx, "arr: %s", json_object_to_json_string(json_arr));
+		LN_DBGPRINTF(ctx, "arr: %s", json_object_to_json_string(json_arr));
 
 		/* now check if we shall continue */
 		longest_path = 0;
 		r = ln_normalizeRec(data->while_cond, str, strLen, strtoffs, 1,
 				    &longest_path, NULL, &endNode);
-		ln_dbgprintf(ctx, "repeat while returns %d, parsed %zu",
+		LN_DBGPRINTF(ctx, "repeat while returns %d, parsed %zu",
 			r, longest_path);
 		if(r == 0)
 			strtoffs = longest_path;

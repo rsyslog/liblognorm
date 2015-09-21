@@ -25,9 +25,9 @@
 #include "annot.h"
 #include "internal.h"
 #include "parser.h"
+#include "helpers.h"
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
-
 
 /* parser lookup table
  * This is a memory- and cache-optimized way of calling parsers.
@@ -125,7 +125,7 @@ ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 	}
 
 	if(!bAdd) {
-		ln_dbgprintf(ctx, "custom type '%s' not found", name);
+		LN_DBGPRINTF(ctx, "custom type '%s' not found", name);
 		goto done;
 	}
 
@@ -133,7 +133,7 @@ ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 	struct ln_type_pdag *newarr;
 	newarr = realloc(ctx->type_pdags, sizeof(struct ln_type_pdag) * (ctx->nTypes+1));
 	if(newarr == NULL) {
-		ln_dbgprintf(ctx, "ln_pdagFindTypeAG: alloc newarr failed");
+		LN_DBGPRINTF(ctx, "ln_pdagFindTypeAG: alloc newarr failed");
 		goto done;
 	}
 	ctx->type_pdags = newarr;
@@ -217,7 +217,7 @@ ln_newParser(ln_ctx ctx,
 	json_object_object_get_ex(prscnf, "priority", &json);
 	const int assignedPrio = (json == NULL) ? DFLT_USR_PARSER_PRIO :
 						  json_object_get_int(json);
-	ln_dbgprintf(ctx, "assigned priority is %d", assignedPrio);
+	LN_DBGPRINTF(ctx, "assigned priority is %d", assignedPrio);
 
 	/* we need to remove already processed items from the config, so
 	 * that we can pass the remaining parameters to the parser.
@@ -229,7 +229,7 @@ ln_newParser(ln_ctx ctx,
 
 	/* got all data items */
 	if((node = calloc(1, sizeof(ln_parser_t))) == NULL) {
-		ln_dbgprintf(ctx, "lnNewParser: alloc node failed");
+		LN_DBGPRINTF(ctx, "lnNewParser: alloc node failed");
 		free((void*)name);
 		goto done;
 	}
@@ -327,7 +327,7 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 
 		/* ok, we have two literals in a row, let's compact the nodes */
 		ln_parser_t *child_prs = prs->node->parsers;
-		ln_dbgprintf(ctx, "opt path compact: add %p to %p", child_prs, prs);
+		LN_DBGPRINTF(ctx, "opt path compact: add %p to %p", child_prs, prs);
 		CHKR(ln_combineData_Literal(prs->parser_data, child_prs->parser_data));
 		ln_pdag *const node_del = prs->node;
 		prs->node = child_prs->node;
@@ -355,7 +355,7 @@ ln_pdagComponentOptimize(ln_ctx ctx, struct ln_pdag *const dag)
 
 for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough */
 	ln_parser_t *prs = dag->parsers+i;
-	ln_dbgprintf(ctx, "pre sort, parser %d:%s[%d]", i, prs->name, prs->prio);
+	LN_DBGPRINTF(ctx, "pre sort, parser %d:%s[%d]", i, prs->name, prs->prio);
 }
 	/* first sort parsers in priority order */
 	if(dag->nparsers > 1) {
@@ -363,13 +363,13 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 	}
 for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough */
 	ln_parser_t *prs = dag->parsers+i;
-	ln_dbgprintf(ctx, "post sort, parser %d:%s[%d]", i, prs->name, prs->prio);
+	LN_DBGPRINTF(ctx, "post sort, parser %d:%s[%d]", i, prs->name, prs->prio);
 }
 
 	/* now on to rest of processing */
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
-		ln_dbgprintf(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
+		LN_DBGPRINTF(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
 			prs->node, i, parserName(prs->prsid), prs->name,
 			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
 		
@@ -389,15 +389,15 @@ ln_pdagOptimize(ln_ctx ctx)
 	int r = 0;
 
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
-		ln_dbgprintf(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
+		LN_DBGPRINTF(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
 		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
 	}
 
-	ln_dbgprintf(ctx, "optimizing main pdag component\n");
+	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
-ln_dbgprintf(ctx, "---AFTER OPTIMIZATION------------------");
+LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
-ln_dbgprintf(ctx, "=======================================");
+LN_DBGPRINTF(ctx, "=======================================");
 	return r;
 }
 
@@ -553,12 +553,12 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	int r;
 	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
 	CHKN(parser);
-	ln_dbgprintf(ctx, "pdag: %p, parser %p", pdag, parser);
+	LN_DBGPRINTF(ctx, "pdag: %p, parser %p", pdag, parser);
 	/* check if we already have this parser, if so, merge
 	 */
 	int i;
 	for(i = 0 ; i < pdag->nparsers ; ++i) {
-		ln_dbgprintf(ctx, "parser  comparison:\n%s\n%s",  pdag->parsers[i].conf, parser->conf);
+		LN_DBGPRINTF(ctx, "parser  comparison:\n%s\n%s",  pdag->parsers[i].conf, parser->conf);
 		if(   pdag->parsers[i].prsid == parser->prsid
 		   && !strcmp(pdag->parsers[i].conf, parser->conf)) {
 		   	// FIXME: the current ->conf object is depending on
@@ -569,7 +569,7 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 			//        else err out
 			*nextnode = pdag->parsers[i].node;
 			r = 0;
-			ln_dbgprintf(ctx, "merging with pdag %p", pdag);
+			LN_DBGPRINTF(ctx, "merging with pdag %p", pdag);
 			pdagDeletePrs(ctx, parser); /* no need for data items */
 			goto done;
 		}
@@ -619,7 +619,7 @@ ln_pdagAddParsers(ln_ctx ctx,
 	for(int i = 0 ; i < lenarr ; ++i) {
 		struct json_object *const curr_prscnf =
 			json_object_array_get_idx(prscnf, i);
-		ln_dbgprintf(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
+		LN_DBGPRINTF(ctx, "parser %d: %s", i, json_object_to_json_string(curr_prscnf));
 		if(json_object_get_type(curr_prscnf) == json_type_array) {
 			struct ln_pdag *local_dag = dag;
 			CHKR(ln_pdagAddParserInternal(ctx, &local_dag, mode,
@@ -712,22 +712,32 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-	ln_dbgprintf(dag->ctx, "%ssubDAG%s %p (children: %d parsers)",
-		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers);
+if(dag->stats.visited == 0) return;
+	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [visited %u, backtracked %u]",
+		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers,
+		     dag->stats.visited, dag->stats.backtracked);
 
+for(int i = 0 ; i < dag->nparsers ; ++i) {
+	ln_parser_t *const prs = dag->parsers+i;
+	LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s': visited %u", indent,
+		parserName(prs->prsid),
+		dag->parsers[i].name,
+		(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN",
+	dag->parsers[i].node->stats.visited);
+}
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *const prs = dag->parsers+i;
-		ln_dbgprintf(dag->ctx, "%sfield type '%s', name '%s': '%s':", indent,
+		LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s':", indent,
 			parserName(prs->prsid),
 			dag->parsers[i].name,
 			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
 		if(prs->prsid == PRS_REPEAT) {
 			struct data_Repeat *const data = (struct data_Repeat*) prs->parser_data;
-			ln_dbgprintf(dag->ctx, "%sparser:", indent);
+			LN_DBGPRINTF(dag->ctx, "%sparser:", indent);
 			ln_displayPDAGComponent(data->parser, level + 1);
-			ln_dbgprintf(dag->ctx, "%swhile:", indent);
+			LN_DBGPRINTF(dag->ctx, "%swhile:", indent);
 			ln_displayPDAGComponent(data->while_cond, level + 1);
-			ln_dbgprintf(dag->ctx, "%send repeat def", indent);
+			LN_DBGPRINTF(dag->ctx, "%send repeat def", indent);
 		}
 		ln_displayPDAGComponent(dag->parsers[i].node, level + 1);
 	}
@@ -736,19 +746,19 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 
 
 /* developer debug aid, to be used for example as follows:
-   ln_dbgprintf(dag->ctx, "---------------------------------------");
+   LN_DBGPRINTF(dag->ctx, "---------------------------------------");
    ln_displayPDAG(dag);
-   ln_dbgprintf(dag->ctx, "=======================================");
+   LN_DBGPRINTF(dag->ctx, "=======================================");
  */
 void
 ln_displayPDAG(ln_ctx ctx)
 {
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
-		ln_dbgprintf(ctx, "COMPONENT: %s", ctx->type_pdags[i].name);
+		LN_DBGPRINTF(ctx, "COMPONENT: %s", ctx->type_pdags[i].name);
 		ln_displayPDAGComponent(ctx->type_pdags[i].pdag, 0);
 	}
 
-	ln_dbgprintf(ctx, "MAIN COMPONENT:");
+	LN_DBGPRINTF(ctx, "MAIN COMPONENT:");
 	ln_displayPDAGComponent(ctx->pdag, 0);
 }
 
@@ -770,7 +780,7 @@ struct data_Literal { const char *lit; }; // TODO remove when this hack is no lo
 static void
 ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 {
-	ln_dbgprintf(dag->ctx, "in dot: %p, visited %d", dag, (int) dag->flags.visited);
+	LN_DBGPRINTF(dag->ctx, "in dot: %p, visited %d", dag, (int) dag->flags.visited);
 	if(dag->flags.visited)
 		return; /* already processed this subpart */
 	dag->flags.visited = 1;
@@ -857,29 +867,28 @@ fixJSON(struct ln_pdag *dag,
 {
 	int r = LN_WRONGPARSER;
 
-	ln_dbgprintf(dag->ctx, "in  field name '%s', json: '%s', value: '%s'", prs->name, json_object_to_json_string(json), json_object_to_json_string(*value));
 	if(prs->name ==  NULL) {
 		if (*value != NULL) {
 			/* Free the unneeded value */
 			json_object_put(*value);
 		}
-	} else if(prs->name != NULL && !strcmp(prs->name, ".")) {
+	} else if(prs->name != NULL && prs->name[0] == '.' && prs->name[1] == '\0') {
 		if(json_object_get_type(*value) == json_type_object) {
 			json_object_object_foreach(*value, key, val) {
-				ln_dbgprintf(dag->ctx, "key: %s, json: %s", key, json_object_to_json_string(val));
 				json_object_get(val);
 				json_object_object_add(json, key, val);
 			}
 			json_object_put(*value);
 		} else {
-			ln_dbgprintf(dag->ctx, "field name is '.', but json type is %s",
+			LN_DBGPRINTF(dag->ctx, "field name is '.', but json type is %s",
 				json_type_to_name(json_object_get_type(*value)));
-			json_object_object_add(json, prs->name, *value);
+			json_object_object_add_ex(json, prs->name, *value,
+				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		}
 	} else {
-		json_object_object_add(json, prs->name, *value);
+		json_object_object_add_ex(json, prs->name, *value,
+			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
-	ln_dbgprintf(dag->ctx, "out field name '%s', json: %s", prs->name, json_object_to_json_string(json));
 	r = 0;
 	return r;
 }
@@ -909,16 +918,16 @@ tryParser(struct ln_pdag *dag,
 	if(prs->prsid == PRS_CUSTOM_TYPE) {
 		if(*value == NULL)
 			*value = json_object_new_object();
-		ln_dbgprintf(dag->ctx, "calling custom parser '%s'", prs->custType->name);
+		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", prs->custType->name);
 		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
 				    pParsed, *value, &endNode);
 		*pParsed -= *offs;
-		ln_dbgprintf(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s",
-			prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
+		//LN_DBGPRINTF(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s",
+			//prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
-		ln_dbgprintf(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
+		LN_DBGPRINTF(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
 	return r;
 }
@@ -956,13 +965,15 @@ ln_normalizeRec(struct ln_pdag *dag,
 	size_t parsed = 0;
 	struct json_object *value;
 	
-ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
+LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
+
+	++dag->stats.visited;
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			ln_dbgprintf(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', data '%s'",
+			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', data '%s'",
 					offs, bPartialMatch, parserName(prs->prsid), prs->name,
 					(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
 		}
@@ -972,14 +983,15 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
-			ln_dbgprintf(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
+			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
 			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, bPartialMatch, &parsedTo, json, endNode);
-			ln_dbgprintf(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
+			LN_DBGPRINTF(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
 			if(r == 0) {
-				ln_dbgprintf(dag->ctx, "%zu: parser matches at %zu", offs, i);
+				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
 			} else {
-				ln_dbgprintf(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
+				++dag->stats.backtracked;
+				LN_DBGPRINTF(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
 				if (value != NULL) { /* Free the value if it was created */
 					json_object_put(value);
@@ -989,10 +1001,10 @@ ln_dbgprintf(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		/* did we have a longer parser --> then update */
 		if(parsedTo > *pParsedTo)
 			*pParsedTo = parsedTo;
-		ln_dbgprintf(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
+		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
 	}
 
-ln_dbgprintf(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->flags.isTerminal);
+LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->flags.isTerminal);
 	if(dag->flags.isTerminal && (offs == strLen || bPartialMatch)) {
 		*endNode = dag;
 		r = 0;
@@ -1000,7 +1012,7 @@ ln_dbgprintf(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->fla
 	}
 
 done:
-	ln_dbgprintf(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
+	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
 	return r;
 }
 
@@ -1027,11 +1039,11 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 
 	if(ctx->debug) {
 		if(r == 0) {
-			ln_dbgprintf(ctx, "final result for normalizer: parsedTo %zu, endNode %p, "
+			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p, "
 				     "isTerminal %d, tagbucket %p",
 				     parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
 		} else {
-			ln_dbgprintf(ctx, "final result for normalizer: parsedTo %zu, endNode %p",
+			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p",
 				     parsedTo, endNode);
 		}
 	}
