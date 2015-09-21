@@ -165,6 +165,10 @@ char* read_line(FILE *fp) {
 			line_capacity *= 2;
 			line = realloc(line, line_capacity);
 		}
+		if (line == NULL) {
+			fprintf(stderr, "Couldn't allocate working-buffer for log-line\n");
+			return NULL;
+		}
 		line[line_len++] = ch;
 	} while(ch != '\n');
 
