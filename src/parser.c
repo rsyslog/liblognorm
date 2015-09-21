@@ -802,19 +802,21 @@ PARSER_Parse(StringTo)
 	    i++;
 	    if(c[i] == toFind[0]) {
 		/* Found the first letter, now find the rest of the string */
-		j = 0;
-		m = i;
+		j = 1;
+		m = i+1;
 		while(m < strLen && j < data->len ) {
-		    m++;
-		    j++;
-		    if(c[m] != toFind[j])
-			break;
-		    if (j == data->len) 
-			chkstr = 1;
+			if(c[m] != toFind[j])
+				break;
+			if(j == data->len - 1) { /* full match? */
+				chkstr = 1;
+				break;
+			}
+			j++;
+			m++;
 		}
 	    }
 	}
-	if(i == *offs || i == strLen || c[i] != toFind[0])
+	if(i == *offs || i == strLen || chkstr != 1)
 		goto done;
 
 	/* success, persist */
