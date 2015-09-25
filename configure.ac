@@ -56,10 +56,12 @@ LIBS_BEFORE="$LIBS"
 CFLAGS="$CFLAGS $JSON_C_CFLAGS"
 LIBS="$LIBS $JSON_C_LIBS"
 AC_CHECK_FUNCS(json_object_object_get_ex,,)
+AC_CHECK_FUNCS(json_object_object_add_ex,,)
 AC_CHECK_FUNCS(json_object_get_string_len,,)
 AC_CHECK_TYPES(json_bool,,,[#include <json.h>])
 AC_CHECK_FUNCS(json_object_get_int64,,)
 AC_CHECK_FUNCS(json_object_new_int64,,)
+AC_CHECK_FUNCS(json_global_set_string_hash,,)
 AC_CHECK_FUNCS(json_type_to_name,,)
 AC_CHECK_MEMBERS([json_object_iter.key],,,[#include <json.h>])
 LIBS="$LIBS_BEFORE"

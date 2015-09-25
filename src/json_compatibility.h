@@ -7,6 +7,13 @@ int json_object_object_get_ex(struct json_object* obj,
 							  struct json_object **value);
 #endif
 
+#ifndef HAVE_JSON_OBJECT_OBJECT_ADD_EX
+#define JSON_C_OBJECT_ADD_KEY_IS_NEW (1<<1)
+#define JSON_C_OBJECT_KEY_IS_CONSTANT (1<<2)
+void json_object_object_add_ex(struct json_object* obj, const char *key,
+	struct json_object *val, const unsigned opts);
+#endif
+ 
 #ifndef HAVE_JSON_OBJECT_GET_STRING_LEN
 int json_object_get_string_len(struct json_object *obj);
 #endif

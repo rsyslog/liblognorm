@@ -2,6 +2,16 @@
 #include "json_compatibility.h"
 #include <string.h>
 
+#ifndef HAVE_JSON_OBJECT_OBJECT_ADD_EX
+void json_object_object_add_ex(struct json_object* obj,
+	const char *key,
+	struct json_object *val,
+	const __attribute__((unused)) unsigned opts)
+{
+	json_object_object_add(obj, key, val);
+}
+#endif
+
 #ifndef HAVE_JSON_OBJECT_OBJECT_GET_EX
 int json_object_object_get_ex(struct json_object* obj,
 							  const char *key,

@@ -56,7 +56,9 @@ ln_initCtx(void)
 	if((ctx = calloc(1, sizeof(struct ln_ctx_s))) == NULL)
 		goto done;
 
+#ifdef HAVE_JSON_GLOBAL_SET_STRING_HASH
 	json_global_set_string_hash(JSON_C_STR_HASH_PERLLIKE);
+#endif
 	ctx->objID = LN_ObjID_CTX;
 	ctx->dbgCB = NULL;
 	ctx->allowRegex = 0;

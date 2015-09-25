@@ -15,7 +15,4 @@ static inline int myisdigit(char c)
 	return (c >= '0' && c <= '9');
 }
 
-/* disable private extensions to json-c */
-#define json_object_object_add_nocheck(json, key, val) json_object_object_add(json, key, val)
-
 #endif
