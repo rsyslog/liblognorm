@@ -19,6 +19,7 @@
 #include "json_compatibility.h"
 #include "liblognorm.h"
 #include "v1_liblognorm.h"
+#include "v1_ptree.h"
 #include "lognorm.h"
 #include "samp.h"
 #include "pdag.h"
@@ -487,8 +488,14 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
  * Data is sent to given file ptr.
  */
 void
-ln_fullPdagStats(ln_ctx ctx, FILE *const fp)
+ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 {
+	if(ctx->ptree != NULL) {
+		/* we need to handle the old cruft */
+		ln_fullPTreeStats(ctx, fp, extendedStats);
+		return;
+	}
+
 	fprintf(fp, "User-Defined Types\n"
 	            "==================\n");
 	fprintf(fp, "number types: %d\n", ctx->nTypes);
@@ -506,6 +513,9 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp)
 		    "Main PDAG\n"
 	            "=========\n");
 	ln_pdagStats(ctx, ctx->pdag, fp);
+
+	if(extendedStats)
+		ln_displayPDAG(ctx);
 }
 
 /**

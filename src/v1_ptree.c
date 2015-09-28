@@ -892,3 +892,16 @@ ln_v1_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object *
 
 done:	return r;
 }
+
+
+/**
+ * Gather and output pdag statistics for the full pdag (ctx)
+ * including all disconnected components (type defs).
+ *
+ * Data is sent to given file ptr.
+ */
+void
+ln_fullPTreeStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
+{
+	ln_displayPTree(ctx->ptree, 0);
+}

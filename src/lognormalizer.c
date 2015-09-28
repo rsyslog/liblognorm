@@ -249,6 +249,7 @@ fprintf(stderr,
 	"    -d           Print DOT file to stdout and exit\n"
 	"    -d<filename> Save DOT file to the filename\n"
 	"    -s<filename> Print parse dag statistics and exit\n"
+	"    -S<filename> Print extended parse dag statistics and exit (includes -s)\n"
 	"\n"
 	);
 }
@@ -259,6 +260,7 @@ int main(int argc, char *argv[])
 	char *repository = NULL;
 	int ret = 0;
 	FILE *fpStats = NULL;
+	int extendedStats = 0;
 
 	if((ctx = ln_initCtx()) == NULL) {
 		complain("Could not initialize liblognorm context");
@@ -266,7 +268,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:e:r:E:vpPt:To:hL")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hL")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -280,6 +282,9 @@ int main(int argc, char *argv[])
 				}
 			}
 			break;
+		case 'S': /* generate pdag statistic file */
+			extendedStats = 1;
+			/* INTENTIONALLY NO BREAK! - KEEP order! */
 		case 's': /* generate pdag statistic file */
 			if(!strcmp(optarg, "-")) {
 				fpStats = stdout;
@@ -366,7 +371,7 @@ int main(int argc, char *argv[])
 	}
 
 	if(fpStats != NULL) {
-		ln_fullPdagStats(ctx, fpStats);
+		ln_fullPdagStats(ctx, fpStats, extendedStats);
 		ret=1;
 		goto exit;
 	}
@@ -377,11 +382,6 @@ int main(int argc, char *argv[])
 
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
-
-	if(ctx->ptree != NULL)
-		ln_displayPTree(ctx->ptree, 0);
-	else
-		ln_displayPDAG(ctx);
 
 exit:
 	if (ctx) ln_exitCtx(ctx);

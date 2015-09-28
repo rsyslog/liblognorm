@@ -30,6 +30,7 @@
  */
 #ifndef LIBLOGNORM_PTREE_H_INCLUDED
 #define	LIBLOGNORM_PTREE_H_INCLUDED
+#include <stdio.h>
 #include <libestr.h>
 
 #define ORIGINAL_MSG_KEY "originalmsg"
@@ -198,5 +199,8 @@ void ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str);
  *         corresponds to the parameters passed.
  */
 struct ln_ptree * ln_buildPTree(struct ln_ptree *tree, es_str_t *str, size_t offs);
+
+/* internal helper for displaying stats */
+void ln_fullPTreeStats(ln_ctx ctx, FILE *const fp, const int extendedStats);
 
 #endif /* #ifndef LOGNORM_PTREE_H_INCLUDED */
