@@ -925,6 +925,7 @@ done:
 PARSER_Construct(CharTo)
 {
 	int r = 0;
+	LN_DBGPRINTF(ctx, "in parser_construct charTo");
 	struct data_CharTo *data = (struct data_CharTo*) calloc(1, sizeof(struct data_CharTo));
 	struct json_object *ed;
 
@@ -2548,6 +2549,7 @@ PARSER_Parse(Repeat)
 	struct ln_pdag *endNode = NULL;
 	size_t longest_path = 0;
 	size_t strtoffs = *offs;
+	size_t lastKnownGood = strtoffs;
 	struct json_object *json_arr = NULL;
 
 	do {
@@ -2560,6 +2562,10 @@ PARSER_Parse(Repeat)
 
 		if(r != 0) {
 			if(data->permitMismatchInParser) {
+				strtoffs = lastKnownGood; /* go back to final match */
+				json_object_put(parsed_value);
+				LN_DBGPRINTF(ctx, "mismatch in repeat, parse ptr back to %zd",
+					strtoffs);
 				goto success;
 			} else {
 				goto done;
@@ -2571,11 +2577,13 @@ PARSER_Parse(Repeat)
 		}
 
 		/* check for name=".", which means we need to place the
-		 * value only into to array.
+		 * value only into to array. As we do not have direct
+		 * access to the key, we loop over our result as a work-
+		 * around.
 		 */
 		struct json_object *toAdd = parsed_value;
 		json_object_object_foreach(parsed_value, key, val) {
-			if(!strcmp(key, ".")) {
+			if(key[0] == '.' && key[1] == '\0') {
 				json_object_get(val); /* inc refcount! */
 				toAdd = val;
 			}
@@ -2588,6 +2596,7 @@ PARSER_Parse(Repeat)
 
 		/* now check if we shall continue */
 		longest_path = 0;
+		lastKnownGood = strtoffs; /* record pos in case of fail in while */
 		r = ln_normalizeRec(data->while_cond, str, strLen, strtoffs, 1,
 				    &longest_path, NULL, &endNode);
 		LN_DBGPRINTF(ctx, "repeat while returns %d, parsed %zu",
