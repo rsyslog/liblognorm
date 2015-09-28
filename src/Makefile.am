@@ -58,6 +58,7 @@ EXTRA_DIST = \
 	samp.h \
 	enc.h \
 	parser.h \
+	helpers.h \
 	json_compatibility.h
 
 # and now the old cruft:
