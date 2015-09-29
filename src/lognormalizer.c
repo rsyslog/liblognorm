@@ -250,6 +250,7 @@ fprintf(stderr,
 	"    -d<filename> Save DOT file to the filename\n"
 	"    -s<filename> Print parse dag statistics and exit\n"
 	"    -S<filename> Print extended parse dag statistics and exit (includes -s)\n"
+	"    -x<filename> Print statistics as dot file (called only)\n"
 	"\n"
 	);
 }
@@ -260,6 +261,7 @@ int main(int argc, char *argv[])
 	char *repository = NULL;
 	int ret = 0;
 	FILE *fpStats = NULL;
+	FILE *fpStatsDOT = NULL;
 	int extendedStats = 0;
 
 	if((ctx = ln_initCtx()) == NULL) {
@@ -268,7 +270,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hL")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hLx:")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -277,6 +279,18 @@ int main(int argc, char *argv[])
 				if((fpDOT = fopen(optarg, "w")) == NULL) {
 					perror(optarg);
 					complain("Cannot open DOT file");
+					ret = 1;
+					goto exit;
+				}
+			}
+			break;
+		case 'x': /* generate statistics DOT file */
+			if(!strcmp(optarg, "")) {
+				fpStatsDOT = stdout;
+			} else {
+				if((fpStatsDOT = fopen(optarg, "w")) == NULL) {
+					perror(optarg);
+					complain("Cannot open statistics DOT file");
 					ret = 1;
 					goto exit;
 				}
@@ -384,10 +398,11 @@ int main(int argc, char *argv[])
 
 	if(fpStats != NULL) {
 		ln_fullPdagStats(ctx, fpStats, extendedStats);
-		ret=1;
 	}
-		ln_setDebugCB(ctx, dbgCallBack, NULL);
-		ln_enableDebug(ctx, 1);
+
+	if(fpStatsDOT != NULL) {
+		ln_fullPDagStatsDOT(ctx, fpStatsDOT);
+	}
 
 exit:
 	if (ctx) ln_exitCtx(ctx);

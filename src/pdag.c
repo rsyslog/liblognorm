@@ -903,6 +903,58 @@ ln_genDotPDAGGraph(struct ln_pdag *dag, es_str_t **str)
 	es_addBufConstcstr(str, "}\n");
 }
 
+/**
+ * recursive handler for statistics DOT graph generator.
+ */
+static void
+ln_genStatsDotPDAGGraphRec(struct ln_pdag *dag, FILE *const __restrict__ fp)
+{
+	if(dag->flags.visited)
+		return; /* already processed this subpart */
+	dag->flags.visited = 1;
+	fprintf(fp, "l%p [ label=\"%u:%u\"", dag,
+		dag->stats.called, dag->stats.backtracked);
+
+	if(isLeaf(dag)) {
+		fprintf(fp, " style=\"bold\"");
+	}
+	fprintf(fp, "]\n");
+
+	/* display field subdags */
+
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
+		if(prs->node->stats.called == 0)
+			continue;
+		fprintf(fp, "l%p -> l%p [label=\"", dag, prs->node);
+		if(prs->prsid == PRS_LITERAL) {
+			for(const char *p = ((struct data_Literal*)prs->parser_data)->lit ; *p ; ++p) {
+				if(*p != '\\' && *p != '"')
+					fputc(*p, fp);
+			}
+		} else {
+			fprintf(fp, "%s", parserName(prs->prsid));
+		}
+		fprintf(fp, "\" style=\"dotted\"]\n");
+		ln_genStatsDotPDAGGraphRec(prs->node, fp);
+	}
+}
+
+
+void
+ln_genStatsDotPDAGGraph(struct ln_pdag *dag, FILE *const fp)
+{
+	ln_pdagClearVisited(dag->ctx);
+	fprintf(fp, "digraph pdag {\n");
+	ln_genStatsDotPDAGGraphRec(dag, fp);
+	fprintf(fp, "}\n");
+}
+
+void
+ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp)
+{
+	ln_genStatsDotPDAGGraph(ctx->pdag, fp);
+}
 
 /**
  * add unparsed string to event.
