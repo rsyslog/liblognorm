@@ -370,16 +370,22 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
+#if 0
 	if(fpStats != NULL) {
 		ln_fullPdagStats(ctx, fpStats, extendedStats);
 		ret=1;
 		goto exit;
 	}
+#endif
 
 	if(verbose > 2) ln_displayPDAG(ctx);
 
 	normalize();
 
+	if(fpStats != NULL) {
+		ln_fullPdagStats(ctx, fpStats, extendedStats);
+		ret=1;
+	}
 		ln_setDebugCB(ctx, dbgCallBack, NULL);
 		ln_enableDebug(ctx, 1);
 

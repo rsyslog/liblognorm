@@ -105,10 +105,11 @@ struct ln_pdag {
 	struct json_object *tags;	/**< tags to assign to events of this type */
 	int refcnt;			/**< reference count for deleting tracking */
 	struct {
-		unsigned visited;
+		unsigned called;
 		unsigned backtracked;	/**< incremented when backtracking was initiated */
 		unsigned terminated;
 	} stats;	/**< usage statistics */
+	const char *rb_id;		/**< human-readable rulebase identifier, for stats etc */
 };
 
 
@@ -192,7 +193,6 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
 int ln_pdagOptimize(ln_ctx ctx);
-void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
 void ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);

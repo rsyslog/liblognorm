@@ -380,6 +380,40 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 	}
 	return r;
 }
+
+/**
+ * Assign human-readable identifiers (names) to each node. These are
+ * later used in stats, debug output and whereever else this may make
+ * sense.
+ */
+static void
+ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix)
+{
+	char *id;
+
+	dag->rb_id = prefix;
+	/* now on to rest of processing */
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		if(prs->prsid == PRS_LITERAL) {
+			if(prs->name == NULL) {
+				asprintf(&id, "%s%s", prefix,
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+			} else {
+				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
+					prs->name,
+					parserName(prs->prsid),
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+			}
+		} else {
+			asprintf(&id, "%s%%%s:%s%%", prefix,
+				prs->name ? prs->name : "-",
+				parserName(prs->prsid));
+		}
+		ln_pdagComponentSetIDs(ctx, prs->node, id);
+	}
+}
+
 /**
  * Optimize the pdag.
  * This includes all components.
@@ -392,10 +426,12 @@ ln_pdagOptimize(ln_ctx ctx)
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
 		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
+		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, "");
 	}
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
+	ln_pdagComponentSetIDs(ctx, ctx->pdag, "");
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
 LN_DBGPRINTF(ctx, "=======================================");
@@ -444,17 +480,42 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 	return max_path + 1;
 }
 
+
+static void
+ln_pdagStatsExtended(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, int level)
+{
+	char indent[2048];
+
+	if(level > 1023)
+		level = 1023;
+	memset(indent, ' ', level * 2);
+	indent[level * 2] = '\0';
+
+	if(dag->stats.called > 0) {
+		fprintf(fp, "%u, %u, %s\n",
+			dag->stats.called,
+			dag->stats.backtracked,
+			dag->rb_id);
+	}
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
+		if(prs->node->stats.called > 0) {
+			ln_pdagStatsExtended(ctx, prs->node, fp, level+1);
+		}
+	}
+}
+
 /**
  * Gather pdag statistics for a *specific* pdag.
  *
  * Data is sent to given file ptr.
  */
-void
-ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
+static void
+ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, const int extendedStats)
 {
 	struct pdag_stats *const stats = calloc(1, sizeof(struct pdag_stats));
 	stats->prs_cnt = calloc(NPARSERS, sizeof(int));
-	ln_pdagClearVisited(ctx);
+	//ln_pdagClearVisited(ctx);
 	const int longest_path = ln_pdagStatsRec(ctx, dag, stats);
 
 	fprintf(fp, "nodes.............: %4d\n", stats->nodes);
@@ -479,7 +540,15 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
 
 	free(stats->prs_cnt);
 	free(stats);
+	
+	if(extendedStats) {
+		fprintf(fp, "Usage Statistics:\n"
+			    "-----------------\n");
+		ln_pdagComponentClearVisited(dag);
+		ln_pdagStatsExtended(ctx, dag, fp, 0);
+	}
 }
+
 
 /**
  * Gather and output pdag statistics for the full pdag (ctx)
@@ -506,16 +575,13 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		fprintf(fp, "\n"
 			    "type PDAG: %s\n"
 		            "----------\n", ctx->type_pdags[i].name);
-		ln_pdagStats(ctx, ctx->type_pdags[i].pdag, fp);
+		ln_pdagStats(ctx, ctx->type_pdags[i].pdag, fp, extendedStats);
 	}
 
 	fprintf(fp, "\n"
 		    "Main PDAG\n"
 	            "=========\n");
-	ln_pdagStats(ctx, ctx->pdag, fp);
-
-	if(extendedStats)
-		ln_displayPDAG(ctx);
+	ln_pdagStats(ctx, ctx->pdag, fp, extendedStats);
 }
 
 /**
@@ -722,18 +788,17 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-if(dag->stats.visited == 0) return;
-	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [visited %u, backtracked %u]",
+	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [called %u, backtracked %u]",
 		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers,
-		     dag->stats.visited, dag->stats.backtracked);
+		     dag->stats.called, dag->stats.backtracked);
 
 for(int i = 0 ; i < dag->nparsers ; ++i) {
 	ln_parser_t *const prs = dag->parsers+i;
-	LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s': visited %u", indent,
+	LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s': called %u", indent,
 		parserName(prs->prsid),
 		dag->parsers[i].name,
 		(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN",
-	dag->parsers[i].node->stats.visited);
+	dag->parsers[i].node->stats.called);
 }
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *const prs = dag->parsers+i;
@@ -763,6 +828,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) {
 void
 ln_displayPDAG(ln_ctx ctx)
 {
+	ln_pdagClearVisited(ctx);
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "COMPONENT: %s", ctx->type_pdags[i].name);
 		ln_displayPDAGComponent(ctx->type_pdags[i].pdag, 0);
@@ -977,7 +1043,7 @@ ln_normalizeRec(struct ln_pdag *dag,
 	
 LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 
-	++dag->stats.visited;
+	++dag->stats.called;
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
