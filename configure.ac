@@ -104,6 +104,20 @@ if test "$enable_debug" = "no"; then
         AC_DEFINE(NDEBUG, 1, [Defined if debug mode is disabled.])
 fi
 
+# advanced statistics
+AC_ARG_ENABLE(advanced-stats,
+        [AS_HELP_STRING([--enable-advanced-stats],[Enable advanced statistics @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_advstats="yes" ;;
+          no) enable_advstats="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-advstats) ;;
+         esac],
+        [enable_advstats="no"]
+)
+if test "$enable_advstats" = "yes"; then
+        AC_DEFINE(ADVANCED_STATS, 1, [Defined if advanced statistics are enabled.])
+fi
+
 # docs (html) build settings
 AC_ARG_ENABLE(docs,
 	[AS_HELP_STRING([--enable-docs],[Enable building HTML docs (requires Sphinx) @<:@default=no@:>@])],
@@ -174,6 +188,7 @@ echo "*****************************************************"
 echo "liblognorm will be compiled with the following settings:"
 echo
 echo "Regex enabled:               $enable_regexp"
+echo "Advanced Statistics enabled: $enable_advstats"
 echo "Testbench enabled:           $enable_testbench"
 echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"

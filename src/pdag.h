@@ -112,6 +112,17 @@ struct ln_pdag {
 	const char *rb_id;		/**< human-readable rulebase identifier, for stats etc */
 };
 
+#ifdef ADVANCED_STATS
+struct advstats {
+	int pathlen;
+	int backtracked;
+};
+#define ADVSTATS_MAX_ENTITIES 55
+extern int advstats_max_pathlen;
+extern int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
+extern int advstats_max_backtracked;
+extern int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
+#endif
 
 /* Methods */
 
@@ -199,6 +210,10 @@ ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
 
 /* friends */
-int ln_normalizeRec(struct ln_pdag *dag, const char *const str, const size_t strLen, const size_t offs, const int bPartialMatch, size_t *const __restrict__ pParsedTo, struct json_object *json, struct ln_pdag **endNode);
+int ln_normalizeRec(struct ln_pdag *dag, const char *const str, const size_t strLen, const size_t offs, const int bPartialMatch, size_t *const __restrict__ pParsedTo, struct json_object *json, struct ln_pdag **endNode
+#ifdef ADVANCED_STATS
+	, struct advstats *astats
+# endif
+);
 
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */

@@ -30,6 +30,13 @@
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
+#ifdef	ADVANCED_STATS
+int advstats_max_pathlen = 0;
+int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
+int advstats_max_backtracked = 0;
+int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
+#endif
+
 /* parser lookup table
  * This is a memory- and cache-optimized way of calling parsers.
  * VERY IMPORTANT: the initialization must be done EXACTLY in the
@@ -544,6 +551,7 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, const int ex
 	if(extendedStats) {
 		fprintf(fp, "Usage Statistics:\n"
 			    "-----------------\n");
+		fprintf(fp, "called, backtracked, rule\n");
 		ln_pdagComponentClearVisited(dag);
 		ln_pdagStatsExtended(ctx, dag, fp, 0);
 	}
@@ -582,6 +590,24 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		    "Main PDAG\n"
 	            "=========\n");
 	ln_pdagStats(ctx, ctx->pdag, fp, extendedStats);
+
+#ifdef	ADVANCED_STATS
+	fprintf(fp, "\n"
+		    "Advanced Runtime Stats\n"
+	            "======================\n");
+	fprintf(fp, "These are acutal number from analyzing the control flow\n"
+		    "at runtime. Currently, custom data types are not included\n\n");
+	fprintf(fp, "Path Length\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_pathlens[i] > 0 )
+			fprintf(fp, "%3d: %d\n", i, advstats_pathlens[i]);
+	}
+	fprintf(fp, "Nbr Backtracked\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_backtracks[i] > 0 )
+			fprintf(fp, "%3d: %d\n", i, advstats_backtracks[i]);
+	}
+#endif
 }
 
 /**
@@ -1030,7 +1056,11 @@ ln_normalizeRec(struct ln_pdag *dag,
 	const int bPartialMatch,
 	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
-	struct ln_pdag **endNode);
+	struct ln_pdag **endNode
+#ifdef	ADVANCED_STATS
+	, struct advstats *astats
+#endif
+	);
 
 static int
 tryParser(struct ln_pdag *dag,
@@ -1039,7 +1069,11 @@ tryParser(struct ln_pdag *dag,
 	size_t *offs,
 	size_t *const __restrict__ pParsed,
 	struct json_object **value,
-	const ln_parser_t *const prs)
+	const ln_parser_t *const prs
+#ifdef	ADVANCED_STATS
+	, struct advstats *astats
+#endif
+	)
 {
 	int r;
 	struct ln_pdag *endNode = NULL;
@@ -1048,10 +1082,12 @@ tryParser(struct ln_pdag *dag,
 			*value = json_object_new_object();
 		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", prs->custType->name);
 		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
-				    pParsed, *value, &endNode);
+				    pParsed, *value, &endNode
+#				    ifdef ADVANCED_STATS
+					, astats
+#				    endif
+				    );
 		*pParsed -= *offs;
-		//LN_DBGPRINTF(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s",
-			//prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
@@ -1083,7 +1119,11 @@ ln_normalizeRec(struct ln_pdag *dag,
 	const int bPartialMatch,
 	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
-	struct ln_pdag **endNode)
+	struct ln_pdag **endNode
+#ifdef	ADVANCED_STATS
+	, struct advstats *astats
+#endif
+	)
 {
 	int r = LN_WRONGPARSER;
 	int localR;
@@ -1096,6 +1136,13 @@ ln_normalizeRec(struct ln_pdag *dag,
 LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 
 	++dag->stats.called;
+#ifdef	ADVANCED_STATS
+	struct advstats dummy_astats;
+	if(astats == NULL) {
+		astats = &dummy_astats;
+	}
+	++astats->pathlen;
+#endif
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
@@ -1107,18 +1154,30 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		}
 		i = offs;
 		value = NULL;
-		localR = tryParser(dag, str, strLen, &i, &parsed, &value, prs);
+		localR = tryParser(dag, str, strLen, &i, &parsed, &value, prs
+#			    	   ifdef ADVANCED_STATS
+				       , astats
+#			    	   endif
+				   );
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
 			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
-			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, bPartialMatch, &parsedTo, json, endNode);
+			r = ln_normalizeRec(prs->node, str, strLen, parsedTo,
+					    bPartialMatch, &parsedTo, json, endNode
+#					    ifdef ADVANCED_STATS
+						, astats
+#					    endif
+					    );
 			LN_DBGPRINTF(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
 			} else {
 				++dag->stats.backtracked;
+				#ifdef	ADVANCED_STATS
+					++astats->backtracked;
+				#endif
 				LN_DBGPRINTF(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
 				if (value != NULL) { /* Free the value if it was created */
@@ -1158,12 +1217,20 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 
 	struct ln_pdag *endNode = NULL;
 	size_t parsedTo = 0;
+#	ifdef ADVANCED_STATS
+	struct advstats astats;
+	memset(&astats, 0, sizeof(astats));
+#	endif
 
 	if(*json_p == NULL) {
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, 0, &parsedTo, *json_p, &endNode);
+	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, 0, &parsedTo, *json_p, &endNode
+#			    ifdef ADVANCED_STATS
+				, &astats
+#			    endif
+			    );
 
 	if(ctx->debug) {
 		if(r == 0) {
@@ -1188,5 +1255,17 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		addUnparsedField(str, strLen, parsedTo, *json_p);
 	}
 
+#ifdef	ADVANCED_STATS
+	if(astats.pathlen < ADVSTATS_MAX_ENTITIES)
+		advstats_pathlens[astats.pathlen]++;
+	if(astats.pathlen > advstats_max_pathlen) {
+		advstats_max_pathlen = astats.pathlen;
+	}
+	if(astats.backtracked < ADVSTATS_MAX_ENTITIES)
+		advstats_backtracks[astats.backtracked]++;
+	if(astats.backtracked > advstats_max_backtracked) {
+		advstats_max_backtracked = astats.backtracked;
+	}
+#endif
 done:	return r;
 }
