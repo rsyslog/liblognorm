@@ -31,6 +31,8 @@ const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
 #ifdef	ADVANCED_STATS
+uint64_t advstats_parsers_called = 0;
+uint64_t advstats_parsers_success = 0;
 int advstats_max_pathlen = 0;
 int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
 int advstats_max_backtracked = 0;
@@ -50,10 +52,17 @@ int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
  * no priorities (which is expected to be common) or user-assigned
  * priorities are equal for some parsers.
  */
+#ifdef ADVANCED_STATS
+#define PARSER_ENTRY_NO_DATA(identifier, parser, prio) \
+{ identifier, prio, NULL, ln_v2_parse##parser, NULL, 0, 0 }
+#define PARSER_ENTRY(identifier, parser, prio) \
+{ identifier, prio, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser, 0, 0 }
+#else
 #define PARSER_ENTRY_NO_DATA(identifier, parser, prio) \
 { identifier, prio, NULL, ln_v2_parse##parser, NULL }
 #define PARSER_ENTRY(identifier, parser, prio) \
 { identifier, prio, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser }
+#endif
 static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("literal", Literal, 4),
 	PARSER_ENTRY("repeat", Repeat, 4),
@@ -592,16 +601,57 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 	ln_pdagStats(ctx, ctx->pdag, fp, extendedStats);
 
 #ifdef	ADVANCED_STATS
+	const uint64_t parsers_failed = advstats_parsers_called - advstats_parsers_success;
 	fprintf(fp, "\n"
 		    "Advanced Runtime Stats\n"
 	            "======================\n");
-	fprintf(fp, "These are acutal number from analyzing the control flow\n"
-		    "at runtime. Currently, custom data types are not included\n\n");
+	fprintf(fp, "These are actual number from analyzing the control flow "
+		    "at runtime.\n");
+	fprintf(fp, "Note that literal matching is also done via parsers. As such, \n"
+		    "it is expected that fail rates increase with the size of the \n"
+		    "rule base.\n");
+	fprintf(fp, "\n");
+	fprintf(fp, "Parser Calls:\n");
+	fprintf(fp, "total....: %10" PRIu64 "\n", advstats_parsers_called);
+	fprintf(fp, "succesful: %10" PRIu64 "\n", advstats_parsers_success);
+	fprintf(fp, "failed...: %10" PRIu64 " [%d%%]\n",
+		parsers_failed,
+		(int) ((parsers_failed * 100) / advstats_parsers_called) );
+	fprintf(fp, "\nIndividual Parser Calls "
+		    "(never called parsers are not shown):\n");
+	for(  size_t i = 0
+	    ; i < sizeof(parser_lookup_table) / sizeof(struct ln_parser_info)
+	    ; ++i) {
+		if(parser_lookup_table[i].called > 0) {
+			const uint64_t failed = parser_lookup_table[i].called
+				- parser_lookup_table[i].success;
+			fprintf(fp, "%20s: %10" PRIu64 " [%5.2f%%] "
+				    "success: %10" PRIu64 " [%5.1f%%] "
+				    "fail: %10" PRIu64 " [%5.1f%%]"
+			            "\n",
+				parser_lookup_table[i].name,
+				parser_lookup_table[i].called,
+				(float)(parser_lookup_table[i].called * 100)
+				        / advstats_parsers_called,
+				parser_lookup_table[i].success,
+				(float)(parser_lookup_table[i].success * 100)
+				        / parser_lookup_table[i].called,
+				failed,
+				(float)(failed * 100)
+				        / parser_lookup_table[i].called
+			       );
+		}
+	}
+
+	fprintf(fp, "\n");
+	fprintf(fp, "Note: currently, custom data types are not included in path\n"
+	            "length and backtracking information.\n\n");
 	fprintf(fp, "Path Length\n");
 	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
 		if(advstats_pathlens[i] > 0 )
 			fprintf(fp, "%3d: %d\n", i, advstats_pathlens[i]);
 	}
+	fprintf(fp, "\n");
 	fprintf(fp, "Nbr Backtracked\n");
 	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
 		if(advstats_backtracks[i] > 0 )
@@ -1093,6 +1143,16 @@ tryParser(struct ln_pdag *dag,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
 		LN_DBGPRINTF(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
+#ifdef	ADVANCED_STATS
+	++advstats_parsers_called;
+	if(r == 0)
+		++advstats_parsers_success;
+	if(prs->prsid != PRS_CUSTOM_TYPE) {
+		++parser_lookup_table[prs->prsid].called;
+		if(r == 0)
+			++parser_lookup_table[prs->prsid].success;
+	}
+#endif
 	return r;
 }
 /**

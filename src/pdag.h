@@ -89,6 +89,10 @@ struct ln_parser_info {
 	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
+#ifdef ADVANCED_STATS
+	uint64_t called;
+	uint64_t success;
+#endif
 };
 
 
