@@ -27,6 +27,7 @@
 #include "internal.h"
 #include "parser.h"
 #include "helpers.h"
+const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
@@ -1155,6 +1156,33 @@ tryParser(struct ln_pdag *dag,
 #endif
 	return r;
 }
+
+
+#ifdef	XX_ADVANCED_STATS
+static inline const char *
+advstats_prs_name(prs_t *prs)
+{
+	if(prs->prsid == PRS_LITERAL) {
+		es_addBuf(&astats->exec_path,
+			  ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data),
+			  strlen(ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data))
+			 );
+		es_addChar(&astats->exec_path, '-');
+		es_addChar(&astats->exec_path, '>');
+	} else {
+		if(astats != NULL) {
+			es_addChar(&astats->exec_path, '%');
+			es_addBuf(&astats->exec_path,
+				parserName(prs->prsid),
+				strlen(parserName(prs->prsid)) );
+			es_addChar(&astats->exec_path, '%');
+		}
+	}
+}
+#endif
+
 /**
  * Recursive step of the normalizer. It walks the parse dag and calls itself
  * recursively when this is appropriate. It also implements backtracking in
@@ -1200,17 +1228,22 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 	struct advstats dummy_astats;
 	if(astats == NULL) {
 		astats = &dummy_astats;
+		astats->exec_path = es_newStr(1024);
 	}
 	++astats->pathlen;
+	++astats->recursion_level;
 #endif
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', data '%s'",
+			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', "
+				     "data '%s'",
 					offs, bPartialMatch, parserName(prs->prsid), prs->name,
-					(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
+					(prs->prsid == PRS_LITERAL)
+					 ? ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)
+					 : "UNKNOWN");
 		}
 		i = offs;
 		value = NULL;
@@ -1222,7 +1255,43 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
-			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
+			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p",
+				offs, prs->node);
+			#ifdef	ADVANCED_STATS
+				char hdr[16];
+				const size_t lenhdr 
+				  = snprintf(hdr, sizeof(hdr), "%d:", astats->recursion_level);
+				es_addBuf(&astats->exec_path, hdr, lenhdr);
+				if(prs->prsid == PRS_LITERAL) {
+					es_addChar(&astats->exec_path, '"');
+					es_addBuf(&astats->exec_path,
+						  ln_DataForDisplayLiteral(dag->ctx,
+							prs->parser_data),
+						  strlen(ln_DataForDisplayLiteral(dag->ctx,
+							prs->parser_data))
+					         );
+					es_addChar(&astats->exec_path, '"');
+					//es_addChar(&astats->exec_path, '-');
+					//es_addChar(&astats->exec_path, '>');
+				} else if(parser_lookup_table[prs->prsid].parser
+						== ln_v2_parseCharTo) {
+					es_addBuf(&astats->exec_path,
+						  ln_DataForDisplayCharTo(dag->ctx,
+							prs->parser_data),
+						  strlen(ln_DataForDisplayCharTo(dag->ctx,
+							prs->parser_data))
+					         );
+				} else {
+					if(astats != NULL) {
+						//es_addChar(&astats->exec_path, '%');
+						es_addBuf(&astats->exec_path,
+							parserName(prs->prsid),
+							strlen(parserName(prs->prsid)) );
+						//es_addChar(&astats->exec_path, '%');
+					}
+				}
+				es_addChar(&astats->exec_path, ',');
+			#endif
 			r = ln_normalizeRec(prs->node, str, strLen, parsedTo,
 					    bPartialMatch, &parsedTo, json, endNode
 #					    ifdef ADVANCED_STATS
@@ -1237,6 +1306,27 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 				++dag->stats.backtracked;
 				#ifdef	ADVANCED_STATS
 					++astats->backtracked;
+					es_addBuf(&astats->exec_path, "[B]", 3);
+				/*
+					es_addBuf(&astats->exec_path, "[B:", 3);
+					if(prs->prsid == PRS_LITERAL) {
+						es_addBuf(&astats->exec_path,
+							  ln_DataForDisplayLiteral(dag->ctx,
+								prs->parser_data),
+							  strlen(ln_DataForDisplayLiteral(dag->ctx,
+								prs->parser_data))
+							 );
+					} else {
+						if(astats != NULL) {
+							es_addChar(&astats->exec_path, '%');
+							es_addBuf(&astats->exec_path,
+								parserName(prs->prsid),
+								strlen(parserName(prs->prsid)) );
+							es_addChar(&astats->exec_path, '%');
+						}
+					}
+					es_addChar(&astats->exec_path, ']');
+				*/
 				#endif
 				LN_DBGPRINTF(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
@@ -1260,6 +1350,12 @@ LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->fla
 
 done:
 	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
+#ifdef	ADVANCED_STATS
+	if(astats == &dummy_astats) {
+		es_deleteStr(astats->exec_path);
+	}
+	--astats->recursion_level;
+#endif
 	return r;
 }
 
@@ -1280,6 +1376,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 #	ifdef ADVANCED_STATS
 	struct advstats astats;
 	memset(&astats, 0, sizeof(astats));
+	astats.exec_path = es_newStr(1024);
 #	endif
 
 	if(*json_p == NULL) {
@@ -1316,6 +1413,10 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	}
 
 #ifdef	ADVANCED_STATS
+	if(r != 0)
+		es_addBuf(&astats.exec_path, "[FAILED]", 8);
+	else if(!endNode->flags.isTerminal)
+		es_addBuf(&astats.exec_path, "[FAILED:NON-TERMINAL]", 21);
 	if(astats.pathlen < ADVSTATS_MAX_ENTITIES)
 		advstats_pathlens[astats.pathlen]++;
 	if(astats.pathlen > advstats_max_pathlen) {
@@ -1326,6 +1427,11 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	if(astats.backtracked > advstats_max_backtracked) {
 		advstats_max_backtracked = astats.backtracked;
 	}
+char * cstr = es_str2cstr(astats.exec_path, NULL);
+fprintf(stderr, "%.4d line: %s\n", astats.backtracked, str);
+fprintf(stderr, "exec path: %s\n\n", cstr);
+free(cstr);
+	es_deleteStr(astats.exec_path);
 #endif
 done:	return r;
 }

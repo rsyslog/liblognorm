@@ -120,6 +120,8 @@ struct ln_pdag {
 struct advstats {
 	int pathlen;
 	int backtracked;
+	int recursion_level;
+	es_str_t *exec_path;
 };
 #define ADVSTATS_MAX_ENTITIES 55
 extern int advstats_max_pathlen;

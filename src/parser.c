@@ -878,6 +878,7 @@ done:
 struct data_CharTo {
 	char *term_chars;
 	size_t n_term_chars;
+	char *data_for_display;
 };
 /**
  * Parse everything up to a specific character.
@@ -942,9 +943,25 @@ done:
 		free(data);
 	return r;
 }
+PARSER_DataForDisplay(CharTo)
+{
+	struct data_CharTo *data = (struct data_CharTo*) pdata;
+	if(data->data_for_display == NULL) {
+		data->data_for_display = malloc(8+data->n_term_chars+2);
+		memcpy(data->data_for_display, "char-to{", 8);
+		size_t i, j;
+		for(j = 0, i = 8 ; j < data->n_term_chars ; ++j, ++i) {
+			data->data_for_display[i] = data->term_chars[j];
+		}
+		data->data_for_display[i++] = '}';
+		data->data_for_display[i] = '\0';
+	}
+	return data->data_for_display;
+}
 PARSER_Destruct(CharTo)
 {
 	struct data_CharTo *const data = (struct data_CharTo*) pdata;
+	free(data->data_for_display);
 	free(data->term_chars);
 	free(pdata);
 }
