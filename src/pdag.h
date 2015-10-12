@@ -153,6 +153,7 @@ struct npb {
 	int pathlen;
 	int backtracked;
 	int recursion_level;
+	struct advstats astats;
 #endif
 };
 
@@ -249,9 +250,6 @@ ln_normalizeRec(npb_t *const __restrict__ npb,
 	const int bPartialMatch,
 	struct json_object *json,
 	struct ln_pdag **endNode
-#ifdef ADVANCED_STATS
-	, struct advstats *astats
-# endif
 );
 
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */

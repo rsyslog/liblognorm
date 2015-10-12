@@ -2563,11 +2563,7 @@ PARSER_Parse(Repeat)
 	do {
 		struct json_object *parsed_value = json_object_new_object();
 		r = ln_normalizeRec(npb, data->parser, strtoffs, 1,
-				    parsed_value, &endNode
-#				    ifdef ADVANCED_STATS
-					, NULL
-#				    endif
-				    );
+				    parsed_value, &endNode);
 		strtoffs = npb->parsedTo;
 		LN_DBGPRINTF(npb->ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, npb->parsedTo, json_object_to_json_string(parsed_value));
@@ -2609,11 +2605,7 @@ PARSER_Parse(Repeat)
 		/* now check if we shall continue */
 		npb->parsedTo = 0;
 		lastKnownGood = strtoffs; /* record pos in case of fail in while */
-		r = ln_normalizeRec(npb, data->while_cond, strtoffs, 1, NULL, &endNode
-#				    ifdef ADVANCED_STATS
-					, NULL
-#				    endif
-				    );
+		r = ln_normalizeRec(npb, data->while_cond, strtoffs, 1, NULL, &endNode);
 		LN_DBGPRINTF(npb->ctx, "repeat while returns %d, parsed %zu",
 			r, npb->parsedTo);
 		if(r == 0)
