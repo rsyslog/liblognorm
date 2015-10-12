@@ -18,6 +18,7 @@
 
 typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;
+typedef struct npb npb_t;
 typedef uint8_t prsid_t;
 
 struct ln_type_pdag;
@@ -86,7 +87,7 @@ struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
 	int prio;		/**< parser specific prio in range 0..255 */
 	int (*construct)(ln_ctx ctx, json_object *const json, void **);
-	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
+	int (*parser)(npb_t *npb, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
 #ifdef ADVANCED_STATS
@@ -129,6 +130,31 @@ extern int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
 extern int advstats_max_backtracked;
 extern int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
 #endif
+
+/** the "normalization paramater block" (npb)
+ * This structure is passed to all normalization routines including
+ * parsers. It contains data that commonly needs to be passed,
+ * like the to be parsed string and its length, as well as read/write
+ * data which is used to track information over the general
+ * normalization process (like the execution path, if requested).
+ * The main purpose is to save stack writes by eliminating the
+ * need for using multiple function parameters. Note that it
+ * must be carefully considered which items to add to the
+ * npb - those that change from recursion level to recursion
+ * level are NOT to be placed here.
+ */
+struct npb {
+	ln_ctx ctx;
+	const char *str;		/**< to-be-normalized message */
+	size_t strLen;			/**< length of it */
+	size_t parsedTo;		/**< up to which byte could this be parsed? */
+	es_str_t *exec_path;
+#ifdef ADVANCED_STATS
+	int pathlen;
+	int backtracked;
+	int recursion_level;
+#endif
+};
 
 /* Methods */
 
@@ -216,7 +242,13 @@ ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
 
 /* friends */
-int ln_normalizeRec(struct ln_pdag *dag, const char *const str, const size_t strLen, const size_t offs, const int bPartialMatch, size_t *const __restrict__ pParsedTo, struct json_object *json, struct ln_pdag **endNode
+int
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
+	const size_t offs,
+	const int bPartialMatch,
+	struct json_object *json,
+	struct ln_pdag **endNode
 #ifdef ADVANCED_STATS
 	, struct advstats *astats
 # endif

@@ -1100,12 +1100,10 @@ fixJSON(struct ln_pdag *dag,
 
 // TODO: streamline prototype when done with changes
 int
-ln_normalizeRec(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	const size_t offs,
 	const int bPartialMatch,
-	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
 	struct ln_pdag **endNode
 #ifdef	ADVANCED_STATS
@@ -1114,9 +1112,8 @@ ln_normalizeRec(struct ln_pdag *dag,
 	);
 
 static int
-tryParser(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+tryParser(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	size_t *offs,
 	size_t *const __restrict__ pParsed,
 	struct json_object **value,
@@ -1128,22 +1125,25 @@ tryParser(struct ln_pdag *dag,
 {
 	int r;
 	struct ln_pdag *endNode = NULL;
+	size_t parsedTo = npb->parsedTo;
 	if(prs->prsid == PRS_CUSTOM_TYPE) {
 		if(*value == NULL)
 			*value = json_object_new_object();
 		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", prs->custType->name);
-		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
-				    pParsed, *value, &endNode
+		r = ln_normalizeRec(npb, prs->custType->pdag, *offs, 1,
+				    *value, &endNode
 #				    ifdef ADVANCED_STATS
 					, astats
 #				    endif
 				    );
-		*pParsed -= *offs;
+		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, offs %zd, *pParsed %zd",
+			prs->custType->name, r, *offs, *pParsed);
+		*pParsed = npb->parsedTo - *offs;
 	} else {
-		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
+		r = parser_lookup_table[prs->prsid].parser(npb,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
-		LN_DBGPRINTF(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
+	LN_DBGPRINTF(npb->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 #ifdef	ADVANCED_STATS
 	++advstats_parsers_called;
 	if(r == 0)
@@ -1154,6 +1154,7 @@ tryParser(struct ln_pdag *dag,
 			++parser_lookup_table[prs->prsid].success;
 	}
 #endif
+	npb->parsedTo = parsedTo;
 	return r;
 }
 
@@ -1200,12 +1201,10 @@ advstats_prs_name(prs_t *prs)
  * TODO: can we use parameter block to prevent pushing params to the stack?
  */
 int
-ln_normalizeRec(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	const size_t offs,
 	const int bPartialMatch,
-	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
 	struct ln_pdag **endNode
 #ifdef	ADVANCED_STATS
@@ -1217,7 +1216,7 @@ ln_normalizeRec(struct ln_pdag *dag,
 	int localR;
 	size_t i;
 	size_t iprs;
-	size_t parsedTo = *pParsedTo;
+	size_t parsedTo = npb->parsedTo;
 	size_t parsed = 0;
 	struct json_object *value;
 	
@@ -1247,7 +1246,7 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		}
 		i = offs;
 		value = NULL;
-		localR = tryParser(dag, str, strLen, &i, &parsed, &value, prs
+		localR = tryParser(npb, dag, &i, &parsed, &value, prs
 #			    	   ifdef ADVANCED_STATS
 				       , astats
 #			    	   endif
@@ -1292,8 +1291,8 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 				}
 				es_addChar(&astats->exec_path, ',');
 			#endif
-			r = ln_normalizeRec(prs->node, str, strLen, parsedTo,
-					    bPartialMatch, &parsedTo, json, endNode
+			r = ln_normalizeRec(npb, prs->node, parsedTo,
+					    bPartialMatch, json, endNode
 #					    ifdef ADVANCED_STATS
 						, astats
 #					    endif
@@ -1336,20 +1335,20 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 			}
 		}
 		/* did we have a longer parser --> then update */
-		if(parsedTo > *pParsedTo)
-			*pParsedTo = parsedTo;
-		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
+		if(parsedTo > npb->parsedTo)
+			npb->parsedTo = parsedTo;
+		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, npb->parsedTo);
 	}
 
-LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->flags.isTerminal);
-	if(dag->flags.isTerminal && (offs == strLen || bPartialMatch)) {
+LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, npb->strLen, dag->flags.isTerminal);
+	if(dag->flags.isTerminal && (offs == npb->strLen || bPartialMatch)) {
 		*endNode = dag;
 		r = 0;
 		goto done;
 	}
 
 done:
-	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
+	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, npb->parsedTo, parsedTo);
 #ifdef	ADVANCED_STATS
 	if(astats == &dummy_astats) {
 		es_deleteStr(astats->exec_path);
@@ -1372,7 +1371,12 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	/* end old cruft */
 
 	struct ln_pdag *endNode = NULL;
-	size_t parsedTo = 0;
+	npb_t npb;
+	memset(&npb, 0, sizeof(npb));
+	npb.ctx = ctx;
+	npb.str = str;
+	npb.strLen = strLen;
+
 #	ifdef ADVANCED_STATS
 	struct advstats astats;
 	memset(&astats, 0, sizeof(astats));
@@ -1383,7 +1387,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, 0, &parsedTo, *json_p, &endNode
+	r = ln_normalizeRec(&npb, ctx->pdag, 0, 0, *json_p, &endNode
 #			    ifdef ADVANCED_STATS
 				, &astats
 #			    endif
@@ -1393,12 +1397,13 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		if(r == 0) {
 			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p, "
 				     "isTerminal %d, tagbucket %p",
-				     parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
+				     npb.parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
 		} else {
 			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p",
-				     parsedTo, endNode);
+				     npb.parsedTo, endNode);
 		}
 	}
+	LN_DBGPRINTF(ctx, "DONE, final return is %d", r);
 	if(r == 0 && endNode->flags.isTerminal) {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
@@ -1409,7 +1414,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		}
 		r = 0;
 	} else {
-		addUnparsedField(str, strLen, parsedTo, *json_p);
+		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
 	}
 
 #ifdef	ADVANCED_STATS

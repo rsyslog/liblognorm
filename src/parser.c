@@ -70,8 +70,8 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  *
  * All parsers receive 
  *
- * @param[in] str the to-be-parsed string
- * @param[in] strLen length of the to-be-parsed string
+ * @param[in] npb->str the to-be-parsed string
+ * @param[in] npb->strLen length of the to-be-parsed string
  * @param[in] offs an offset into the string
  * @param[in] pointer to parser data block
  * @param[out] parsed bytes
@@ -87,9 +87,7 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
  */
 #define PARSER_Parse(ParserName) \
 int ln_v2_parse##ParserName( \
-	__attribute__((unused)) ln_ctx ctx, \
-	const char *const str, \
-	const size_t strLen, \
+	npb_t *const npb, \
 	size_t *const offs,       \
 	__attribute__((unused)) void *const pdata, \
 	size_t *parsed,                                      \
@@ -169,8 +167,8 @@ PARSER_Parse(RFC5424Date)
 	size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
 
-	pszTS = (unsigned char*) str + *offs;
-	len = orglen = strLen - *offs;
+	pszTS = (unsigned char*) npb->str + *offs;
+	len = orglen = npb->strLen - *offs;
 
 	year = hParseInt(&pszTS, &len);
 
@@ -249,7 +247,7 @@ PARSER_Parse(RFC5424Date)
 	*parsed = orglen - len;
 
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 
 	r = 0; /* success */
@@ -274,8 +272,8 @@ PARSER_Parse(RFC3164Date)
 	int minute;
 	int second;
 
-	p = (unsigned char*) str + *offs;
-	orglen = len = strLen - *offs;
+	p = (unsigned char*) npb->str + *offs;
+	orglen = len = npb->strLen - *offs;
 	/* If we look at the month (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec),
 	 * we may see the following character sequences occur:
 	 *
@@ -477,7 +475,7 @@ PARSER_Parse(RFC3164Date)
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -494,19 +492,19 @@ PARSER_Parse(Number)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 
-	for (i = *offs; i < strLen && myisdigit(c[i]); i++);
+	for (i = *offs; i < npb->strLen && myisdigit(c[i]); i++);
 	if (i == *offs)
 		goto done;
 	
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -520,10 +518,10 @@ PARSER_Parse(Float)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 
 	int seen_point = 0;
 
@@ -531,7 +529,7 @@ PARSER_Parse(Float)
 
 	if (c[i] == '-') i++; 
 
-	for (; i < strLen; i++) {
+	for (; i < npb->strLen; i++) {
 		if (c[i] == '.') {
 			if (seen_point != 0) break;
 			seen_point = 1;
@@ -545,7 +543,7 @@ PARSER_Parse(Float)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -568,16 +566,16 @@ PARSER_Parse(HexNumber)
 	struct data_HexNumber *const data = (struct data_HexNumber*) pdata;
 	uint64_t maxval = data->maxval;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 
 	if(c[i] != '0' || c[i+1] != 'x')
 		goto done;
 
 	uint64_t val = 0;
-	for (i += 2 ; i < strLen && isxdigit(c[i]); i++) {
+	for (i += 2 ; i < npb->strLen && isxdigit(c[i]); i++) {
 		const char digit = tolower(c[i]);
 		val *= 16;
 		if(digit >= 'a' && digit <= 'f')
@@ -588,7 +586,7 @@ PARSER_Parse(HexNumber)
 	if (i == *offs || !isspace(c[i]))
 		goto done;
 	if(maxval > 0 && val > maxval) {
-		LN_DBGPRINTF(ctx, "hexnumber parser: val too large (max %" PRIu64
+		LN_DBGPRINTF(npb->ctx, "hexnumber parser: val too large (max %" PRIu64
 			     ", actual %" PRIu64 ")",
 			     maxval, val);
 		goto done;
@@ -597,7 +595,7 @@ PARSER_Parse(HexNumber)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -649,13 +647,13 @@ PARSER_Parse(KernelTimestamp)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 
 	i = *offs;
-	if(c[i] != '[' || i+LEN_KERNEL_TIMESTAMP > strLen
+	if(c[i] != '[' || i+LEN_KERNEL_TIMESTAMP > npb->strLen
 	   || !myisdigit(c[i+1])
 	   || !myisdigit(c[i+2])
 	   || !myisdigit(c[i+3])
@@ -664,15 +662,15 @@ PARSER_Parse(KernelTimestamp)
 	   )
 		goto done;
 	i += 6;
-	for(int j = 0 ; j < 7 && i < strLen && myisdigit(c[i]) ; )
+	for(int j = 0 ; j < 7 && i < npb->strLen && myisdigit(c[i]) ; )
 		++i, ++j;	/* just scan */
 
-	if(i >= strLen || c[i] != '.')
+	if(i >= npb->strLen || c[i] != '.')
 		goto done;
 
 	++i; /* skip over '.' */
 
-	if( i+7 > strLen
+	if( i+7 > npb->strLen
 	   || !myisdigit(c[i+0])
 	   || !myisdigit(c[i+1])
 	   || !myisdigit(c[i+2])
@@ -687,7 +685,7 @@ PARSER_Parse(KernelTimestamp)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -708,19 +706,19 @@ PARSER_Parse(Whitespace)
 	const char *c;
 	size_t i = *offs;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 
 	if(!isspace(c[i]))
 		goto done;
 
-	for (i++ ; i < strLen && isspace(c[i]); i++);
+	for (i++ ; i < npb->strLen && isspace(c[i]); i++);
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -737,14 +735,14 @@ PARSER_Parse(Word)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != ' ') 
+	while(i < npb->strLen && c[i] != ' ') 
 		i++;
 
 	if(i == *offs)
@@ -753,7 +751,7 @@ PARSER_Parse(Word)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -775,21 +773,21 @@ PARSER_Parse(StringTo)
 	int chkstr;
 	struct data_StringTo *const data = (struct data_StringTo*) pdata;
 	const char *const toFind = data->toFind;
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 	chkstr = 0;
 
 	/* Total hunt for letter */
-	while(chkstr == 0 && i < strLen ) {
+	while(chkstr == 0 && i < npb->strLen ) {
 	    i++;
 	    if(c[i] == toFind[0]) {
 		/* Found the first letter, now find the rest of the string */
 		j = 1;
 		m = i+1;
-		while(m < strLen && j < data->len ) {
+		while(m < npb->strLen && j < data->len ) {
 			if(c[m] != toFind[j])
 				break;
 			if(j == data->len - 1) { /* full match? */
@@ -801,13 +799,13 @@ PARSER_Parse(StringTo)
 		}
 	    }
 	}
-	if(i == *offs || i == strLen || chkstr != 1)
+	if(i == *offs || i == npb->strLen || chkstr != 1)
 		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -850,14 +848,14 @@ PARSER_Parse(Alpha)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && isalpha(c[i])) 
+	while(i < npb->strLen && isalpha(c[i])) 
 		i++;
 
 	if(i == *offs) {
@@ -867,7 +865,7 @@ PARSER_Parse(Alpha)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -893,16 +891,16 @@ PARSER_Parse(CharTo)
 	size_t i;
 	struct data_CharTo *const data = (struct data_CharTo*) pdata;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
 
 	/* search end of word */
 	int found = 0;
-	while(i < strLen && !found) {
+	while(i < npb->strLen && !found) {
 		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
-			if(str[i] == data->term_chars[j]) {
+			if(npb->str[i] == data->term_chars[j]) {
 				found = 1;
 				break;
 			}
@@ -911,13 +909,13 @@ PARSER_Parse(CharTo)
 			++i;
 	}
 
-	if(i == *offs || i == strLen || !found)
+	if(i == *offs || i == npb->strLen || !found)
 		goto done;
 
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0;
 done:
@@ -981,8 +979,8 @@ PARSER_Parse(Literal)
 	size_t i = *offs;
 	size_t j;
 
-	for(j = 0 ; lit[j] != '\0' && i < strLen ; ++j) {
-		if(lit[j] != str[i])
+	for(j = 0 ; lit[j] != '\0' && i < npb->strLen ; ++j) {
+		if(lit[j] != npb->str[i])
 			break;
 		++i;
 	}
@@ -990,7 +988,7 @@ PARSER_Parse(Literal)
 	*parsed = j; /* we must always return how far we parsed! */
 	if(lit[j] == '\0') {
 		if(value != NULL) {
-			*value = json_object_new_string_len(str+(*offs), *parsed);
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 		}
 		r = 0;
 	}
@@ -1067,16 +1065,16 @@ PARSER_Parse(CharSeparated)
 	struct data_CharSeparated *const data = (struct data_CharSeparated*) pdata;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
 
 	/* search end of word */
 	int found = 0;
-	while(i < strLen && !found) {
+	while(i < npb->strLen && !found) {
 		for(size_t j = 0 ; j < data->n_term_chars ; ++j) {
-			if(str[i] == data->term_chars[j]) {
+			if(npb->str[i] == data->term_chars[j]) {
 				found = 1;
 				break;
 			}
@@ -1088,7 +1086,7 @@ PARSER_Parse(CharSeparated)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 	return r;
@@ -1125,16 +1123,16 @@ PARSER_Destruct(CharSeparated)
  * Just get everything till the end of string.
  */
 PARSER_Parse(Rest)
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 
 	/* silence the warning about unused variable */
-	(void)str;
+	(void)npb->str;
 	/* success, persist */
-	*parsed = strLen - *offs;
+	*parsed = npb->strLen - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0;
 	return r;
@@ -1152,14 +1150,14 @@ PARSER_Parse(OpQuotedString)
 	size_t i;
 	char *cstr = NULL;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
 	if(c[i] != '"') {
-		while(i < strLen && c[i] != ' ') 
+		while(i < npb->strLen && c[i] != ' ') 
 			i++;
 
 		if(i == *offs)
@@ -1173,10 +1171,10 @@ PARSER_Parse(OpQuotedString)
 	    ++i;
 
 	    /* search end of string */
-	    while(i < strLen && c[i] != '"') 
+	    while(i < npb->strLen && c[i] != '"') 
 		    i++;
 
-	    if(i == strLen || c[i] != '"')
+	    if(i == npb->strLen || c[i] != '"')
 		    goto done;
 	    /* success, persist */
 	    *parsed = i + 1 - *offs; /* "eat" terminal double quote */
@@ -1203,12 +1201,12 @@ PARSER_Parse(QuotedString)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
-	if(i + 2 > strLen)
+	if(i + 2 > npb->strLen)
 		goto done;	/* needs at least 2 characters */
 
 	if(c[i] != '"')
@@ -1216,17 +1214,17 @@ PARSER_Parse(QuotedString)
 	++i;
 
 	/* search end of string */
-	while(i < strLen && c[i] != '"') 
+	while(i < npb->strLen && c[i] != '"') 
 		i++;
 
-	if(i == strLen || c[i] != '"')
+	if(i == npb->strLen || c[i] != '"')
 		goto done;
 
 	/* success, persist */
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1243,13 +1241,13 @@ PARSER_Parse(ISODate)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
-	if(*offs+10 > strLen)
+	if(*offs+10 > npb->strLen)
 		goto done;	/* if it is not 10 chars, it can't be an ISO date */
 
 	/* year */
@@ -1281,7 +1279,7 @@ PARSER_Parse(ISODate)
 	/* success, persist */
 	*parsed = 10;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1305,10 +1303,10 @@ PARSER_Parse(CiscoInterfaceSpec)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
 	if(c[i] == ':' || isspace(c[i])) goto done;
@@ -1323,12 +1321,12 @@ PARSER_Parse(CiscoInterfaceSpec)
 	int bHaveIP = 0;
 	size_t lenIP;
 	size_t idxIP = i;
-	if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) == 0) {
+	if(ln_v2_parseIPv4(npb, &i, NULL, &lenIP, NULL) == 0) {
 		bHaveIP = 1;
 		i += lenIP - 1; /* position on delimiter */
 	} else {
 		idxInterface = i;
-		while(i < strLen) {
+		while(i < npb->strLen) {
 			if(isspace(c[i])) goto done;
 			if(c[i] == ':')
 				break;
@@ -1337,22 +1335,22 @@ PARSER_Parse(CiscoInterfaceSpec)
 		lenInterface = i - idxInterface;
 		bHaveInterface = 1;
 	}
-	if(i == strLen) goto done;
+	if(i == npb->strLen) goto done;
 	++i; /* skip over colon */
 
 	/* we now utilize our other parser helpers */
 	if(!bHaveIP) {
 		idxIP = i;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &lenIP, NULL) != 0) goto done;
+		if(ln_v2_parseIPv4(npb, &i, NULL, &lenIP, NULL) != 0) goto done;
 		i += lenIP;
 	}
-	if(i == strLen || c[i] != '/') goto done;
+	if(i == npb->strLen || c[i] != '/') goto done;
 	++i; /* skip slash */
 	const size_t idxPort = i;
 	size_t lenPort;
-	if(ln_v2_parseNumber(ctx, str, strLen, &i, NULL, &lenPort, NULL) != 0) goto done;
+	if(ln_v2_parseNumber(npb, &i, NULL, &lenPort, NULL) != 0) goto done;
 	i += lenPort;
-	if(i == strLen) goto success;
+	if(i == npb->strLen) goto success;
 
 	/* check if optional second ip/port is present
 	 * We assume we must at least have 5 chars [" (::1)"]
@@ -1360,17 +1358,17 @@ PARSER_Parse(CiscoInterfaceSpec)
 	int bHaveIP2 = 0;
 	size_t idxIP2 = 0, lenIP2 = 0;
 	size_t idxPort2 = 0, lenPort2 = 0;
-	if(i+5 < strLen && c[i] == ' ' && c[i+1] == '(') {
+	if(i+5 < npb->strLen && c[i] == ' ' && c[i+1] == '(') {
 		size_t iTmp = i+2; /* skip over " (" */
 		idxIP2 = iTmp;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &iTmp, NULL, &lenIP2, NULL) == 0) {
+		if(ln_v2_parseIPv4(npb, &iTmp, NULL, &lenIP2, NULL) == 0) {
 			iTmp += lenIP2;
-			if(i < strLen || c[iTmp] == '/') {
+			if(i < npb->strLen || c[iTmp] == '/') {
 				++iTmp; /* skip slash */
 				idxPort2 = iTmp;
-				if(ln_v2_parseNumber(ctx, str, strLen, &iTmp, NULL, &lenPort2, NULL) == 0) {
+				if(ln_v2_parseNumber(npb, &iTmp, NULL, &lenPort2, NULL) == 0) {
 					iTmp += lenPort2;
-					if(iTmp < strLen && c[iTmp] == ')') {
+					if(iTmp < npb->strLen && c[iTmp] == ')') {
 						i = iTmp + 1; /* match, so use new index */
 						bHaveIP2 = 1;
 					}
@@ -1385,13 +1383,13 @@ PARSER_Parse(CiscoInterfaceSpec)
 	int bHaveUser = 0;
 	size_t idxUser = 0;
 	size_t lenUser = 0;
-	if(   (i+2 < strLen && c[i] == '(' && !isspace(c[i+1]) )
-	   || (i+3 < strLen && c[i] == ' ' && c[i+1] == '(' && !isspace(c[i+2])) ) {
+	if(   (i+2 < npb->strLen && c[i] == '(' && !isspace(c[i+1]) )
+	   || (i+3 < npb->strLen && c[i] == ' ' && c[i+1] == '(' && !isspace(c[i+2])) ) {
 		idxUser = i + ((c[i] == ' ') ? 2 : 1); /* skip [SP]'(' */
 		size_t iTmp = idxUser;
-		while(iTmp < strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
+		while(iTmp < npb->strLen && !isspace(c[iTmp]) && c[iTmp] != ')')
 			++iTmp; /* just scan */
-		if(iTmp < strLen && c[iTmp] == ')') {
+		if(iTmp < npb->strLen && c[iTmp] == ')') {
 			i = iTmp + 1; /* we have a match, so use new index */
 			bHaveUser = 1;
 			lenUser = iTmp - idxUser;
@@ -1445,10 +1443,10 @@ PARSER_Parse(Duration)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
 	/* hour is a bit tricky */
@@ -1461,7 +1459,7 @@ PARSER_Parse(Duration)
 	else
 		goto done;
 
-	if(i+5 > strLen)
+	if(i+5 > npb->strLen)
 		goto done;/* if it is not 5 chars from here, it can't be us */
 
 	if(c[i] < '0' || c[i] > '5') goto done;
@@ -1473,7 +1471,7 @@ PARSER_Parse(Duration)
 	/* success, persist */
 	*parsed = (i + 5) - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1489,13 +1487,13 @@ PARSER_Parse(Time24hr)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
-	if(*offs+8 > strLen)
+	if(*offs+8 > npb->strLen)
 		goto done;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
@@ -1517,7 +1515,7 @@ PARSER_Parse(Time24hr)
 	/* success, persist */
 	*parsed = 8;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1534,13 +1532,13 @@ PARSER_Parse(Time12hr)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	c = str;
+	c = npb->str;
 	i = *offs;
 
-	if(*offs+8 > strLen)
+	if(*offs+8 > npb->strLen)
 		goto done;	/* if it is not 8 chars, it can't be us */
 
 	/* hour */
@@ -1561,7 +1559,7 @@ PARSER_Parse(Time12hr)
 	/* success, persist */
 	*parsed = 8;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1571,25 +1569,25 @@ done:
 
 /* helper to IPv4 address parser, checks the next set of numbers.
  * Syntax 1 to 3 digits, value together not larger than 255.
- * @param[in] str parse buffer
+ * @param[in] npb->str parse buffer
  * @param[in/out] offs offset into buffer, updated if successful
  * @return 0 if OK, 1 otherwise
  */
 static int
-chkIPv4AddrByte(const char *str, size_t strLen, size_t *offs)
+chkIPv4AddrByte(npb_t *const npb, size_t *offs)
 {
 	int val = 0;
 	int r = 1;	/* default: done -- simplifies things */
 	const char *c;
 	size_t i = *offs;
 
-	c = str;
-	if(i == strLen || !myisdigit(c[i]))
+	c = npb->str;
+	if(i == npb->strLen || !myisdigit(c[i]))
 		goto done;
 	val = c[i++] - '0';
-	if(i < strLen && myisdigit(c[i])) {
+	if(i < npb->strLen && myisdigit(c[i])) {
 		val = val * 10 + c[i++] - '0';
-		if(i < strLen && myisdigit(c[i]))
+		if(i < npb->strLen && myisdigit(c[i]))
 			val = val * 10 + c[i++] - '0';
 	}
 	if(val > 255)	/* cannot be a valid IP address byte! */
@@ -1608,32 +1606,32 @@ PARSER_Parse(IPv4)
 	const char *c;
 	size_t i;
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
-	if(i + 7 > strLen) {
+	if(i + 7 > npb->strLen) {
 		/* IPv4 addr requires at least 7 characters */
 		goto done;
 	}
-	c = str;
+	c = npb->str;
 
 	/* byte 1*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
-	if(i == strLen || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(npb, &i) != 0) goto done;
+	if(i == npb->strLen || c[i++] != '.') goto done;
 	/* byte 2*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
-	if(i == strLen || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(npb, &i) != 0) goto done;
+	if(i == npb->strLen || c[i++] != '.') goto done;
 	/* byte 3*/
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
-	if(i == strLen || c[i++] != '.') goto done;
+	if(chkIPv4AddrByte(npb, &i) != 0) goto done;
+	if(i == npb->strLen || c[i++] != '.') goto done;
 	/* byte 4 - we do NOT need any char behind it! */
-	if(chkIPv4AddrByte(str, strLen, &i) != 0) goto done;
+	if(chkIPv4AddrByte(npb, &i) != 0) goto done;
 
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1644,20 +1642,19 @@ done:
 /* skip past the IPv6 address block, parse pointer is set to 
  * first char after the block. Returns an error if already at end
  * of string.
- * @param[in] str parse buffer
+ * @param[in] npb->str parse buffer
  * @param[in/out] offs offset into buffer, updated if successful
  * @return 0 if OK, 1 otherwise
  */
 static int
-skipIPv6AddrBlock(const char *const __restrict__ str,
-	const size_t strLen,
+skipIPv6AddrBlock(npb_t *const npb,
 	size_t *const __restrict__ offs)
 {
 	int j;
-	if(*offs == strLen)
+	if(*offs == npb->strLen)
 		return 1;
 
-	for(j = 0 ; j < 4  && *offs+j < strLen && isxdigit(str[*offs+j]) ; ++j)
+	for(j = 0 ; j < 4  && *offs+j < npb->strLen && isxdigit(npb->str[*offs+j]) ; ++j)
 		/*just skip*/ ;
 
 	*offs += j;
@@ -1678,15 +1675,15 @@ PARSER_Parse(IPv6)
 	int nBlocks = 0; /* how many blocks did we already have? */
 	int bHad0Abbrev = 0; /* :: already used? */
 
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	i = *offs;
-	if(i + 2 > strLen) {
+	if(i + 2 > npb->strLen) {
 		/* IPv6 addr requires at least 2 characters ("::") */
 		goto done;
 	}
-	c = str;
+	c = npb->str;
 
 	/* check that first block is non-empty */
 	if(! ( isxdigit(c[i]) || (c[i] == ':' && c[i+1] == ':') ) )
@@ -1695,9 +1692,9 @@ PARSER_Parse(IPv6)
 	/* try for all potential blocks plus one more (so we see errors!) */
 	for(int j = 0 ; j < 9 ; ++j) {
 		beginBlock = i;
-		if(skipIPv6AddrBlock(str, strLen, &i) != 0) goto done;
+		if(skipIPv6AddrBlock(npb, &i) != 0) goto done;
 		nBlocks++;
-		if(i == strLen) goto chk_ok;
+		if(i == npb->strLen) goto chk_ok;
 		if(isspace(c[i])) goto chk_ok;
 		if(c[i] == '.'){ /* IPv4 processing! */
 			hasIPv4 = 1;
@@ -1705,7 +1702,7 @@ PARSER_Parse(IPv6)
 		}
 		if(c[i] != ':') goto done;
 		i++; /* "eat" ':' */
-		if(i == strLen) goto chk_ok;
+		if(i == npb->strLen) goto chk_ok;
 		/* check for :: */
 		if(bHad0Abbrev) {
 			if(c[i] == ':') goto done;
@@ -1713,7 +1710,7 @@ PARSER_Parse(IPv6)
 			if(c[i] == ':') {
 				bHad0Abbrev = 1;
 				++i;
-				if(i == strLen) goto chk_ok;
+				if(i == npb->strLen) goto chk_ok;
 			}
 		}
 	}
@@ -1724,7 +1721,7 @@ PARSER_Parse(IPv6)
 		/* prevent pure IPv4 address to be recognized */
 		if(beginBlock == *offs) goto done;
 		i = beginBlock;
-		if(ln_v2_parseIPv4(ctx, str, strLen, &i, NULL, &ipv4_parsed, NULL) != 0)
+		if(ln_v2_parseIPv4(npb, &i, NULL, &ipv4_parsed, NULL) != 0)
 			goto done;
 		i += ipv4_parsed;
 	}
@@ -1741,7 +1738,7 @@ chk_ok:	/* we are finished parsing, check if things are ok */
 	/* if we reach this point, we found a valid IP address */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
 	}
 	r = 0; /* success */
 done:
@@ -1765,8 +1762,7 @@ isValidIPTablesNameChar(const char c)
 /* helper to iptables parser, parses out a a single name=value pair 
  */
 static int
-parseIPTablesNameValue(const char *const __restrict__ str,
-	const size_t strLen, 
+parseIPTablesNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot)
 {
@@ -1774,20 +1770,20 @@ parseIPTablesNameValue(const char *const __restrict__ str,
 	size_t i = *offs;
 
 	const size_t iName = i;
-	while(i < strLen && isValidIPTablesNameChar(str[i]))
+	while(i < npb->strLen && isValidIPTablesNameChar(npb->str[i]))
 		++i;
-	if(i == iName || (i < strLen && str[i] != '=' && str[i] != ' '))
+	if(i == iName || (i < npb->strLen && npb->str[i] != '=' && npb->str[i] != ' '))
 		goto done; /* no name at all! */
 
 	const ssize_t lenName = i - iName;
 
 	ssize_t iVal = -1;
 	size_t lenVal = i - iVal;
-	if(i < strLen && str[i] != ' ') {
+	if(i < npb->strLen && npb->str[i] != ' ') {
 		/* we have a real value (not just a flag name like "DF") */
 		++i; /* skip '=' */
 		iVal = i;
-		while(i < strLen && !isspace(str[i]))
+		while(i < npb->strLen && !isspace(npb->str[i]))
 			++i;
 		lenVal = i - iVal;
 	}
@@ -1801,13 +1797,13 @@ parseIPTablesNameValue(const char *const __restrict__ str,
 
 	char *name;
 	CHKN(name = malloc(lenName+1));
-	memcpy(name, str+iName, lenName);
+	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
 	json_object *json;
 	if(iVal == -1) {
 		json = NULL;
 	} else {
-		CHKN(json = json_object_new_string_len(str+iVal, lenVal));
+		CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	}
 	json_object_object_add(valroot, name, json);
 	free(name);
@@ -1836,11 +1832,11 @@ PARSER_Parse(v2IPTables)
 	int nfields = 0;
 
 	/* stage one */
-	while(i < strLen) {
-		CHKR(parseIPTablesNameValue(str, strLen, &i, NULL));
+	while(i < npb->strLen) {
+		CHKR(parseIPTablesNameValue(npb, &i, NULL));
 		++nfields;
 		/* exactly one SP is permitted between fields */
-		if(i < strLen && str[i] == ' ')
+		if(i < npb->strLen && npb->str[i] == ' ')
 			++i;
 	}
 
@@ -1858,9 +1854,9 @@ PARSER_Parse(v2IPTables)
 
 	i = *offs;
 	CHKN(*value = json_object_new_object());
-	while(i < strLen) {
-		CHKR(parseIPTablesNameValue(str, strLen, &i, *value));
-		while(i < strLen && isspace(str[i]))
+	while(i < npb->strLen) {
+		CHKR(parseIPTablesNameValue(npb, &i, *value));
+		while(i < npb->strLen && isspace(npb->str[i]))
 			++i;
 	}
 
@@ -1888,7 +1884,7 @@ PARSER_Parse(JSON)
 	const size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 
-	if(str[i] != '{' && str[i] != ']') {
+	if(npb->str[i] != '{' && npb->str[i] != ']') {
 		/* this can't be json, see RFC4627, Sect. 2
 		 * see this bug in json-c:
 		 * https://github.com/json-c/json-c/issues/181
@@ -1903,7 +1899,7 @@ PARSER_Parse(JSON)
 		goto done;
 
 	struct json_object *const json
-		= json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+		= json_tokener_parse_ex(tokener, npb->str+i, (int) (npb->strLen - i));
 
 	if(json == NULL)
 		goto done;
@@ -1950,8 +1946,7 @@ isValidNameChar(const char c)
  * TODO: so far, quote characters are not permitted WITHIN quoted values.
  */
 static int
-parseNameValue(const char *const __restrict__ str,
-	const size_t strLen, 
+parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot)
 {
@@ -1959,16 +1954,16 @@ parseNameValue(const char *const __restrict__ str,
 	size_t i = *offs;
 
 	const size_t iName = i;
-	while(i < strLen && isValidNameChar(str[i]))
+	while(i < npb->strLen && isValidNameChar(npb->str[i]))
 		++i;
-	if(i == iName || str[i] != '=')
+	if(i == iName || npb->str[i] != '=')
 		goto done; /* no name at all! */
 
 	const size_t lenName = i - iName;
 	++i; /* skip '=' */
 
 	const size_t iVal = i;
-	while(i < strLen && !isspace(str[i]))
+	while(i < npb->strLen && !isspace(npb->str[i]))
 		++i;
 	const size_t lenVal = i - iVal;
 
@@ -1981,10 +1976,10 @@ parseNameValue(const char *const __restrict__ str,
 
 	char *name;
 	CHKN(name = malloc(lenName+1));
-	memcpy(name, str+iName, lenName);
+	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
 	json_object *json;
-	CHKN(json = json_object_new_string_len(str+iVal, lenVal));
+	CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	json_object_object_add(valroot, name, json);
 	free(name);
 done:
@@ -2005,35 +2000,35 @@ PARSER_Parse(CEESyslog)
 	struct json_tokener *tokener = NULL;
 	struct json_object *json = NULL;
 
-	if(strLen < i + 7  || /* "@cee:{}" is minimum text */
-	   str[i]   != '@' ||
-	   str[i+1] != 'c' ||
-	   str[i+2] != 'e' ||
-	   str[i+3] != 'e' ||
-	   str[i+4] != ':')
+	if(npb->strLen < i + 7  || /* "@cee:{}" is minimum text */
+	   npb->str[i]   != '@' ||
+	   npb->str[i+1] != 'c' ||
+	   npb->str[i+2] != 'e' ||
+	   npb->str[i+3] != 'e' ||
+	   npb->str[i+4] != ':')
 	   	goto done;
 	
 	/* skip whitespace */
-	for(i += 5 ; i < strLen && isspace(str[i]) ; ++i)
+	for(i += 5 ; i < npb->strLen && isspace(npb->str[i]) ; ++i)
 		/* just skip */;
 
-	if(i == strLen || str[i] != '{')
+	if(i == npb->strLen || npb->str[i] != '{')
 		goto done;
 		/* note: we do not permit arrays in CEE mode */
 
 	if((tokener = json_tokener_new()) == NULL)
 		goto done;
 
-	json = json_tokener_parse_ex(tokener, str+i, (int) (strLen - i));
+	json = json_tokener_parse_ex(tokener, npb->str+i, (int) (npb->strLen - i));
 
 	if(json == NULL)
 		goto done;
 
-	if(i + tokener->char_offset != strLen)
+	if(i + tokener->char_offset != npb->strLen)
 		goto done;
 
 	/* success, persist */
-	*parsed =  strLen;
+	*parsed =  npb->strLen;
 	r = 0; /* success */
 
 	if(value != NULL) {
@@ -2065,9 +2060,9 @@ PARSER_Parse(NameValue)
 	size_t i = *offs;
 
 	/* stage one */
-	while(i < strLen) {
-		CHKR(parseNameValue(str, strLen, &i, NULL));
-		while(i < strLen && isspace(str[i]))
+	while(i < npb->strLen) {
+		CHKR(parseNameValue(npb, &i, NULL));
+		while(i < npb->strLen && isspace(npb->str[i]))
 			++i;
 	}
 
@@ -2081,9 +2076,9 @@ PARSER_Parse(NameValue)
 
 	i = *offs;
 	CHKN(*value = json_object_new_object());
-	while(i < strLen) {
-		CHKR(parseNameValue(str, strLen, &i, *value));
-		while(i < strLen && isspace(str[i]))
+	while(i < npb->strLen) {
+		CHKR(parseNameValue(npb, &i, *value));
+		while(i < npb->strLen && isspace(npb->str[i]))
 			++i;
 	}
 
@@ -2109,34 +2104,34 @@ PARSER_Parse(MAC48)
 	size_t i = *offs;
 	char delim;
 
-	if(strLen < i + 17 || /* this motif has exactly 17 characters */
-	   !isxdigit(str[i]) ||
-	   !isxdigit(str[i+1])
+	if(npb->strLen < i + 17 || /* this motif has exactly 17 characters */
+	   !isxdigit(npb->str[i]) ||
+	   !isxdigit(npb->str[i+1])
 	   )
 		FAIL(LN_WRONGPARSER);
 
-	if(str[i+2] == ':')
+	if(npb->str[i+2] == ':')
 		delim = ':';
-	else if(str[i+2] == '-')
+	else if(npb->str[i+2] == '-')
 		delim = '-';
 	else
 		FAIL(LN_WRONGPARSER);
 
 	/* first byte ok */
-	if(!isxdigit(str[i+3])  ||
-	   !isxdigit(str[i+4])  ||
-	   str[i+5] != delim    || /* 2nd byte ok */
-	   !isxdigit(str[i+6])  ||
-	   !isxdigit(str[i+7])  ||
-	   str[i+8] != delim    || /* 3rd byte ok */
-	   !isxdigit(str[i+9])  ||
-	   !isxdigit(str[i+10]) ||
-	   str[i+11] != delim   || /* 4th byte ok */
-	   !isxdigit(str[i+12]) ||
-	   !isxdigit(str[i+13]) ||
-	   str[i+14] != delim   || /* 5th byte ok */
-	   !isxdigit(str[i+15]) ||
-	   !isxdigit(str[i+16])    /* 6th byte ok */
+	if(!isxdigit(npb->str[i+3])  ||
+	   !isxdigit(npb->str[i+4])  ||
+	   npb->str[i+5] != delim    || /* 2nd byte ok */
+	   !isxdigit(npb->str[i+6])  ||
+	   !isxdigit(npb->str[i+7])  ||
+	   npb->str[i+8] != delim    || /* 3rd byte ok */
+	   !isxdigit(npb->str[i+9])  ||
+	   !isxdigit(npb->str[i+10]) ||
+	   npb->str[i+11] != delim   || /* 4th byte ok */
+	   !isxdigit(npb->str[i+12]) ||
+	   !isxdigit(npb->str[i+13]) ||
+	   npb->str[i+14] != delim   || /* 5th byte ok */
+	   !isxdigit(npb->str[i+15]) ||
+	   !isxdigit(npb->str[i+16])    /* 6th byte ok */
 	   )
 		FAIL(LN_WRONGPARSER);
 
@@ -2145,7 +2140,7 @@ PARSER_Parse(MAC48)
 	r = 0; /* success */
 
 	if(value != NULL) {
-		CHKN(*value = json_object_new_string_len(str+i, 17));
+		CHKN(*value = json_object_new_string_len(npb->str+i, 17));
 	}
 
 done:
@@ -2157,8 +2152,7 @@ done:
  * to point to the end of it.
  */
 static int
-cefParseExtensionValue(const char *const __restrict__ str,
-	const size_t strLen,
+cefParseExtensionValue(npb_t *const npb,
 	size_t *__restrict__ iEndVal)
 {
 	int r = 0;
@@ -2170,20 +2164,20 @@ cefParseExtensionValue(const char *const __restrict__ str,
 	 */
 	int hadSP = 0;
 	int inEscape = 0;
-	for(iLastWordBegin = 0 ; i < strLen ; ++i) {
+	for(iLastWordBegin = 0 ; i < npb->strLen ; ++i) {
 		if(inEscape) {
-			if(str[i] != '=' &&
-			   str[i] != '\\' &&
-			   str[i] != 'r' &&
-			   str[i] != 'n')
+			if(npb->str[i] != '=' &&
+			   npb->str[i] != '\\' &&
+			   npb->str[i] != 'r' &&
+			   npb->str[i] != 'n')
 			FAIL(LN_WRONGPARSER);
 			inEscape = 0;
 		} else {
-			if(str[i] == '=') {
+			if(npb->str[i] == '=') {
 				break;
-			} else if(str[i] == '\\') {
+			} else if(npb->str[i] == '\\') {
 				inEscape = 1;
-			} else if(str[i] == ' ') {
+			} else if(npb->str[i] == ' ') {
 				hadSP = 1;
 			} else {
 				if(hadSP) {
@@ -2197,7 +2191,7 @@ cefParseExtensionValue(const char *const __restrict__ str,
 	/* Note: iLastWordBegin can never be at offset zero, because
 	 * the CEF header starts there!
 	 */
-	if(i < strLen) {
+	if(i < npb->strLen) {
 		*iEndVal = (iLastWordBegin == 0) ? i : iLastWordBegin - 1;
 	} else {
 		*iEndVal = i;
@@ -2214,13 +2208,12 @@ done:
  * They also seem to use dots.
  */
 static int
-cefParseName(const char *const __restrict__ str,
-	const size_t strLen,
+cefParseName(npb_t *const npb,
 	size_t *const __restrict__ i)
 {
 	int r = 0;
-	while(*i < strLen && str[*i] != '=') {
-		if(!(isalnum(str[*i]) || str[*i] == '_' || str[*i] == '.'))
+	while(*i < npb->strLen && npb->str[*i] != '=') {
+		if(!(isalnum(npb->str[*i]) || npb->str[*i] == '_' || npb->str[*i] == '.'))
 			FAIL(LN_WRONGPARSER);
 		++(*i);
 	}
@@ -2237,8 +2230,7 @@ done:
  * not. This is done by subroutines.
  */
 static int
-cefParseExtensions(const char *const __restrict__ str,
-	const size_t strLen,
+cefParseExtensions(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	json_object *const __restrict__ jroot)
 {
@@ -2249,33 +2241,33 @@ cefParseExtensions(const char *const __restrict__ str,
 	char *name = NULL;
 	char *value = NULL;
 
-	while(i < strLen) {
-		while(i < strLen && str[i] == ' ')
+	while(i < npb->strLen) {
+		while(i < npb->strLen && npb->str[i] == ' ')
 			++i;
 		iName = i;
-		CHKR(cefParseName(str, strLen, &i));
-		if(i+1 >= strLen || str[i] != '=')
+		CHKR(cefParseName(npb, &i));
+		if(i+1 >= npb->strLen || npb->str[i] != '=')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
 		++i; /* skip '=' */
 
 		iValue = i;
-		CHKR(cefParseExtensionValue(str, strLen, &i));
+		CHKR(cefParseExtensionValue(npb, &i));
 		lenValue = i - iValue;
 
 		++i; /* skip past value */
 
 		if(jroot != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
-			memcpy(name, str+iName, lenName);
+			memcpy(name, npb->str+iName, lenName);
 			name[lenName] = '\0';
 			CHKN(value = malloc(sizeof(char) * (lenValue + 1)));
 			/* copy value but escape it */
 			size_t iDst = 0;
 			for(size_t iSrc = 0 ; iSrc < lenValue ; ++iSrc) {
-				if(str[iValue+iSrc] == '\\') {
+				if(npb->str[iValue+iSrc] == '\\') {
 					++iSrc; /* we know the next char must exist! */
-					switch(str[iValue+iSrc]) {
+					switch(npb->str[iValue+iSrc]) {
 					case '=':	value[iDst] = '=';
 							break;
 					case 'n':	value[iDst] = '\n';
@@ -2286,7 +2278,7 @@ cefParseExtensions(const char *const __restrict__ str,
 							break;
 					}
 				} else {
-					value[iDst] = str[iValue+iSrc];
+					value[iDst] = npb->str[iValue+iSrc];
 				}
 				++iDst;
 			}
@@ -2299,7 +2291,7 @@ cefParseExtensions(const char *const __restrict__ str,
 		}
 	}
 
-	*offs = strLen; /* this parser consume everything or fails */
+	*offs = npb->strLen; /* this parser consume everything or fails */
 
 done:
 	free(name);
@@ -2317,24 +2309,23 @@ done:
  * sequences inside the string.
  */
 static int
-cefGetHdrField(const char *const __restrict__ str,
-	const size_t strLen,
+cefGetHdrField(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	char **val)
 {
 	int r = 0;
 	size_t i = *offs;
-	assert(str[i] != '|');
-	while(i < strLen && str[i] != '|') {
-		if(str[i] == '\\') {
+	assert(npb->str[i] != '|');
+	while(i < npb->strLen && npb->str[i] != '|') {
+		if(npb->str[i] == '\\') {
 			++i; /* skip esc char */
-			if(str[i] != '\\' && str[i] != '|')
+			if(npb->str[i] != '\\' && npb->str[i] != '|')
 				FAIL(LN_WRONGPARSER);
 		}
 		++i; /* scan to next delimiter */
 	}
 
-	if(str[i] != '|')
+	if(npb->str[i] != '|')
 		FAIL(LN_WRONGPARSER);
 
 	const size_t iBegin = *offs;
@@ -2350,9 +2341,9 @@ cefGetHdrField(const char *const __restrict__ str,
 	CHKN(*val = malloc(len + 1));
 	size_t iDst = 0;
 	for(size_t iSrc = 0 ; iSrc < len ; ++iSrc) {
-		if(str[iBegin+iSrc] == '\\')
+		if(npb->str[iBegin+iSrc] == '\\')
 			++iSrc; /* we already checked above that this is OK! */
-		(*val)[iDst++] = str[iBegin+iSrc];
+		(*val)[iDst++] = npb->str[iBegin+iSrc];
 	}
 	(*val)[iDst] = 0;
 	r = 0;
@@ -2374,23 +2365,23 @@ PARSER_Parse(CEF)
 	char *severity = NULL;
 
 	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
-	if(strLen < i + 17 ||
-	   str[i]   != 'C' ||
-	   str[i+1] != 'E' ||
-	   str[i+2] != 'F' ||
-	   str[i+3] != ':' ||
-	   str[i+4] != '0' ||
-	   str[i+5] != '|'
+	if(npb->strLen < i + 17 ||
+	   npb->str[i]   != 'C' ||
+	   npb->str[i+1] != 'E' ||
+	   npb->str[i+2] != 'F' ||
+	   npb->str[i+3] != ':' ||
+	   npb->str[i+4] != '0' ||
+	   npb->str[i+5] != '|'
 	   )	FAIL(LN_WRONGPARSER);
 	
 	i += 6; /* position on '|' */
 
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &vendor));
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &product));
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &version));
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &sigID));
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &name));
-	CHKR(cefGetHdrField(str, strLen, &i, (value == NULL) ? NULL : &severity));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &vendor));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &product));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &version));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &sigID));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &name));
+	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &severity));
 	++i; /* skip over terminal '|' */
 
 	/* OK, we now know we have a good header. Now, we need
@@ -2406,7 +2397,7 @@ PARSER_Parse(CEF)
 	 * to persist the data. So this must be handled differently.
 	 */
 	 size_t iBeginExtensions = i;
-	 CHKR(cefParseExtensions(str, strLen, &i, NULL));
+	 CHKR(cefParseExtensions(npb, &i, NULL));
 
 	/* success, persist */
 	*parsed = i - *offs;
@@ -2433,7 +2424,7 @@ PARSER_Parse(CEF)
 		json_object_object_add(*value, "Extensions", jext);
 
 		i = iBeginExtensions;
-		cefParseExtensions(str, strLen, &i, jext);
+		cefParseExtensions(npb, &i, jext);
 	}
 
 done:
@@ -2462,10 +2453,10 @@ PARSER_Parse(CheckpointLEA)
 	char *name = NULL;
 	char *val = NULL;
 
-	while(i < strLen) {
-		while(i < strLen && str[i] == ' ') /* skip leading SP */
+	while(i < npb->strLen) {
+		while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
 			++i;
-		if(i == strLen) { /* OK if just trailing space */
+		if(i == npb->strLen) { /* OK if just trailing space */
 			if(foundFields == 0)
 				FAIL(LN_WRONGPARSER);
 			break; /* we are done with the loop, all processed */
@@ -2474,31 +2465,31 @@ PARSER_Parse(CheckpointLEA)
 		}
 		iName = i;
 		/* TODO: do a stricter check? ... but we don't have a spec */
-		while(i < strLen && str[i] != ':') {
+		while(i < npb->strLen && npb->str[i] != ':') {
 			++i;
 		}
-		if(i+1 >= strLen || str[i] != ':')
+		if(i+1 >= npb->strLen || npb->str[i] != ':')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
 		++i; /* skip ':' */
 
-		while(i < strLen && str[i] == ' ') /* skip leading SP */
+		while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
 			++i;
 		iValue = i;
-		while(i < strLen && str[i] != ';') {
+		while(i < npb->strLen && npb->str[i] != ';') {
 			++i;
 		}
-		if(i+1 > strLen || str[i] != ';')
+		if(i+1 > npb->strLen || npb->str[i] != ';')
 			FAIL(LN_WRONGPARSER);
 		lenValue = i - iValue;
 		++i; /* skip ';' */
 
 		if(value != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
-			memcpy(name, str+iName, lenName);
+			memcpy(name, npb->str+iName, lenName);
 			name[lenName] = '\0';
 			CHKN(val = malloc(sizeof(char) * (lenValue + 1)));
-			memcpy(val, str+iValue, lenValue);
+			memcpy(val, npb->str+iValue, lenValue);
 			val[lenValue] = '\0';
 			if(*value == NULL)
 				CHKN(*value = json_object_new_object());
@@ -2564,28 +2555,28 @@ chkNoDupeDotInParserDefs(ln_ctx ctx, struct json_object *parsers)
 PARSER_Parse(Repeat)
 	struct data_Repeat *const data = (struct data_Repeat*) pdata;
 	struct ln_pdag *endNode = NULL;
-	size_t longest_path = 0;
 	size_t strtoffs = *offs;
 	size_t lastKnownGood = strtoffs;
 	struct json_object *json_arr = NULL;
+	const size_t parsedTo_save = npb->parsedTo;
 
 	do {
 		struct json_object *parsed_value = json_object_new_object();
-		r = ln_normalizeRec(data->parser, str, strLen, strtoffs, 1,
-				    &longest_path, parsed_value, &endNode
+		r = ln_normalizeRec(npb, data->parser, strtoffs, 1,
+				    parsed_value, &endNode
 #				    ifdef ADVANCED_STATS
 					, NULL
 #				    endif
 				    );
-		strtoffs = longest_path;
-		LN_DBGPRINTF(ctx, "repeat parser returns %d, parsed %zu, json: %s",
-			r, longest_path, json_object_to_json_string(parsed_value));
+		strtoffs = npb->parsedTo;
+		LN_DBGPRINTF(npb->ctx, "repeat parser returns %d, parsed %zu, json: %s",
+			r, npb->parsedTo, json_object_to_json_string(parsed_value));
 
 		if(r != 0) {
 			if(data->permitMismatchInParser) {
 				strtoffs = lastKnownGood; /* go back to final match */
 				json_object_put(parsed_value);
-				LN_DBGPRINTF(ctx, "mismatch in repeat, parse ptr back to %zd",
+				LN_DBGPRINTF(npb->ctx, "mismatch in repeat, parse ptr back to %zd",
 					strtoffs);
 				goto success;
 			} else {
@@ -2613,21 +2604,20 @@ PARSER_Parse(Repeat)
 		json_object_array_add(json_arr, toAdd);
 		if(toAdd != parsed_value)
 			json_object_put(parsed_value);
-		LN_DBGPRINTF(ctx, "arr: %s", json_object_to_json_string(json_arr));
+		LN_DBGPRINTF(npb->ctx, "arr: %s", json_object_to_json_string(json_arr));
 
 		/* now check if we shall continue */
-		longest_path = 0;
+		npb->parsedTo = 0;
 		lastKnownGood = strtoffs; /* record pos in case of fail in while */
-		r = ln_normalizeRec(data->while_cond, str, strLen, strtoffs, 1,
-				    &longest_path, NULL, &endNode
+		r = ln_normalizeRec(npb, data->while_cond, strtoffs, 1, NULL, &endNode
 #				    ifdef ADVANCED_STATS
 					, NULL
 #				    endif
 				    );
-		LN_DBGPRINTF(ctx, "repeat while returns %d, parsed %zu",
-			r, longest_path);
+		LN_DBGPRINTF(npb->ctx, "repeat while returns %d, parsed %zu",
+			r, npb->parsedTo);
 		if(r == 0)
-			strtoffs = longest_path;
+			strtoffs = npb->parsedTo;
 	} while(r == 0);
 
 success:
@@ -2638,6 +2628,7 @@ success:
 	} else {
 		*value = json_arr;
 	}
+	npb->parsedTo = parsedTo_save;
 	r = 0; /* success */
 done:
 	return r;
@@ -2791,7 +2782,7 @@ stringAddPermittedCharsViaArray(ln_ctx ctx, struct data_String *const data,
  * generic string parser
  */
 PARSER_Parse(String)
-	assert(str != NULL);
+	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	struct data_String *const data = (struct data_String*) pdata;
@@ -2800,13 +2791,13 @@ PARSER_Parse(String)
 	int bHadEndQuote = 0;
 	int bHadEscape = 0;
 
-	if(i == strLen) goto done;
+	if(i == npb->strLen) goto done;
 
-	if((data->quoteMode == ST_QUOTE_AUTO) && (str[i] == data->qchar_begin)) {
+	if((data->quoteMode == ST_QUOTE_AUTO) && (npb->str[i] == data->qchar_begin)) {
 		bHaveQuotes = 1;
 		++i;
 	} else if(data->quoteMode == ST_QUOTE_REQD) {
-		if(str[i] == data->qchar_begin) {
+		if(npb->str[i] == data->qchar_begin) {
 			bHaveQuotes = 1;
 			++i;
 		} else {
@@ -2815,14 +2806,14 @@ PARSER_Parse(String)
 	}
 
 	/* scan string */
-	while(i < strLen) {
+	while(i < npb->strLen) {
 		if(bHaveQuotes) {
-			if(str[i] == data->qchar_end) {
+			if(npb->str[i] == data->qchar_end) {
 				if(data->flags.esc_md == ST_ESC_DOUBLE
 				   || data->flags.esc_md == ST_ESC_BOTH) {
 					/* may be escaped, need to check! */
-					if(i+1 < strLen
-					   && str[i+1] == data->qchar_end) {
+					if(i+1 < npb->strLen
+					   && npb->str[i+1] == data->qchar_end) {
 						bHadEscape = 1;
 					   	++i;
 					} else { /* not escaped -> terminal */
@@ -2836,8 +2827,8 @@ PARSER_Parse(String)
 			}
 		}
 
-		if(   str[i] == '\\'
-		   && i+1 < strLen
+		if(   npb->str[i] == '\\'
+		   && i+1 < npb->strLen
 		   && (data->flags.esc_md == ST_ESC_BACKSLASH
 		       || data->flags.esc_md == ST_ESC_BOTH) ) {
 			bHadEscape = 1;
@@ -2845,9 +2836,9 @@ PARSER_Parse(String)
 		}
 
 		/* terminating conditions */
-		if(!bHaveQuotes && str[i] == ' ')
+		if(!bHaveQuotes && npb->str[i] == ' ')
 			break;
-		if(!stringIsPermittedChar(data, str[i]))
+		if(!stringIsPermittedChar(data, npb->str[i]))
 			break;
 		i++;
 	}
@@ -2859,7 +2850,7 @@ PARSER_Parse(String)
 		goto done;
 
 	const size_t trmChkIdx = (bHaveQuotes) ? i+1 : i;
-	if(str[trmChkIdx] != ' ')
+	if(npb->str[trmChkIdx] != ' ')
 		goto done;
 
 	/* success, persist */
@@ -2876,7 +2867,7 @@ PARSER_Parse(String)
 			strt = *offs;
 			len = *parsed;
 		}
-		char *const cstr = strndup(str+strt, len);
+		char *const cstr = strndup(npb->str+strt, len);
 		if(bHadEscape) {
 			/* need to post-process string... */
 			for(size_t j = 0 ; cstr[j] != '\0' ; j++) {
