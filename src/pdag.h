@@ -120,11 +120,13 @@ struct ln_pdag {
 #ifdef ADVANCED_STATS
 struct advstats {
 	int pathlen;
+	int parser_calls;		/**< parser calls in general during path */
+	int lit_parser_calls;		/**< same just for the literal parser */
 	int backtracked;
 	int recursion_level;
 	es_str_t *exec_path;
 };
-#define ADVSTATS_MAX_ENTITIES 55
+#define ADVSTATS_MAX_ENTITIES 100
 extern int advstats_max_pathlen;
 extern int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
 extern int advstats_max_backtracked;

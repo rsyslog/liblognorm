@@ -2572,8 +2572,8 @@ PARSER_Parse(Repeat)
 			if(data->permitMismatchInParser) {
 				strtoffs = lastKnownGood; /* go back to final match */
 				json_object_put(parsed_value);
-				LN_DBGPRINTF(npb->ctx, "mismatch in repeat, parse ptr back to %zd",
-					strtoffs);
+				LN_DBGPRINTF(npb->ctx, "mismatch in repeat, "
+					"parse ptr back to %zd", strtoffs);
 				goto success;
 			} else {
 				goto done;
