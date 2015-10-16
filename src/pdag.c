@@ -460,13 +460,14 @@ LN_DBGPRINTF(ctx, "=======================================");
 }
 
 
+#define LN_INTERN_PDAG_STATS_NPARSERS 100
 /* data structure for pdag statistics */
 struct pdag_stats {
 	int nodes;
 	int term_nodes;
 	int parsers;
 	int max_nparsers;
-	int nparsers_cnt[100];
+	int nparsers_cnt[LN_INTERN_PDAG_STATS_NPARSERS];
 	int nparsers_100plus;
 	int *prs_cnt;
 };
@@ -485,7 +486,7 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 		stats->term_nodes++;
 	if(dag->nparsers > stats->max_nparsers)
 		stats->max_nparsers = dag->nparsers;
-	if(dag->nparsers >= ADVSTATS_MAX_ENTITIES)
+	if(dag->nparsers >= LN_INTERN_PDAG_STATS_NPARSERS)
 		stats->nparsers_100plus++;
 	else
 		stats->nparsers_cnt[dag->nparsers]++;
