@@ -50,7 +50,7 @@ ln_v1_inherittedCtx(ln_ctx parent)
 {
 	ln_ctx child = ln_initCtx();
 	if (child != NULL) {
-		child->allowRegex = parent->allowRegex;
+		child->opts = parent->opts;
 		child->dbgCB = parent->dbgCB;
 		child->dbgCookie = parent->dbgCookie;
 		child->version = parent->version;

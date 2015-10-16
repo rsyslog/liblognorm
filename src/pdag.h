@@ -15,6 +15,7 @@
 
 #define ORIGINAL_MSG_KEY "originalmsg"
 #define UNPARSED_DATA_KEY "unparsed-data"
+#define EXEC_PATH_KEY "exec-path"
 
 typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;

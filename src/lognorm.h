@@ -60,8 +60,7 @@ struct ln_ctx_s {
 			       * to all rules before they are submitted to tree
 			       * building.
 			       */
-	unsigned short allowRegex; /**< allow use of regex-based field-types
-				     * (disabled by default for performance reasons) */
+	unsigned opts; /**< specific options, see LN_CTXOPTS_* defines */
 	struct ln_type_pdag *type_pdags; /**< array of our type pdags */
 	int nTypes;		 /**< number of type pdags */
 	int version;		/**< 1 or 2, depending on rulebase/algo version */

@@ -227,7 +227,14 @@ genDOT()
 static void
 handle_generic_option(const char* opt) {
 	if (strcmp("allowRegex", opt) == 0) {
-		ln_setCtxOpts(ctx, 1);
+		ln_setCtxOpts(ctx, LN_CTXOPT_ALLOW_REGEX);
+	} else if (strcmp("addExecPath", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_EXEC_PATH);
+	} else if (strcmp("addOriginalMsg", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_ORIGINALMSG);
+	} else {
+		fprintf(stderr, "invalid -o option '%s'\n", opt);
+		exit(1);
 	}
 }
 
@@ -241,6 +248,8 @@ fprintf(stderr,
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
+	"    -oaddExecPath Add exec_path attribute to output\n"
+	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
 	"    -P           Print back only if the message has NOT been parsed succesfully\n"
 	"    -L           Add source file line number information to unparsed line output\n"

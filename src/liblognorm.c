@@ -61,7 +61,7 @@ ln_initCtx(void)
 #endif
 	ctx->objID = LN_ObjID_CTX;
 	ctx->dbgCB = NULL;
-	ctx->allowRegex = 0;
+	ctx->opts = 0;
 
 	/* we add an root for the empty word, this simplifies parse
 	 * dag handling.
@@ -84,8 +84,8 @@ done:
 }
 
 void
-ln_setCtxOpts(ln_ctx ctx, int allow_regex) {
-	ctx->allowRegex = allow_regex;
+ln_setCtxOpts(ln_ctx ctx, const unsigned opts) {
+	ctx->opts |= opts;
 }
 
 

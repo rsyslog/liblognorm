@@ -1094,6 +1094,23 @@ ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp)
 	ln_genStatsDotPDAGGraph(ctx->pdag, fp);
 }
 
+
+static inline int
+addOriginalMsg(const char *str, const size_t strLen, struct json_object *const json)
+{
+	int r = 1;
+	struct json_object *value;
+
+	value = json_object_new_string_len(str, strLen);
+	if (value == NULL) {
+		goto done;
+	}
+	json_object_object_add(json, ORIGINAL_MSG_KEY, value);
+	r = 0;
+done:
+	return r;
+}
+
 /**
  * add unparsed string to event.
  */
@@ -1102,15 +1119,10 @@ addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct
 {
 	int r = 1;
 	struct json_object *value;
-	char *s = NULL;
-	CHKN(s = strndup(str, strLen));
-	value = json_object_new_string(s);
-	if (value == NULL) {
-		goto done;
-	}
-	json_object_object_add(json, ORIGINAL_MSG_KEY, value);
+
+	CHKR(addOriginalMsg(str, strLen, json));
 	
-	value = json_object_new_string(s + offs);
+	value = json_object_new_string(str + offs);
 	if (value == NULL) {
 		goto done;
 	}
@@ -1118,7 +1130,6 @@ addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct
 
 	r = 0;
 done:
-	free(s);
 	return r;
 }
 
@@ -1187,14 +1198,14 @@ tryParser(npb_t *const __restrict__ npb,
 	  = snprintf(hdr, sizeof(hdr), "%d:", npb->astats.recursion_level);
 	es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
 	if(prs->prsid == PRS_LITERAL) {
-		es_addChar(&npb->astats.exec_path, '"');
+		es_addChar(&npb->astats.exec_path, '\'');
 		es_addBuf(&npb->astats.exec_path,
 			  ln_DataForDisplayLiteral(dag->ctx,
 				prs->parser_data),
 			  strlen(ln_DataForDisplayLiteral(dag->ctx,
 				prs->parser_data))
 			 );
-		es_addChar(&npb->astats.exec_path, '"');
+		es_addChar(&npb->astats.exec_path, '\'');
 	} else if(parser_lookup_table[prs->prsid].parser
 			== ln_v2_parseCharTo) {
 		es_addBuf(&npb->astats.exec_path,
@@ -1420,6 +1431,9 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 			json_object_object_add(*json_p, "event.tags", endNode->tags);
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
+		if(ctx->opts & LN_CTXOPT_ADD_ORIGINALMSG) {
+			addOriginalMsg(str, strLen, *json_p);
+		}
 		r = 0;
 	} else {
 		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
@@ -1454,16 +1468,23 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	}
 
 	/* complete execution path */
-	char hdr[128];
-	const size_t lenhdr 
-	  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
-	  	     npb.astats.pathlen, npb.astats.parser_calls,
-		     npb.astats.lit_parser_calls);
-	es_addBuf(&npb.astats.exec_path, hdr, lenhdr);
-char * cstr = es_str2cstr(npb.astats.exec_path, NULL);
-fprintf(stderr, "%.4d line: %s\n", npb.astats.backtracked, str);
-fprintf(stderr, "exec path: %s\n\n", cstr);
-free(cstr);
+	if(ctx->opts & LN_CTXOPT_ADD_EXEC_PATH) {
+		struct json_object *value;
+		char hdr[128];
+		const size_t lenhdr 
+		  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
+			     npb.astats.pathlen, npb.astats.parser_calls,
+			     npb.astats.lit_parser_calls);
+		es_addBuf(&npb.astats.exec_path, hdr, lenhdr);
+		char * cstr = es_str2cstr(npb.astats.exec_path, NULL);
+		//fprintf(stderr, "%.4d line: %s\n", npb.astats.backtracked, str);
+		//fprintf(stderr, "exec path: %s\n\n", cstr);
+		value = json_object_new_string(cstr);
+		if (value != NULL) {
+			json_object_object_add(*json_p, EXEC_PATH_KEY, value);
+		}
+		free(cstr);
+	}
 	es_deleteStr(npb.astats.exec_path);
 #endif
 done:	return r;
