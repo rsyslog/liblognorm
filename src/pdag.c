@@ -485,7 +485,7 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 		stats->term_nodes++;
 	if(dag->nparsers > stats->max_nparsers)
 		stats->max_nparsers = dag->nparsers;
-	if(dag->nparsers >= 100)
+	if(dag->nparsers >= ADVSTATS_MAX_ENTITIES)
 		stats->nparsers_100plus++;
 	else
 		stats->nparsers_cnt[dag->nparsers]++;
@@ -493,7 +493,8 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 	int max_path = 0;
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
-		stats->prs_cnt[prs->prsid]++;
+		if(prs->prsid != PRS_CUSTOM_TYPE)
+			stats->prs_cnt[prs->prsid]++;
 		const int path_len = ln_pdagStatsRec(ctx, prs->node, stats);
 		if(path_len > max_path)
 			max_path = path_len;
@@ -648,6 +649,8 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		}
 	}
 
+	uint64_t total_len;
+	uint64_t total_cnt;
 	fprintf(fp, "\n");
 	fprintf(fp, "\n"
 	            "Path Length Statistics\n"
@@ -660,22 +663,37 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		    "given explicitely, as they use almost no time to process.\n"
 		    "\n"
 		);
+	total_len = 0;
+	total_cnt = 0;
 	fprintf(fp, "Path Length\n");
 	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
-		if(advstats_pathlens[i] > 0 )
+		if(advstats_pathlens[i] > 0 ) {
 			fprintf(fp, "%3d: %d\n", i, advstats_pathlens[i]);
+			total_len += i * advstats_pathlens[i];
+			total_cnt += advstats_pathlens[i];
+		}
 	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_pathlen);
 	fprintf(fp, "\n");
+
+	total_len = 0;
+	total_cnt = 0;
 	fprintf(fp, "Nbr Backtracked\n");
 	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
-		if(advstats_backtracks[i] > 0 )
+		if(advstats_backtracks[i] > 0 ) {
 			fprintf(fp, "%3d: %d\n", i, advstats_backtracks[i]);
+			total_len += i * advstats_backtracks[i];
+			total_cnt += advstats_backtracks[i];
+		}
 	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_backtracked);
 	fprintf(fp, "\n");
 
 	/* we calc some stats while we output */
-	uint64_t total_len = 0;
-	uint64_t total_cnt = 0;
+	total_len = 0;
+	total_cnt = 0;
 	fprintf(fp, "Parser Calls\n");
 	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
 		if(advstats_parser_calls[i] > 0 ) {
@@ -684,7 +702,7 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 			total_cnt += advstats_parser_calls[i];
 		}
 	}
-	fprintf(fp, "avg: %u\n", (unsigned) (total_len/total_cnt));
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
 	fprintf(fp, "max: %d\n", advstats_max_parser_calls);
 	fprintf(fp, "\n");
 
@@ -698,7 +716,7 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 			total_cnt += advstats_lit_parser_calls[i];
 		}
 	}
-	fprintf(fp, "avg: %u\n", (unsigned) (total_len/total_cnt));
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
 	fprintf(fp, "max: %d\n", advstats_max_lit_parser_calls);
 	fprintf(fp, "\n");
 #endif
