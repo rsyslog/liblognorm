@@ -1181,6 +1181,36 @@ tryParser(npb_t *const __restrict__ npb,
 	int r;
 	struct ln_pdag *endNode = NULL;
 	size_t parsedTo = npb->parsedTo;
+#	ifdef	ADVANCED_STATS
+	char hdr[16];
+	const size_t lenhdr 
+	  = snprintf(hdr, sizeof(hdr), "%d:", npb->astats.recursion_level);
+	es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+	if(prs->prsid == PRS_LITERAL) {
+		es_addChar(&npb->astats.exec_path, '"');
+		es_addBuf(&npb->astats.exec_path,
+			  ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data),
+			  strlen(ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data))
+			 );
+		es_addChar(&npb->astats.exec_path, '"');
+	} else if(parser_lookup_table[prs->prsid].parser
+			== ln_v2_parseCharTo) {
+		es_addBuf(&npb->astats.exec_path,
+			  ln_DataForDisplayCharTo(dag->ctx,
+				prs->parser_data),
+			  strlen(ln_DataForDisplayCharTo(dag->ctx,
+				prs->parser_data))
+			 );
+	} else {
+		es_addBuf(&npb->astats.exec_path,
+			parserName(prs->prsid),
+			strlen(parserName(prs->prsid)) );
+	}
+	es_addChar(&npb->astats.exec_path, ',');
+#	endif
+
 	if(prs->prsid == PRS_CUSTOM_TYPE) {
 		if(*value == NULL)
 			*value = json_object_new_object();
@@ -1189,11 +1219,17 @@ tryParser(npb_t *const __restrict__ npb,
 		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, "
 			"offs %zd, *pParsed %zd", prs->custType->name, r, *offs, *pParsed);
 		*pParsed = npb->parsedTo - *offs;
+		#ifdef	ADVANCED_STATS
+		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8); 
+		#endif
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(npb,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
 	}
 	LN_DBGPRINTF(npb->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
+	npb->parsedTo = parsedTo;
+
 #ifdef	ADVANCED_STATS
 	++advstats_parsers_called;
 	++npb->astats.parser_calls;
@@ -1207,7 +1243,6 @@ tryParser(npb_t *const __restrict__ npb,
 			++parser_lookup_table[prs->prsid].success;
 	}
 #endif
-	npb->parsedTo = parsedTo;
 	return r;
 }
 
@@ -1291,44 +1326,7 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		}
 		i = offs;
 		value = NULL;
-			#ifdef	ADVANCED_STATS
-				char hdr[16];
-				const size_t lenhdr 
-				  = snprintf(hdr, sizeof(hdr), "%d:", npb->astats.recursion_level);
-				es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
-				if(prs->prsid == PRS_LITERAL) {
-					es_addChar(&npb->astats.exec_path, '"');
-					es_addBuf(&npb->astats.exec_path,
-						  ln_DataForDisplayLiteral(dag->ctx,
-							prs->parser_data),
-						  strlen(ln_DataForDisplayLiteral(dag->ctx,
-							prs->parser_data))
-					         );
-					es_addChar(&npb->astats.exec_path, '"');
-				} else if(parser_lookup_table[prs->prsid].parser
-						== ln_v2_parseCharTo) {
-					es_addBuf(&npb->astats.exec_path,
-						  ln_DataForDisplayCharTo(dag->ctx,
-							prs->parser_data),
-						  strlen(ln_DataForDisplayCharTo(dag->ctx,
-							prs->parser_data))
-					         );
-				} else {
-					es_addBuf(&npb->astats.exec_path,
-						parserName(prs->prsid),
-						strlen(parserName(prs->prsid)) );
-				}
-				es_addChar(&npb->astats.exec_path, ',');
-			#endif
 		localR = tryParser(npb, dag, &i, &parsed, &value, prs);
-
-			#ifdef	ADVANCED_STATS
-			if(prs->prsid == PRS_CUSTOM_TYPE) {
-				es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
-				es_addBuf(&npb->astats.exec_path, "[R:USR],", 8); 
-			}
-			#endif
-
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
@@ -1367,10 +1365,11 @@ LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, npb->strLen, dag
 	}
 
 done:
-	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, npb->parsedTo, parsedTo);
-#ifdef	ADVANCED_STATS
+	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu",
+		offs, r, npb->parsedTo, parsedTo);
+#	ifdef	ADVANCED_STATS
 	--npb->astats.recursion_level;
-#endif
+#	endif
 	return r;
 }
 
