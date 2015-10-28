@@ -16,6 +16,7 @@
 #define ORIGINAL_MSG_KEY "originalmsg"
 #define UNPARSED_DATA_KEY "unparsed-data"
 #define EXEC_PATH_KEY "exec-path"
+#define EXEC_RULE_KEY "rule"
 
 typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;
@@ -151,6 +152,7 @@ struct npb {
 	const char *str;		/**< to-be-normalized message */
 	size_t strLen;			/**< length of it */
 	size_t parsedTo;		/**< up to which byte could this be parsed? */
+	es_str_t *rule;			/**< a mock-up of the rule used to parse */
 	es_str_t *exec_path;
 #ifdef ADVANCED_STATS
 	int pathlen;

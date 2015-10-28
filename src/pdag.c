@@ -1259,30 +1259,49 @@ tryParser(npb_t *const __restrict__ npb,
 }
 
 
-#ifdef	XX_ADVANCED_STATS
-static inline const char *
-advstats_prs_name(prs_t *prs)
+static void
+add_str_reversed(npb_t *const __restrict__ npb,
+	const char *const __restrict__ str,
+	const size_t len)
 {
-	if(prs->prsid == PRS_LITERAL) {
-		es_addBuf(&astats.exec_path,
-			  ln_DataForDisplayLiteral(dag->ctx,
-				prs->parser_data),
-			  strlen(ln_DataForDisplayLiteral(dag->ctx,
-				prs->parser_data))
-			 );
-		es_addChar(&astats.exec_path, '-');
-		es_addChar(&astats.exec_path, '>');
-	} else {
-		if(astats != NULL) {
-			es_addChar(&astats.exec_path, '%');
-			es_addBuf(&astats.exec_path,
-				parserName(prs->prsid),
-				strlen(parserName(prs->prsid)) );
-			es_addChar(&astats.exec_path, '%');
-		}
+	ssize_t i;
+	for(i = len - 1 ; i >= 0 ; --i) {
+		es_addChar(&npb->rule, str[i]);
 	}
 }
-#endif
+
+
+/* Add the current parser to the mockup rule.
+ * Note: we add reversed strings, because we can call this
+ * function effectively only when walking upwards the tree.
+ * This means deepest entries come first. We solve this somewhat
+ * elegantly by reversion strings, and then reversion the string
+ * once more when we emit it, so that we get the right order.
+ */
+static inline void
+add_rule_to_mockup(npb_t *const __restrict__ npb,
+	const ln_parser_t *const __restrict__ prs)
+{
+	if(prs->prsid == PRS_LITERAL) {
+		const char *const val = 
+			  ln_DataForDisplayLiteral(npb->ctx,
+				prs->parser_data);
+		add_str_reversed(npb, val, strlen(val));
+	} else {
+		/* note: name/value order must also be reversed! */
+		es_addChar(&npb->rule, '%');
+		add_str_reversed(npb,
+			parserName(prs->prsid),
+			strlen(parserName(prs->prsid)) );
+		es_addChar(&npb->rule, ':');
+		if(prs->name == NULL) {
+			es_addChar(&npb->rule, '-');
+		} else {
+			add_str_reversed(npb, prs->name, strlen(prs->name));
+		}
+		es_addChar(&npb->rule, '%');
+	}
+}
 
 /**
  * Recursive step of the normalizer. It walks the parse dag and calls itself
@@ -1334,7 +1353,7 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 					offs, bPartialMatch, parserName(prs->prsid), prs->name,
 					(prs->prsid == PRS_LITERAL)
 					 ? ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)
-					 : "UNKNOWN");
+				 	 : "UNKNOWN");
 		}
 		i = offs;
 		value = NULL;
@@ -1350,6 +1369,9 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
+				if(npb->ctx->opts & LN_CTXOPT_ADD_RULE) {
+					add_rule_to_mockup(npb, prs);
+				}
 			} else {
 				++dag->stats.backtracked;
 				#ifdef	ADVANCED_STATS
@@ -1385,6 +1407,21 @@ done:
 	return r;
 }
 
+static char *
+strrev(char *const __restrict__ str)
+{
+    char ch;
+    size_t i = strlen(str)-1,j=0;
+    while(i>j)
+    {
+        ch = str[i];
+        str[i]= str[j];
+        str[j] = ch;
+        i--;
+        j++;
+    }
+    return str;
+}
 
 int
 ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
@@ -1403,6 +1440,9 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	npb.ctx = ctx;
 	npb.str = str;
 	npb.strLen = strLen;
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) {
+		npb.rule = es_newStr(1024);
+	}
 #	ifdef ADVANCED_STATS
 	npb.astats.exec_path = es_newStr(1024);
 #	endif
@@ -1435,9 +1475,19 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		if(ctx->opts & LN_CTXOPT_ADD_ORIGINALMSG) {
 			addOriginalMsg(str, strLen, *json_p);
 		}
+		if(ctx->opts & LN_CTXOPT_ADD_RULE) { /* matching rule mockup */
+			char *cstr = strrev(es_str2cstr(npb.rule, NULL));
+			json_object_object_add(*json_p, EXEC_RULE_KEY,
+				json_object_new_string(cstr));
+			free(cstr);
+		}
 		r = 0;
 	} else {
 		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
+	}
+
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) {
+		es_deleteStr(npb.rule);
 	}
 
 #ifdef	ADVANCED_STATS
@@ -1478,8 +1528,6 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 			     npb.astats.lit_parser_calls);
 		es_addBuf(&npb.astats.exec_path, hdr, lenhdr);
 		char * cstr = es_str2cstr(npb.astats.exec_path, NULL);
-		//fprintf(stderr, "%.4d line: %s\n", npb.astats.backtracked, str);
-		//fprintf(stderr, "exec path: %s\n\n", cstr);
 		value = json_object_new_string(cstr);
 		if (value != NULL) {
 			json_object_object_add(*json_p, EXEC_PATH_KEY, value);

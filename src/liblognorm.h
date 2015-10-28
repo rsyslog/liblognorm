@@ -136,6 +136,7 @@ int ln_exitCtx(ln_ctx ctx);
 #define LN_CTXOPT_ADD_EXEC_PATH		0x02 /**< add exec_path attribute (time-consuming!) */
 #define LN_CTXOPT_ADD_ORIGINALMSG	0x04 /**< always add original message to output
 					          (not just in error case) */
+#define LN_CTXOPT_ADD_RULE		0x08 /**< add mockup rule */
 /**
  * Set options on ctx.
  *

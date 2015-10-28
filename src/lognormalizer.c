@@ -232,6 +232,8 @@ handle_generic_option(const char* opt) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_EXEC_PATH);
 	} else if (strcmp("addOriginalMsg", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_ORIGINALMSG);
+	} else if (strcmp("addRule", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE);
 	} else {
 		fprintf(stderr, "invalid -o option '%s'\n", opt);
 		exit(1);
@@ -248,6 +250,7 @@ fprintf(stderr,
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
+	"    -oaddRule    Add a mockup of the matching rule.\n"
 	"    -oaddExecPath Add exec_path attribute to output\n"
 	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
