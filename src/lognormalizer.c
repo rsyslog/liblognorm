@@ -50,6 +50,7 @@ static int verbose = 0;
 #define OUTPUT_UNPARSED_RECS 0x02
 static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
 				/**< controls which records to output */
+static int outputSummaryLine = 0;
 static int addErrLineNbr = 0;	/**< add line number info to unparsed events */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
@@ -205,8 +206,10 @@ normalize(void)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
-	fprintf(stderr, "%llu records processed, %llu parsed, %llu unparsed\n",
-		numParsed+numUnparsed, numParsed, numUnparsed);
+	if(outputSummaryLine) {
+		fprintf(stderr, "%llu records processed, %llu parsed, %llu unparsed\n",
+			numParsed+numUnparsed, numParsed, numUnparsed);
+	}
 	free(mandatoryTagCstr);
 }
 
@@ -247,6 +250,7 @@ static void usage(void)
 fprintf(stderr,
 	"Options:\n"
 	"    -r<rulebase> Rulebase to use. This is required option\n"
+	"    -H           print summary line (nbr of msgs Handled)\n"
 	"    -e<json|xml|csv|cee-syslog>\n"
 	"                 Change output format. By default, json is used\n"
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
@@ -260,7 +264,7 @@ fprintf(stderr,
 	"    -P           Print back only if the message has NOT been parsed succesfully\n"
 	"    -L           Add source file line number information to unparsed line output\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
-	"    -v           Print debug. When used 3 times, prints parse tree\n"
+	"    -v           Print debug. When used 3 times, prints parse DAG\n"
 	"    -d           Print DOT file to stdout and exit\n"
 	"    -d<filename> Save DOT file to the filename\n"
 	"    -s<filename> Print parse dag statistics and exit\n"
@@ -285,7 +289,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hLx:")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hHLx:")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -337,6 +341,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'P':
 			recOutput = OUTPUT_UNPARSED_RECS;
+			break;
+		case 'H':
+			outputSummaryLine = 1;
 			break;
 		case 'L':
 			addErrLineNbr = 1;
