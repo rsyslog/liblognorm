@@ -57,7 +57,7 @@ static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
 static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will
 					   be output. NULL=all */
-static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_json;
+static enum { f_syslog, f_json, f_xml, f_csv, f_raw } outfmt = f_json;
 
 void
 errCallBack(void __attribute__((unused)) *cookie, const char *msg,
@@ -79,14 +79,19 @@ void complain(const char *errmsg)
 }
 
 
-/* param str is just a performance enhancement, which saves us re-creation
- * of the string on every call.
+/* rawmsg is, as the name says, the raw message, in case we have
+ * "raw" formatter requested.
  */
 static inline void
-outputEvent(struct json_object *json)
+outputEvent(struct json_object *json, const char *const rawmsg)
 {
 	char *cstr = NULL;
 	es_str_t *str = NULL;
+
+	if(outfmt == f_raw) {
+		printf("%s\n", rawmsg);
+		return;
+	}
 
 	switch(outfmt) {
 	case f_json:
@@ -102,7 +107,12 @@ outputEvent(struct json_object *json)
 		ln_fmtEventToXML(json, &str);
 		break;
 	case f_csv:
-	ln_fmtEventToCSV(json, &str, encFmt);
+		ln_fmtEventToCSV(json, &str, encFmt);
+		break;
+	case f_raw:
+		fprintf(stderr, "program error: f_raw should not occur "
+			"here (file %s, line %d)\n", __FILE__, __LINE__);
+		abort();
 		break;
 	}
 	if (str != NULL)
@@ -186,13 +196,13 @@ normalize(void)
 				if(parsed) {
 					numParsed++;
 					if(recOutput & OUTPUT_PARSED_RECS) {
-						outputEvent(json);
+						outputEvent(json, buf);
 					}
 				} else {
 					numUnparsed++;
 					amendLineNbr(json, line_nbr);
 					if(recOutput & OUTPUT_UNPARSED_RECS) {
-						outputEvent(json);
+						outputEvent(json, buf);
 					}
 				}
 			} else {
@@ -251,8 +261,10 @@ fprintf(stderr,
 	"Options:\n"
 	"    -r<rulebase> Rulebase to use. This is required option\n"
 	"    -H           print summary line (nbr of msgs Handled)\n"
-	"    -e<json|xml|csv|cee-syslog>\n"
+	"    -e<json|xml|csv|cee-syslog|raw>\n"
 	"                 Change output format. By default, json is used\n"
+	"                 Raw is exactly like the input. It is useful in combination\n"
+	"                 with -p/-P options to extract known good/bad messages\n"
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
@@ -360,6 +372,8 @@ int main(int argc, char *argv[])
 				outfmt = f_syslog;
 			} else if(!strcmp(optarg, "csv")) {
 				outfmt = f_csv;
+			} else if(!strcmp(optarg, "raw")) {
+				outfmt = f_raw;
 			}
 			break;
 		case 'r': /* rule base to use */
