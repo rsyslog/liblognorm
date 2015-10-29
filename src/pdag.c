@@ -1112,6 +1112,86 @@ done:
 	return r;
 }
 
+static char *
+strrev(char *const __restrict__ str)
+{
+    char ch;
+    size_t i = strlen(str)-1,j=0;
+    while(i>j)
+    {
+        ch = str[i];
+        str[i]= str[j];
+        str[j] = ch;
+        i--;
+        j++;
+    }
+    return str;
+}
+
+/* note: "originalmsg" is NOT added as metadata in order to keep
+ * backwards compatible.
+ */
+static inline void
+addRuleMetadata(npb_t *const __restrict__ npb,
+	struct json_object *const json,
+	struct ln_pdag *const __restrict__ endNode)
+{
+	ln_ctx ctx = npb->ctx;
+	struct json_object *meta = NULL;
+	struct json_object *meta_rule = NULL;
+	struct json_object *value;
+
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) { /* matching rule mockup */
+		if(meta_rule == NULL)
+			meta_rule = json_object_new_object();
+		char *cstr = strrev(es_str2cstr(npb->rule, NULL));
+		json_object_object_add(meta_rule, RULE_MOCKUP_KEY,
+			json_object_new_string(cstr));
+		free(cstr);
+	}
+
+	if(ctx->opts & LN_CTXOPT_ADD_RULE_LOCATION) {
+		if(meta_rule == NULL)
+			meta_rule = json_object_new_object();
+		struct json_object *const location = json_object_new_object();
+		value = json_object_new_string(endNode->rb_file);
+		json_object_object_add(location, "file", value);
+		value = json_object_new_int((int)endNode->rb_lineno);
+		json_object_object_add(location, "line", value);
+		json_object_object_add(meta_rule, RULE_LOCATION_KEY, location);
+	}
+
+	if(meta_rule != NULL) {
+		if(meta == NULL)
+			meta = json_object_new_object();
+		json_object_object_add(meta, META_RULE_KEY, meta_rule);
+	}
+
+#ifdef	ADVANCED_STATS
+	/* complete execution path */
+	if(ctx->opts & LN_CTXOPT_ADD_EXEC_PATH) {
+		if(meta == NULL)
+			meta = json_object_new_object();
+		char hdr[128];
+		const size_t lenhdr 
+		  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
+			     npb->astats.pathlen, npb->astats.parser_calls,
+			     npb->astats.lit_parser_calls);
+		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+		char * cstr = es_str2cstr(npb->astats.exec_path, NULL);
+		value = json_object_new_string(cstr);
+		if (value != NULL) {
+			json_object_object_add(meta, EXEC_PATH_KEY, value);
+		}
+		free(cstr);
+	}
+#endif
+
+	if(meta != NULL)
+		json_object_object_add(json, META_KEY, meta);
+}
+
+
 /**
  * add unparsed string to event.
  */
@@ -1407,22 +1487,6 @@ done:
 	return r;
 }
 
-static char *
-strrev(char *const __restrict__ str)
-{
-    char ch;
-    size_t i = strlen(str)-1,j=0;
-    while(i>j)
-    {
-        ch = str[i];
-        str[i]= str[j];
-        str[j] = ch;
-        i--;
-        j++;
-    }
-    return str;
-}
-
 int
 ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
 {
@@ -1473,14 +1537,13 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
 		if(ctx->opts & LN_CTXOPT_ADD_ORIGINALMSG) {
-			addOriginalMsg(str, strLen, *json_p);
+			/* originalmsg must be kept outside of metadata for 
+			 * backward compatibility reasons.
+			 */
+			json_object_object_add(*json_p, ORIGINAL_MSG_KEY,
+				json_object_new_string_len(str, strLen));
 		}
-		if(ctx->opts & LN_CTXOPT_ADD_RULE) { /* matching rule mockup */
-			char *cstr = strrev(es_str2cstr(npb.rule, NULL));
-			json_object_object_add(*json_p, EXEC_RULE_KEY,
-				json_object_new_string(cstr));
-			free(cstr);
-		}
+		addRuleMetadata(&npb, *json_p, endNode);
 		r = 0;
 	} else {
 		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
@@ -1518,22 +1581,6 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		advstats_max_lit_parser_calls = npb.astats.lit_parser_calls;
 	}
 
-	/* complete execution path */
-	if(ctx->opts & LN_CTXOPT_ADD_EXEC_PATH) {
-		struct json_object *value;
-		char hdr[128];
-		const size_t lenhdr 
-		  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
-			     npb.astats.pathlen, npb.astats.parser_calls,
-			     npb.astats.lit_parser_calls);
-		es_addBuf(&npb.astats.exec_path, hdr, lenhdr);
-		char * cstr = es_str2cstr(npb.astats.exec_path, NULL);
-		value = json_object_new_string(cstr);
-		if (value != NULL) {
-			json_object_object_add(*json_p, EXEC_PATH_KEY, value);
-		}
-		free(cstr);
-	}
 	es_deleteStr(npb.astats.exec_path);
 #endif
 done:	return r;

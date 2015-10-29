@@ -388,6 +388,8 @@ addSampToTree(ln_ctx ctx,
 	/* we are at the end of rule processing, so this node is a terminal */
 	dag->flags.isTerminal = 1;
 	dag->tags = tagBucket;
+	dag->rb_file = strdup(ctx->conf_file);
+	dag->rb_lineno = ctx->conf_ln_nbr;
 
 done:
 	if(str != NULL)
@@ -1132,6 +1134,7 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	}
 
 	/* now we are in our native code */
+	++ctx->conf_ln_nbr; /* "version=2" is line 1! */
 	while(!isEof) {
 		CHKR(ln_sampRead(ctx, repo, &isEof));
 	}

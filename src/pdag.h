@@ -13,10 +13,13 @@
 #include <libestr.h>
 #include <stdint.h>
 
+#define META_KEY "metadata"
 #define ORIGINAL_MSG_KEY "originalmsg"
 #define UNPARSED_DATA_KEY "unparsed-data"
 #define EXEC_PATH_KEY "exec-path"
-#define EXEC_RULE_KEY "rule"
+#define META_RULE_KEY "rule"
+#define RULE_MOCKUP_KEY "mockup"
+#define RULE_LOCATION_KEY "location"
 
 typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;
@@ -117,6 +120,10 @@ struct ln_pdag {
 		unsigned terminated;
 	} stats;	/**< usage statistics */
 	const char *rb_id;		/**< human-readable rulebase identifier, for stats etc */
+	
+	// experimental, move outside later
+	const char *rb_file;
+	unsigned int rb_lineno;
 };
 
 #ifdef ADVANCED_STATS

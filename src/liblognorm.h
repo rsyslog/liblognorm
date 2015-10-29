@@ -137,6 +137,7 @@ int ln_exitCtx(ln_ctx ctx);
 #define LN_CTXOPT_ADD_ORIGINALMSG	0x04 /**< always add original message to output
 					          (not just in error case) */
 #define LN_CTXOPT_ADD_RULE		0x08 /**< add mockup rule */
+#define LN_CTXOPT_ADD_RULE_LOCATION	0x10 /**< add rule location (file, lineno) to metadata */
 /**
  * Set options on ctx.
  *
