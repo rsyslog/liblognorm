@@ -253,6 +253,7 @@ void ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
+void ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp);
 
 /* friends */
 int

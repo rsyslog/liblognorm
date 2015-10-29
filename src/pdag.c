@@ -321,7 +321,7 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
-	free(pdag->rb_file);
+	free((void*)pdag->rb_file);
 	free(pdag);
 done:	return;
 }
