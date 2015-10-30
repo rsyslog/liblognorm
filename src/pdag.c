@@ -449,7 +449,7 @@ ln_pdagOptimize(ln_ctx ctx)
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
 		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
-		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, "");
+		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, strdup(""));
 	}
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
