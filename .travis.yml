@@ -14,5 +14,5 @@ script:
   - autoreconf --force --verbose --install
 # note: we enable regexp to check the v1 compatibility layer. v2 does 
 # not have it, nor is it recommended to enable it.
-  - ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp
+  - ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp --enable-valgrind
   - make && make dist && make check && sudo make install
