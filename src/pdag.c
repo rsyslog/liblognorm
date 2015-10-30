@@ -321,6 +321,7 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
+	free((void*)pdag->rb_id);
 	free((void*)pdag->rb_file);
 	free(pdag);
 done:	return;
@@ -411,7 +412,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 static void
 ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix)
 {
-	char *id;
+	char *id = NULL;
 
 	dag->rb_id = prefix;
 	/* now on to rest of processing */
@@ -453,7 +454,7 @@ ln_pdagOptimize(ln_ctx ctx)
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
-	ln_pdagComponentSetIDs(ctx, ctx->pdag, "");
+	ln_pdagComponentSetIDs(ctx, ctx->pdag, strdup(""));
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
 LN_DBGPRINTF(ctx, "=======================================");
