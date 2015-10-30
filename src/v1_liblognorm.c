@@ -81,8 +81,9 @@ ln_v1_loadSamples(ln_ctx ctx, const char *file)
 	int isEof = 0;
 
 	CHECK_CTX;
+	char *fn_to_free;
 
-	ctx->conf_file = strdup(file);
+	ctx->conf_file = fn_to_free = strdup(file);
 	ctx->conf_ln_nbr = 0;
 
 	if(file == NULL) ERR_ABORT;
@@ -97,10 +98,10 @@ ln_v1_loadSamples(ln_ctx ctx, const char *file)
 	}
 	fclose(repo);
 
-	free((void*)ctx->conf_file);
 	ctx->conf_file = NULL;
 
 done:
+	free((void*)fn_to_free);
 	return r;
 }
 
