@@ -26,6 +26,7 @@ json_eq_LDFLAGS = -no-install
 # implementation is further developed.
 TESTS_SHELLSCRIPTS = \
 	usrdef_simple.sh \
+	usrdef_two.sh \
 	missing_line_ending.sh \
 	names.sh \
 	include.sh \
