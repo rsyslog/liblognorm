@@ -27,8 +27,22 @@
 #include "internal.h"
 #include "parser.h"
 #include "helpers.h"
+const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+
+#ifdef	ADVANCED_STATS
+uint64_t advstats_parsers_called = 0;
+uint64_t advstats_parsers_success = 0;
+int advstats_max_pathlen = 0;
+int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
+int advstats_max_backtracked = 0;
+int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
+int advstats_max_parser_calls = 0;
+int advstats_parser_calls[ADVSTATS_MAX_ENTITIES];
+int advstats_max_lit_parser_calls = 0;
+int advstats_lit_parser_calls[ADVSTATS_MAX_ENTITIES];
+#endif
 
 /* parser lookup table
  * This is a memory- and cache-optimized way of calling parsers.
@@ -43,10 +57,17 @@ const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const 
  * no priorities (which is expected to be common) or user-assigned
  * priorities are equal for some parsers.
  */
+#ifdef ADVANCED_STATS
+#define PARSER_ENTRY_NO_DATA(identifier, parser, prio) \
+{ identifier, prio, NULL, ln_v2_parse##parser, NULL, 0, 0 }
+#define PARSER_ENTRY(identifier, parser, prio) \
+{ identifier, prio, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser, 0, 0 }
+#else
 #define PARSER_ENTRY_NO_DATA(identifier, parser, prio) \
 { identifier, prio, NULL, ln_v2_parse##parser, NULL }
 #define PARSER_ENTRY(identifier, parser, prio) \
 { identifier, prio, ln_construct##parser, ln_v2_parse##parser, ln_destruct##parser }
+#endif
 static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("literal", Literal, 4),
 	PARSER_ENTRY("repeat", Repeat, 4),
@@ -300,6 +321,7 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
+	free((void*)pdag->rb_file);
 	free(pdag);
 done:	return;
 }
@@ -380,6 +402,40 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 	}
 	return r;
 }
+
+/**
+ * Assign human-readable identifiers (names) to each node. These are
+ * later used in stats, debug output and whereever else this may make
+ * sense.
+ */
+static void
+ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix)
+{
+	char *id;
+
+	dag->rb_id = prefix;
+	/* now on to rest of processing */
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		if(prs->prsid == PRS_LITERAL) {
+			if(prs->name == NULL) {
+				asprintf(&id, "%s%s", prefix,
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+			} else {
+				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
+					prs->name,
+					parserName(prs->prsid),
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+			}
+		} else {
+			asprintf(&id, "%s%%%s:%s%%", prefix,
+				prs->name ? prs->name : "-",
+				parserName(prs->prsid));
+		}
+		ln_pdagComponentSetIDs(ctx, prs->node, id);
+	}
+}
+
 /**
  * Optimize the pdag.
  * This includes all components.
@@ -392,10 +448,12 @@ ln_pdagOptimize(ln_ctx ctx)
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
 		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
+		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, "");
 	}
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
+	ln_pdagComponentSetIDs(ctx, ctx->pdag, "");
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
 LN_DBGPRINTF(ctx, "=======================================");
@@ -403,13 +461,14 @@ LN_DBGPRINTF(ctx, "=======================================");
 }
 
 
+#define LN_INTERN_PDAG_STATS_NPARSERS 100
 /* data structure for pdag statistics */
 struct pdag_stats {
 	int nodes;
 	int term_nodes;
 	int parsers;
 	int max_nparsers;
-	int nparsers_cnt[100];
+	int nparsers_cnt[LN_INTERN_PDAG_STATS_NPARSERS];
 	int nparsers_100plus;
 	int *prs_cnt;
 };
@@ -428,7 +487,7 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 		stats->term_nodes++;
 	if(dag->nparsers > stats->max_nparsers)
 		stats->max_nparsers = dag->nparsers;
-	if(dag->nparsers >= 100)
+	if(dag->nparsers >= LN_INTERN_PDAG_STATS_NPARSERS)
 		stats->nparsers_100plus++;
 	else
 		stats->nparsers_cnt[dag->nparsers]++;
@@ -436,7 +495,8 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 	int max_path = 0;
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
-		stats->prs_cnt[prs->prsid]++;
+		if(prs->prsid != PRS_CUSTOM_TYPE)
+			stats->prs_cnt[prs->prsid]++;
 		const int path_len = ln_pdagStatsRec(ctx, prs->node, stats);
 		if(path_len > max_path)
 			max_path = path_len;
@@ -444,17 +504,42 @@ ln_pdagStatsRec(ln_ctx ctx, struct ln_pdag *const dag, struct pdag_stats *const 
 	return max_path + 1;
 }
 
+
+static void
+ln_pdagStatsExtended(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, int level)
+{
+	char indent[2048];
+
+	if(level > 1023)
+		level = 1023;
+	memset(indent, ' ', level * 2);
+	indent[level * 2] = '\0';
+
+	if(dag->stats.called > 0) {
+		fprintf(fp, "%u, %u, %s\n",
+			dag->stats.called,
+			dag->stats.backtracked,
+			dag->rb_id);
+	}
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
+		if(prs->node->stats.called > 0) {
+			ln_pdagStatsExtended(ctx, prs->node, fp, level+1);
+		}
+	}
+}
+
 /**
  * Gather pdag statistics for a *specific* pdag.
  *
  * Data is sent to given file ptr.
  */
-void
-ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
+static void
+ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, const int extendedStats)
 {
 	struct pdag_stats *const stats = calloc(1, sizeof(struct pdag_stats));
 	stats->prs_cnt = calloc(NPARSERS, sizeof(int));
-	ln_pdagClearVisited(ctx);
+	//ln_pdagClearVisited(ctx);
 	const int longest_path = ln_pdagStatsRec(ctx, dag, stats);
 
 	fprintf(fp, "nodes.............: %4d\n", stats->nodes);
@@ -479,7 +564,16 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp)
 
 	free(stats->prs_cnt);
 	free(stats);
+	
+	if(extendedStats) {
+		fprintf(fp, "Usage Statistics:\n"
+			    "-----------------\n");
+		fprintf(fp, "called, backtracked, rule\n");
+		ln_pdagComponentClearVisited(dag);
+		ln_pdagStatsExtended(ctx, dag, fp, 0);
+	}
 }
+
 
 /**
  * Gather and output pdag statistics for the full pdag (ctx)
@@ -506,16 +600,128 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		fprintf(fp, "\n"
 			    "type PDAG: %s\n"
 		            "----------\n", ctx->type_pdags[i].name);
-		ln_pdagStats(ctx, ctx->type_pdags[i].pdag, fp);
+		ln_pdagStats(ctx, ctx->type_pdags[i].pdag, fp, extendedStats);
 	}
 
 	fprintf(fp, "\n"
 		    "Main PDAG\n"
 	            "=========\n");
-	ln_pdagStats(ctx, ctx->pdag, fp);
+	ln_pdagStats(ctx, ctx->pdag, fp, extendedStats);
 
-	if(extendedStats)
-		ln_displayPDAG(ctx);
+#ifdef	ADVANCED_STATS
+	const uint64_t parsers_failed = advstats_parsers_called - advstats_parsers_success;
+	fprintf(fp, "\n"
+		    "Advanced Runtime Stats\n"
+	            "======================\n");
+	fprintf(fp, "These are actual number from analyzing the control flow "
+		    "at runtime.\n");
+	fprintf(fp, "Note that literal matching is also done via parsers. As such, \n"
+		    "it is expected that fail rates increase with the size of the \n"
+		    "rule base.\n");
+	fprintf(fp, "\n");
+	fprintf(fp, "Parser Calls:\n");
+	fprintf(fp, "total....: %10" PRIu64 "\n", advstats_parsers_called);
+	fprintf(fp, "succesful: %10" PRIu64 "\n", advstats_parsers_success);
+	fprintf(fp, "failed...: %10" PRIu64 " [%d%%]\n",
+		parsers_failed,
+		(int) ((parsers_failed * 100) / advstats_parsers_called) );
+	fprintf(fp, "\nIndividual Parser Calls "
+		    "(never called parsers are not shown):\n");
+	for(  size_t i = 0
+	    ; i < sizeof(parser_lookup_table) / sizeof(struct ln_parser_info)
+	    ; ++i) {
+		if(parser_lookup_table[i].called > 0) {
+			const uint64_t failed = parser_lookup_table[i].called
+				- parser_lookup_table[i].success;
+			fprintf(fp, "%20s: %10" PRIu64 " [%5.2f%%] "
+				    "success: %10" PRIu64 " [%5.1f%%] "
+				    "fail: %10" PRIu64 " [%5.1f%%]"
+			            "\n",
+				parser_lookup_table[i].name,
+				parser_lookup_table[i].called,
+				(float)(parser_lookup_table[i].called * 100)
+				        / advstats_parsers_called,
+				parser_lookup_table[i].success,
+				(float)(parser_lookup_table[i].success * 100)
+				        / parser_lookup_table[i].called,
+				failed,
+				(float)(failed * 100)
+				        / parser_lookup_table[i].called
+			       );
+		}
+	}
+
+	uint64_t total_len;
+	uint64_t total_cnt;
+	fprintf(fp, "\n");
+	fprintf(fp, "\n"
+	            "Path Length Statistics\n"
+	            "----------------------\n"
+	            "The regular path length is the number of nodes being visited,\n"
+		    "where each node potentially evaluates several parsers. The\n"
+		    "parser call statistic is the number of parsers called along\n"
+		    "the path. That number is higher, as multiple parsers may be\n"
+		    "called at each node. The number of literal parser calls is\n"
+		    "given explicitely, as they use almost no time to process.\n"
+		    "\n"
+		);
+	total_len = 0;
+	total_cnt = 0;
+	fprintf(fp, "Path Length\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_pathlens[i] > 0 ) {
+			fprintf(fp, "%3d: %d\n", i, advstats_pathlens[i]);
+			total_len += i * advstats_pathlens[i];
+			total_cnt += advstats_pathlens[i];
+		}
+	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_pathlen);
+	fprintf(fp, "\n");
+
+	total_len = 0;
+	total_cnt = 0;
+	fprintf(fp, "Nbr Backtracked\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_backtracks[i] > 0 ) {
+			fprintf(fp, "%3d: %d\n", i, advstats_backtracks[i]);
+			total_len += i * advstats_backtracks[i];
+			total_cnt += advstats_backtracks[i];
+		}
+	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_backtracked);
+	fprintf(fp, "\n");
+
+	/* we calc some stats while we output */
+	total_len = 0;
+	total_cnt = 0;
+	fprintf(fp, "Parser Calls\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_parser_calls[i] > 0 ) {
+			fprintf(fp, "%3d: %d\n", i, advstats_parser_calls[i]);
+			total_len += i * advstats_parser_calls[i];
+			total_cnt += advstats_parser_calls[i];
+		}
+	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_parser_calls);
+	fprintf(fp, "\n");
+
+	total_len = 0;
+	total_cnt = 0;
+	fprintf(fp, "LITERAL Parser Calls\n");
+	for(int i = 0 ; i < ADVSTATS_MAX_ENTITIES ; ++i) {
+		if(advstats_lit_parser_calls[i] > 0 ) {
+			fprintf(fp, "%3d: %d\n", i, advstats_lit_parser_calls[i]);
+			total_len += i * advstats_lit_parser_calls[i];
+			total_cnt += advstats_lit_parser_calls[i];
+		}
+	}
+	fprintf(fp, "avg: %f\n", (double) total_len / (double) total_cnt);
+	fprintf(fp, "max: %d\n", advstats_max_lit_parser_calls);
+	fprintf(fp, "\n");
+#endif
 }
 
 /**
@@ -722,18 +928,17 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-if(dag->stats.visited == 0) return;
-	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [visited %u, backtracked %u]",
+	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [called %u, backtracked %u]",
 		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers,
-		     dag->stats.visited, dag->stats.backtracked);
+		     dag->stats.called, dag->stats.backtracked);
 
 for(int i = 0 ; i < dag->nparsers ; ++i) {
 	ln_parser_t *const prs = dag->parsers+i;
-	LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s': visited %u", indent,
+	LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s': called %u", indent,
 		parserName(prs->prsid),
 		dag->parsers[i].name,
 		(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN",
-	dag->parsers[i].node->stats.visited);
+	dag->parsers[i].node->stats.called);
 }
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *const prs = dag->parsers+i;
@@ -763,6 +968,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) {
 void
 ln_displayPDAG(ln_ctx ctx)
 {
+	ln_pdagClearVisited(ctx);
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "COMPONENT: %s", ctx->type_pdags[i].name);
 		ln_displayPDAGComponent(ctx->type_pdags[i].pdag, 0);
@@ -837,6 +1043,155 @@ ln_genDotPDAGGraph(struct ln_pdag *dag, es_str_t **str)
 	es_addBufConstcstr(str, "}\n");
 }
 
+/**
+ * recursive handler for statistics DOT graph generator.
+ */
+static void
+ln_genStatsDotPDAGGraphRec(struct ln_pdag *dag, FILE *const __restrict__ fp)
+{
+	if(dag->flags.visited)
+		return; /* already processed this subpart */
+	dag->flags.visited = 1;
+	fprintf(fp, "l%p [ label=\"%u:%u\"", dag,
+		dag->stats.called, dag->stats.backtracked);
+
+	if(isLeaf(dag)) {
+		fprintf(fp, " style=\"bold\"");
+	}
+	fprintf(fp, "]\n");
+
+	/* display field subdags */
+
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *const prs = dag->parsers+i;
+		if(prs->node->stats.called == 0)
+			continue;
+		fprintf(fp, "l%p -> l%p [label=\"", dag, prs->node);
+		if(prs->prsid == PRS_LITERAL) {
+			for(const char *p = ((struct data_Literal*)prs->parser_data)->lit ; *p ; ++p) {
+				if(*p != '\\' && *p != '"')
+					fputc(*p, fp);
+			}
+		} else {
+			fprintf(fp, "%s", parserName(prs->prsid));
+		}
+		fprintf(fp, "\" style=\"dotted\"]\n");
+		ln_genStatsDotPDAGGraphRec(prs->node, fp);
+	}
+}
+
+
+void
+ln_genStatsDotPDAGGraph(struct ln_pdag *dag, FILE *const fp)
+{
+	ln_pdagClearVisited(dag->ctx);
+	fprintf(fp, "digraph pdag {\n");
+	ln_genStatsDotPDAGGraphRec(dag, fp);
+	fprintf(fp, "}\n");
+}
+
+void
+ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp)
+{
+	ln_genStatsDotPDAGGraph(ctx->pdag, fp);
+}
+
+
+static inline int
+addOriginalMsg(const char *str, const size_t strLen, struct json_object *const json)
+{
+	int r = 1;
+	struct json_object *value;
+
+	value = json_object_new_string_len(str, strLen);
+	if (value == NULL) {
+		goto done;
+	}
+	json_object_object_add(json, ORIGINAL_MSG_KEY, value);
+	r = 0;
+done:
+	return r;
+}
+
+static char *
+strrev(char *const __restrict__ str)
+{
+    char ch;
+    size_t i = strlen(str)-1,j=0;
+    while(i>j)
+    {
+        ch = str[i];
+        str[i]= str[j];
+        str[j] = ch;
+        i--;
+        j++;
+    }
+    return str;
+}
+
+/* note: "originalmsg" is NOT added as metadata in order to keep
+ * backwards compatible.
+ */
+static inline void
+addRuleMetadata(npb_t *const __restrict__ npb,
+	struct json_object *const json,
+	struct ln_pdag *const __restrict__ endNode)
+{
+	ln_ctx ctx = npb->ctx;
+	struct json_object *meta = NULL;
+	struct json_object *meta_rule = NULL;
+	struct json_object *value;
+
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) { /* matching rule mockup */
+		if(meta_rule == NULL)
+			meta_rule = json_object_new_object();
+		char *cstr = strrev(es_str2cstr(npb->rule, NULL));
+		json_object_object_add(meta_rule, RULE_MOCKUP_KEY,
+			json_object_new_string(cstr));
+		free(cstr);
+	}
+
+	if(ctx->opts & LN_CTXOPT_ADD_RULE_LOCATION) {
+		if(meta_rule == NULL)
+			meta_rule = json_object_new_object();
+		struct json_object *const location = json_object_new_object();
+		value = json_object_new_string(endNode->rb_file);
+		json_object_object_add(location, "file", value);
+		value = json_object_new_int((int)endNode->rb_lineno);
+		json_object_object_add(location, "line", value);
+		json_object_object_add(meta_rule, RULE_LOCATION_KEY, location);
+	}
+
+	if(meta_rule != NULL) {
+		if(meta == NULL)
+			meta = json_object_new_object();
+		json_object_object_add(meta, META_RULE_KEY, meta_rule);
+	}
+
+#ifdef	ADVANCED_STATS
+	/* complete execution path */
+	if(ctx->opts & LN_CTXOPT_ADD_EXEC_PATH) {
+		if(meta == NULL)
+			meta = json_object_new_object();
+		char hdr[128];
+		const size_t lenhdr 
+		  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
+			     npb->astats.pathlen, npb->astats.parser_calls,
+			     npb->astats.lit_parser_calls);
+		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+		char * cstr = es_str2cstr(npb->astats.exec_path, NULL);
+		value = json_object_new_string(cstr);
+		if (value != NULL) {
+			json_object_object_add(meta, EXEC_PATH_KEY, value);
+		}
+		free(cstr);
+	}
+#endif
+
+	if(meta != NULL)
+		json_object_object_add(json, META_KEY, meta);
+}
+
 
 /**
  * add unparsed string to event.
@@ -846,15 +1201,10 @@ addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct
 {
 	int r = 1;
 	struct json_object *value;
-	char *s = NULL;
-	CHKN(s = strndup(str, strLen));
-	value = json_object_new_string(s);
-	if (value == NULL) {
-		goto done;
-	}
-	json_object_object_add(json, ORIGINAL_MSG_KEY, value);
+
+	CHKR(addOriginalMsg(str, strLen, json));
 	
-	value = json_object_new_string(s + offs);
+	value = json_object_new_string(str + offs);
 	if (value == NULL) {
 		goto done;
 	}
@@ -862,7 +1212,6 @@ addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct
 
 	r = 0;
 done:
-	free(s);
 	return r;
 }
 
@@ -905,42 +1254,136 @@ fixJSON(struct ln_pdag *dag,
 
 // TODO: streamline prototype when done with changes
 int
-ln_normalizeRec(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	const size_t offs,
 	const int bPartialMatch,
-	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
-	struct ln_pdag **endNode);
+	struct ln_pdag **endNode
+	);
 
 static int
-tryParser(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+tryParser(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	size_t *offs,
 	size_t *const __restrict__ pParsed,
 	struct json_object **value,
-	const ln_parser_t *const prs)
+	const ln_parser_t *const prs
+	)
 {
 	int r;
 	struct ln_pdag *endNode = NULL;
+	size_t parsedTo = npb->parsedTo;
+#	ifdef	ADVANCED_STATS
+	char hdr[16];
+	const size_t lenhdr 
+	  = snprintf(hdr, sizeof(hdr), "%d:", npb->astats.recursion_level);
+	es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+	if(prs->prsid == PRS_LITERAL) {
+		es_addChar(&npb->astats.exec_path, '\'');
+		es_addBuf(&npb->astats.exec_path,
+			  ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data),
+			  strlen(ln_DataForDisplayLiteral(dag->ctx,
+				prs->parser_data))
+			 );
+		es_addChar(&npb->astats.exec_path, '\'');
+	} else if(parser_lookup_table[prs->prsid].parser
+			== ln_v2_parseCharTo) {
+		es_addBuf(&npb->astats.exec_path,
+			  ln_DataForDisplayCharTo(dag->ctx,
+				prs->parser_data),
+			  strlen(ln_DataForDisplayCharTo(dag->ctx,
+				prs->parser_data))
+			 );
+	} else {
+		es_addBuf(&npb->astats.exec_path,
+			parserName(prs->prsid),
+			strlen(parserName(prs->prsid)) );
+	}
+	es_addChar(&npb->astats.exec_path, ',');
+#	endif
+
 	if(prs->prsid == PRS_CUSTOM_TYPE) {
 		if(*value == NULL)
 			*value = json_object_new_object();
 		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", prs->custType->name);
-		r = ln_normalizeRec(prs->custType->pdag, str, strLen, *offs, 1,
-				    pParsed, *value, &endNode);
-		*pParsed -= *offs;
-		//LN_DBGPRINTF(dag->ctx, "custom parser '%s' returns %d, pParsed %zu, json: %s",
-			//prs->custType->name, r, *pParsed, json_object_to_json_string(*value));
+		r = ln_normalizeRec(npb, prs->custType->pdag, *offs, 1, *value, &endNode);
+		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, "
+			"offs %zd, *pParsed %zd", prs->custType->name, r, *offs, *pParsed);
+		*pParsed = npb->parsedTo - *offs;
+		#ifdef	ADVANCED_STATS
+		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
+		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8); 
+		#endif
 	} else {
-		r = parser_lookup_table[prs->prsid].parser(dag->ctx, str, strLen,
+		r = parser_lookup_table[prs->prsid].parser(npb,
 			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
-		LN_DBGPRINTF(dag->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	}
+	LN_DBGPRINTF(npb->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
+	npb->parsedTo = parsedTo;
+
+#ifdef	ADVANCED_STATS
+	++advstats_parsers_called;
+	++npb->astats.parser_calls;
+	if(prs->prsid == PRS_LITERAL)
+		++npb->astats.lit_parser_calls;
+	if(r == 0)
+		++advstats_parsers_success;
+	if(prs->prsid != PRS_CUSTOM_TYPE) {
+		++parser_lookup_table[prs->prsid].called;
+		if(r == 0)
+			++parser_lookup_table[prs->prsid].success;
+	}
+#endif
 	return r;
 }
+
+
+static void
+add_str_reversed(npb_t *const __restrict__ npb,
+	const char *const __restrict__ str,
+	const size_t len)
+{
+	ssize_t i;
+	for(i = len - 1 ; i >= 0 ; --i) {
+		es_addChar(&npb->rule, str[i]);
+	}
+}
+
+
+/* Add the current parser to the mockup rule.
+ * Note: we add reversed strings, because we can call this
+ * function effectively only when walking upwards the tree.
+ * This means deepest entries come first. We solve this somewhat
+ * elegantly by reversion strings, and then reversion the string
+ * once more when we emit it, so that we get the right order.
+ */
+static inline void
+add_rule_to_mockup(npb_t *const __restrict__ npb,
+	const ln_parser_t *const __restrict__ prs)
+{
+	if(prs->prsid == PRS_LITERAL) {
+		const char *const val = 
+			  ln_DataForDisplayLiteral(npb->ctx,
+				prs->parser_data);
+		add_str_reversed(npb, val, strlen(val));
+	} else {
+		/* note: name/value order must also be reversed! */
+		es_addChar(&npb->rule, '%');
+		add_str_reversed(npb,
+			parserName(prs->prsid),
+			strlen(parserName(prs->prsid)) );
+		es_addChar(&npb->rule, ':');
+		if(prs->name == NULL) {
+			es_addChar(&npb->rule, '-');
+		} else {
+			add_str_reversed(npb, prs->name, strlen(prs->name));
+		}
+		es_addChar(&npb->rule, '%');
+	}
+}
+
 /**
  * Recursive step of the normalizer. It walks the parse dag and calls itself
  * recursively when this is appropriate. It also implements backtracking in
@@ -958,49 +1401,64 @@ tryParser(struct ln_pdag *dag,
  * TODO: can we use parameter block to prevent pushing params to the stack?
  */
 int
-ln_normalizeRec(struct ln_pdag *dag,
-	const char *const str,
-	const size_t strLen,
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
 	const size_t offs,
 	const int bPartialMatch,
-	size_t *const __restrict__ pParsedTo,
 	struct json_object *json,
-	struct ln_pdag **endNode)
+	struct ln_pdag **endNode
+	)
 {
 	int r = LN_WRONGPARSER;
 	int localR;
 	size_t i;
 	size_t iprs;
-	size_t parsedTo = *pParsedTo;
+	size_t parsedTo = npb->parsedTo;
 	size_t parsed = 0;
 	struct json_object *value;
 	
 LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 
-	++dag->stats.visited;
+	++dag->stats.called;
+#ifdef	ADVANCED_STATS
+	++npb->astats.pathlen;
+	++npb->astats.recursion_level;
+#endif
 
 	/* now try the parsers */
 	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
 		if(dag->ctx->debug) {
-			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', data '%s'",
+			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', "
+				     "data '%s'",
 					offs, bPartialMatch, parserName(prs->prsid), prs->name,
-					(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
+					(prs->prsid == PRS_LITERAL)
+					 ? ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)
+				 	 : "UNKNOWN");
 		}
 		i = offs;
 		value = NULL;
-		localR = tryParser(dag, str, strLen, &i, &parsed, &value, prs);
+		localR = tryParser(npb, dag, &i, &parsed, &value, prs);
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
-			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p", offs, prs->node);
-			r = ln_normalizeRec(prs->node, str, strLen, parsedTo, bPartialMatch, &parsedTo, json, endNode);
+			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p",
+				offs, prs->node);
+			r = ln_normalizeRec(npb, prs->node, parsedTo,
+					    bPartialMatch, json, endNode);
 			LN_DBGPRINTF(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
+				if(npb->ctx->opts & LN_CTXOPT_ADD_RULE) {
+					add_rule_to_mockup(npb, prs);
+				}
 			} else {
 				++dag->stats.backtracked;
+				#ifdef	ADVANCED_STATS
+					++npb->astats.backtracked;
+					es_addBuf(&npb->astats.exec_path, "[B]", 3);
+				#endif
 				LN_DBGPRINTF(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
 				if (value != NULL) { /* Free the value if it was created */
@@ -1009,23 +1467,26 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 			}
 		}
 		/* did we have a longer parser --> then update */
-		if(parsedTo > *pParsedTo)
-			*pParsedTo = parsedTo;
-		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, *pParsedTo);
+		if(parsedTo > npb->parsedTo)
+			npb->parsedTo = parsedTo;
+		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, npb->parsedTo);
 	}
 
-LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, strLen, dag->flags.isTerminal);
-	if(dag->flags.isTerminal && (offs == strLen || bPartialMatch)) {
+LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, npb->strLen, dag->flags.isTerminal);
+	if(dag->flags.isTerminal && (offs == npb->strLen || bPartialMatch)) {
 		*endNode = dag;
 		r = 0;
 		goto done;
 	}
 
 done:
-	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu", offs, r, *pParsedTo, parsedTo);
+	LN_DBGPRINTF(dag->ctx, "%zu returns %d, pParsedTo %zu, parsedTo %zu",
+		offs, r, npb->parsedTo, parsedTo);
+#	ifdef	ADVANCED_STATS
+	--npb->astats.recursion_level;
+#	endif
 	return r;
 }
-
 
 int
 ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
@@ -1039,24 +1500,35 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	/* end old cruft */
 
 	struct ln_pdag *endNode = NULL;
-	size_t parsedTo = 0;
+	npb_t npb;
+	memset(&npb, 0, sizeof(npb));
+	npb.ctx = ctx;
+	npb.str = str;
+	npb.strLen = strLen;
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) {
+		npb.rule = es_newStr(1024);
+	}
+#	ifdef ADVANCED_STATS
+	npb.astats.exec_path = es_newStr(1024);
+#	endif
 
 	if(*json_p == NULL) {
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	r = ln_normalizeRec(ctx->pdag, str, strLen, 0, 0, &parsedTo, *json_p, &endNode);
+	r = ln_normalizeRec(&npb, ctx->pdag, 0, 0, *json_p, &endNode);
 
 	if(ctx->debug) {
 		if(r == 0) {
 			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p, "
 				     "isTerminal %d, tagbucket %p",
-				     parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
+				     npb.parsedTo, endNode, endNode->flags.isTerminal, endNode->tags);
 		} else {
 			LN_DBGPRINTF(ctx, "final result for normalizer: parsedTo %zu, endNode %p",
-				     parsedTo, endNode);
+				     npb.parsedTo, endNode);
 		}
 	}
+	LN_DBGPRINTF(ctx, "DONE, final return is %d", r);
 	if(r == 0 && endNode->flags.isTerminal) {
 		/* success, finalize event */
 		if(endNode->tags != NULL) {
@@ -1065,10 +1537,52 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 			json_object_object_add(*json_p, "event.tags", endNode->tags);
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
+		if(ctx->opts & LN_CTXOPT_ADD_ORIGINALMSG) {
+			/* originalmsg must be kept outside of metadata for 
+			 * backward compatibility reasons.
+			 */
+			json_object_object_add(*json_p, ORIGINAL_MSG_KEY,
+				json_object_new_string_len(str, strLen));
+		}
+		addRuleMetadata(&npb, *json_p, endNode);
 		r = 0;
 	} else {
-		addUnparsedField(str, strLen, parsedTo, *json_p);
+		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
 	}
 
+	if(ctx->opts & LN_CTXOPT_ADD_RULE) {
+		es_deleteStr(npb.rule);
+	}
+
+#ifdef	ADVANCED_STATS
+	if(r != 0)
+		es_addBuf(&npb.astats.exec_path, "[FAILED]", 8);
+	else if(!endNode->flags.isTerminal)
+		es_addBuf(&npb.astats.exec_path, "[FAILED:NON-TERMINAL]", 21);
+	if(npb.astats.pathlen < ADVSTATS_MAX_ENTITIES)
+		advstats_pathlens[npb.astats.pathlen]++;
+	if(npb.astats.pathlen > advstats_max_pathlen) {
+		advstats_max_pathlen = npb.astats.pathlen;
+	}
+	if(npb.astats.backtracked < ADVSTATS_MAX_ENTITIES)
+		advstats_backtracks[npb.astats.backtracked]++;
+	if(npb.astats.backtracked > advstats_max_backtracked) {
+		advstats_max_backtracked = npb.astats.backtracked;
+	}
+
+	/* parser calls */
+	if(npb.astats.parser_calls < ADVSTATS_MAX_ENTITIES)
+		advstats_parser_calls[npb.astats.parser_calls]++;
+	if(npb.astats.parser_calls > advstats_max_parser_calls) {
+		advstats_max_parser_calls = npb.astats.parser_calls;
+	}
+	if(npb.astats.lit_parser_calls < ADVSTATS_MAX_ENTITIES)
+		advstats_lit_parser_calls[npb.astats.lit_parser_calls]++;
+	if(npb.astats.lit_parser_calls > advstats_max_lit_parser_calls) {
+		advstats_max_lit_parser_calls = npb.astats.lit_parser_calls;
+	}
+
+	es_deleteStr(npb.astats.exec_path);
+#endif
 done:	return r;
 }

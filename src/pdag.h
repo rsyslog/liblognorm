@@ -13,11 +13,17 @@
 #include <libestr.h>
 #include <stdint.h>
 
+#define META_KEY "metadata"
 #define ORIGINAL_MSG_KEY "originalmsg"
 #define UNPARSED_DATA_KEY "unparsed-data"
+#define EXEC_PATH_KEY "exec-path"
+#define META_RULE_KEY "rule"
+#define RULE_MOCKUP_KEY "mockup"
+#define RULE_LOCATION_KEY "location"
 
 typedef struct ln_pdag ln_pdag; /**< the parse DAG object */
 typedef struct ln_parser_s ln_parser_t;
+typedef struct npb npb_t;
 typedef uint8_t prsid_t;
 
 struct ln_type_pdag;
@@ -86,9 +92,13 @@ struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
 	int prio;		/**< parser specific prio in range 0..255 */
 	int (*construct)(ln_ctx ctx, json_object *const json, void **);
-	int (*parser)(ln_ctx ctx, const char*, size_t, size_t*, void *const,
+	int (*parser)(npb_t *npb, size_t*, void *const,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
+#ifdef ADVANCED_STATS
+	uint64_t called;
+	uint64_t success;
+#endif
 };
 
 
@@ -105,12 +115,59 @@ struct ln_pdag {
 	struct json_object *tags;	/**< tags to assign to events of this type */
 	int refcnt;			/**< reference count for deleting tracking */
 	struct {
-		unsigned visited;
+		unsigned called;
 		unsigned backtracked;	/**< incremented when backtracking was initiated */
 		unsigned terminated;
 	} stats;	/**< usage statistics */
+	const char *rb_id;		/**< human-readable rulebase identifier, for stats etc */
+	
+	// experimental, move outside later
+	const char *rb_file;
+	unsigned int rb_lineno;
 };
 
+#ifdef ADVANCED_STATS
+struct advstats {
+	int pathlen;
+	int parser_calls;		/**< parser calls in general during path */
+	int lit_parser_calls;		/**< same just for the literal parser */
+	int backtracked;
+	int recursion_level;
+	es_str_t *exec_path;
+};
+#define ADVSTATS_MAX_ENTITIES 100
+extern int advstats_max_pathlen;
+extern int advstats_pathlens[ADVSTATS_MAX_ENTITIES];
+extern int advstats_max_backtracked;
+extern int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
+#endif
+
+/** the "normalization paramater block" (npb)
+ * This structure is passed to all normalization routines including
+ * parsers. It contains data that commonly needs to be passed,
+ * like the to be parsed string and its length, as well as read/write
+ * data which is used to track information over the general
+ * normalization process (like the execution path, if requested).
+ * The main purpose is to save stack writes by eliminating the
+ * need for using multiple function parameters. Note that it
+ * must be carefully considered which items to add to the
+ * npb - those that change from recursion level to recursion
+ * level are NOT to be placed here.
+ */
+struct npb {
+	ln_ctx ctx;
+	const char *str;		/**< to-be-normalized message */
+	size_t strLen;			/**< length of it */
+	size_t parsedTo;		/**< up to which byte could this be parsed? */
+	es_str_t *rule;			/**< a mock-up of the rule used to parse */
+	es_str_t *exec_path;
+#ifdef ADVANCED_STATS
+	int pathlen;
+	int backtracked;
+	int recursion_level;
+	struct advstats astats;
+#endif
+};
 
 /* Methods */
 
@@ -192,13 +249,20 @@ struct ln_pdag * ln_buildPDAG(struct ln_pdag *DAG, es_str_t *str, size_t offs);
 
 prsid_t ln_parserName2ID(const char *const __restrict__ name);
 int ln_pdagOptimize(ln_ctx ctx);
-void ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp);
 void ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
+void ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp);
 
 /* friends */
-int ln_normalizeRec(struct ln_pdag *dag, const char *const str, const size_t strLen, const size_t offs, const int bPartialMatch, size_t *const __restrict__ pParsedTo, struct json_object *json, struct ln_pdag **endNode);
+int
+ln_normalizeRec(npb_t *const __restrict__ npb,
+	struct ln_pdag *dag,
+	const size_t offs,
+	const int bPartialMatch,
+	struct json_object *json,
+	struct ln_pdag **endNode
+);
 
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */

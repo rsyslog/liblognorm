@@ -26,7 +26,9 @@ Specifies name of the file containing the rulebase.
 
     -v
     
-Increase verbosity level. Can be used several times.
+Increase verbosity level. Can be used several times. If used three
+times, internal data structures are dumped (make sense to developers,
+only).
 
 ::
 
@@ -58,12 +60,6 @@ Print only those messages which have this tag.
     
 ::
 
-    -e <json|xml|csv>   
-
-Output format. By default, output is in Mitre CEE format. With this option, you can change it to JSON, XML or CSV.
-
-::
-
     -T
 
 Include 'event.tags' attribute when output is in JSON format. This attribute contains list of tags of the matched 
@@ -82,6 +78,94 @@ separated by comma or space. It is currently unused for other formats.
 
 Generate DOT file describing parse tree. It is used to plot parse graph 
 with GraphViz.
+
+::
+
+    -H
+
+At end of run, print a summary line with number of messages processed,
+parsed and unparsed to stdout.
+
+::
+
+    -o
+
+Special options. The following ones can be set:
+
+   * **allowRegex** Permits to use regular expressions inse the v1 engine
+     This is deprecated and should not be used for new deployments.
+
+   * **addExecPath** Includes metadata into the event on how it was
+     (tried) to be parsed. Can be useful in troubleshooting normalization
+     problems.
+
+   * **addOriginalMsg** Always add the "original-msg" data item. By
+     default, this is only done when a message could not be parsed.
+
+   * **addRule** Add a mockup of the rule that was processed. Note that
+     it is *not* an exact copy of the rule, but a rule that correctly
+     describes the parsed message. Most importantly, prefixes are 
+     appended and custom data types are expanded (and no longer visiable
+     as such). This option is primarily meant for postprocessing, e.g.
+     as input to an anonymizer.
+
+   * **addRuleRulcation** For rules that successfully parsed, add the
+     location of the rule inside the rulebase. But the file name as
+     well as the line number are given. If two rules evaluate to the same
+     end node, only a single rule location is given. However, in
+     practice this is extremely unlikely and as such for practical
+     reasons the information can be considered reliable.
+
+::
+
+    -s <FILENAME>
+
+At end of run, print internal parse DAG statistics and exit. This
+option is meant for developers and researches which want to get insight
+into the quality of the algorithm and/or how efficient the rulebase could
+be processed. **NOT** intended for end users. This option is performance
+intense.
+
+::
+
+    -S <FILENAME>
+
+Even stronger statistics than -s. Requires that the version is compiled
+with --enable-advanced-statistics, which causes a considerable
+performance loss.
+
+::
+
+   -x <FILENAME>
+
+Print statistics as a DOT file. In order to keep the graph readable,
+information is only emitted for called nodes.
+
+::
+
+    -e <json|xml|csv|raw|cee-syslog>
+
+Output format. By default, output is in JSON format. With this option,
+you can change it to a different one.
+
+Supported Output Formats
+........................
+The JSON, XML, and CSV formats should be self-explanatory.
+
+The cee-syslog format emits messages according to the Mitre CEE spec.
+Note that the cee-syslog format is primarily supported for
+backward-compatibility. It does **not** support nested data items
+and as such cannot be used when the rulebase makes use of this
+feature (we assume this most often happens nowadays). We strongly
+recommend not use it for new deployments. Support may be removed
+in later releases.
+
+The raw format outputs an exact copy of the input message, without
+any normalization visible. The prime use case of "raw" is to extract
+either all messages that could or could not be normalized. To do so
+specify the -p or -P option. Also, it works in combination with the
+-t option to extract a subset based on tagging. In any case, the core
+use is to prepare a subset of the original file for further processing.
 
 Examples
 --------

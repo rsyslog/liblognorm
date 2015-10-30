@@ -50,13 +50,14 @@ static int verbose = 0;
 #define OUTPUT_UNPARSED_RECS 0x02
 static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
 				/**< controls which records to output */
+static int outputSummaryLine = 0;
 static int addErrLineNbr = 0;	/**< add line number info to unparsed events */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
 static es_str_t *encFmt = NULL; /**< a format string for encoder use */
 static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg will
 					   be output. NULL=all */
-static enum { f_syslog, f_json, f_xml, f_csv } outfmt = f_json;
+static enum { f_syslog, f_json, f_xml, f_csv, f_raw } outfmt = f_json;
 
 void
 errCallBack(void __attribute__((unused)) *cookie, const char *msg,
@@ -78,14 +79,19 @@ void complain(const char *errmsg)
 }
 
 
-/* param str is just a performance enhancement, which saves us re-creation
- * of the string on every call.
+/* rawmsg is, as the name says, the raw message, in case we have
+ * "raw" formatter requested.
  */
 static inline void
-outputEvent(struct json_object *json)
+outputEvent(struct json_object *json, const char *const rawmsg)
 {
 	char *cstr = NULL;
 	es_str_t *str = NULL;
+
+	if(outfmt == f_raw) {
+		printf("%s\n", rawmsg);
+		return;
+	}
 
 	switch(outfmt) {
 	case f_json:
@@ -101,7 +107,12 @@ outputEvent(struct json_object *json)
 		ln_fmtEventToXML(json, &str);
 		break;
 	case f_csv:
-	ln_fmtEventToCSV(json, &str, encFmt);
+		ln_fmtEventToCSV(json, &str, encFmt);
+		break;
+	case f_raw:
+		fprintf(stderr, "program error: f_raw should not occur "
+			"here (file %s, line %d)\n", __FILE__, __LINE__);
+		abort();
 		break;
 	}
 	if (str != NULL)
@@ -185,13 +196,13 @@ normalize(void)
 				if(parsed) {
 					numParsed++;
 					if(recOutput & OUTPUT_PARSED_RECS) {
-						outputEvent(json);
+						outputEvent(json, buf);
 					}
 				} else {
 					numUnparsed++;
 					amendLineNbr(json, line_nbr);
 					if(recOutput & OUTPUT_UNPARSED_RECS) {
-						outputEvent(json);
+						outputEvent(json, buf);
 					}
 				}
 			} else {
@@ -205,8 +216,10 @@ normalize(void)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
-	fprintf(stderr, "%llu records processed, %llu parsed, %llu unparsed\n",
-		numParsed+numUnparsed, numParsed, numUnparsed);
+	if(outputSummaryLine) {
+		fprintf(stderr, "%llu records processed, %llu parsed, %llu unparsed\n",
+			numParsed+numUnparsed, numParsed, numUnparsed);
+	}
 	free(mandatoryTagCstr);
 }
 
@@ -227,7 +240,18 @@ genDOT()
 static void
 handle_generic_option(const char* opt) {
 	if (strcmp("allowRegex", opt) == 0) {
-		ln_setCtxOpts(ctx, 1);
+		ln_setCtxOpts(ctx, LN_CTXOPT_ALLOW_REGEX);
+	} else if (strcmp("addExecPath", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_EXEC_PATH);
+	} else if (strcmp("addOriginalMsg", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_ORIGINALMSG);
+	} else if (strcmp("addRule", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE);
+	} else if (strcmp("addRuleLocation", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE_LOCATION);
+	} else {
+		fprintf(stderr, "invalid -o option '%s'\n", opt);
+		exit(1);
 	}
 }
 
@@ -236,20 +260,28 @@ static void usage(void)
 fprintf(stderr,
 	"Options:\n"
 	"    -r<rulebase> Rulebase to use. This is required option\n"
-	"    -e<json|xml|csv|cee-syslog>\n"
+	"    -H           print summary line (nbr of msgs Handled)\n"
+	"    -e<json|xml|csv|cee-syslog|raw>\n"
 	"                 Change output format. By default, json is used\n"
+	"                 Raw is exactly like the input. It is useful in combination\n"
+	"                 with -p/-P options to extract known good/bad messages\n"
 	"    -E<format>   Encoder-specific format (used for CSV, read docs)\n"
 	"    -T           Include 'event.tags' in JSON format\n"
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
+	"    -oaddRule    Add a mockup of the matching rule.\n"
+	"    -oaddRuleLocation Add location of matching rule to metadata\n"
+	"    -oaddExecPath Add exec_path attribute to output\n"
+	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
 	"    -P           Print back only if the message has NOT been parsed succesfully\n"
 	"    -L           Add source file line number information to unparsed line output\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
-	"    -v           Print debug. When used 3 times, prints parse tree\n"
+	"    -v           Print debug. When used 3 times, prints parse DAG\n"
 	"    -d           Print DOT file to stdout and exit\n"
 	"    -d<filename> Save DOT file to the filename\n"
 	"    -s<filename> Print parse dag statistics and exit\n"
 	"    -S<filename> Print extended parse dag statistics and exit (includes -s)\n"
+	"    -x<filename> Print statistics as dot file (called only)\n"
 	"\n"
 	);
 }
@@ -260,6 +292,7 @@ int main(int argc, char *argv[])
 	char *repository = NULL;
 	int ret = 0;
 	FILE *fpStats = NULL;
+	FILE *fpStatsDOT = NULL;
 	int extendedStats = 0;
 
 	if((ctx = ln_initCtx()) == NULL) {
@@ -268,7 +301,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hL")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hHLx:")) != -1) {
 		switch (opt) {
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
@@ -277,6 +310,18 @@ int main(int argc, char *argv[])
 				if((fpDOT = fopen(optarg, "w")) == NULL) {
 					perror(optarg);
 					complain("Cannot open DOT file");
+					ret = 1;
+					goto exit;
+				}
+			}
+			break;
+		case 'x': /* generate statistics DOT file */
+			if(!strcmp(optarg, "")) {
+				fpStatsDOT = stdout;
+			} else {
+				if((fpStatsDOT = fopen(optarg, "w")) == NULL) {
+					perror(optarg);
+					complain("Cannot open statistics DOT file");
 					ret = 1;
 					goto exit;
 				}
@@ -309,6 +354,9 @@ int main(int argc, char *argv[])
 		case 'P':
 			recOutput = OUTPUT_UNPARSED_RECS;
 			break;
+		case 'H':
+			outputSummaryLine = 1;
+			break;
 		case 'L':
 			addErrLineNbr = 1;
 			break;
@@ -324,6 +372,8 @@ int main(int argc, char *argv[])
 				outfmt = f_syslog;
 			} else if(!strcmp(optarg, "csv")) {
 				outfmt = f_csv;
+			} else if(!strcmp(optarg, "raw")) {
+				outfmt = f_raw;
 			}
 			break;
 		case 'r': /* rule base to use */
@@ -370,18 +420,17 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 
-	if(fpStats != NULL) {
-		ln_fullPdagStats(ctx, fpStats, extendedStats);
-		ret=1;
-		goto exit;
-	}
-
 	if(verbose > 2) ln_displayPDAG(ctx);
 
 	normalize();
 
-		ln_setDebugCB(ctx, dbgCallBack, NULL);
-		ln_enableDebug(ctx, 1);
+	if(fpStats != NULL) {
+		ln_fullPdagStats(ctx, fpStats, extendedStats);
+	}
+
+	if(fpStatsDOT != NULL) {
+		ln_fullPDagStatsDOT(ctx, fpStatsDOT);
+	}
 
 exit:
 	if (ctx) ln_exitCtx(ctx);

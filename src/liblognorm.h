@@ -131,14 +131,21 @@ ln_ctx ln_inherittedCtx(ln_ctx parent);
 int ln_exitCtx(ln_ctx ctx);
 
 
+/* binary values, so that we can "or" them together */
+#define LN_CTXOPT_ALLOW_REGEX		0x01 /**< permit regex matching */
+#define LN_CTXOPT_ADD_EXEC_PATH		0x02 /**< add exec_path attribute (time-consuming!) */
+#define LN_CTXOPT_ADD_ORIGINALMSG	0x04 /**< always add original message to output
+					          (not just in error case) */
+#define LN_CTXOPT_ADD_RULE		0x08 /**< add mockup rule */
+#define LN_CTXOPT_ADD_RULE_LOCATION	0x10 /**< add rule location (file, lineno) to metadata */
 /**
  * Set options on ctx.
  *
  * @param ctx The context to be modified.
- * @param allow_regex A boolean indicating regex-usage should/shouldn't be allowed
+ * @param opts a potentially or-ed list of options, see LN_CTXOPT_*
  */
 void
-ln_setCtxOpts(ln_ctx ctx, int allow_regex);
+ln_setCtxOpts(ln_ctx ctx, unsigned opts);
 
 
 /**
