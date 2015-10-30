@@ -1,3 +1,7 @@
+# environment variables:
+# GREP - if set, can be used to use alternative grep version
+#        Most important use case is to use GNU grep (ggrep)
+#        on Solaris. If unset, use "grep".
 set -e
 
 if [ "x$debug" == "xon" ]; then #get core-dump on crash
@@ -32,7 +36,10 @@ execute() {
 }
 
 assert_output_contains() {
-    cat test.out | grep -F "$1"
+    if [ "x$GREP" == "x" ]; then
+       GREP=grep
+    fi
+    cat test.out | $GREP -F "$1"
 }
 
 assert_output_json_eq() {
