@@ -149,10 +149,11 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
 	CHECK_CTX;
-	ctx->conf_file = strdup(file);
+	const char *tofree;
+	ctx->conf_file = tofree = strdup(file);
 	ctx->conf_ln_nbr = 0;
 	r = ln_sampLoad(ctx, file);
-	free((void*)ctx->conf_file);
+	free((void*)tofree);
 	ctx->conf_file = NULL;
 done:
 	return r;
