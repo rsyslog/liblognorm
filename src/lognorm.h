@@ -72,6 +72,7 @@ struct ln_ctx_s {
 	struct ln_ptree *ptree;
 	/* end old cruft */
 	/* things for config processing / error message during it */
+	int include_level;		/**< 1 for main rulebase file, higher for include levels */
 	const char *conf_file;		/**< currently open config file or NULL, if none */
 	unsigned int conf_ln_nbr;	/**< current config file line number */
 };

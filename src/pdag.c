@@ -454,6 +454,7 @@ ln_pdagOptimize(ln_ctx ctx)
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
+	LN_DBGPRINTF(ctx, "finished optimizing main pdag component\n");
 	ln_pdagComponentSetIDs(ctx, ctx->pdag, strdup(""));
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);

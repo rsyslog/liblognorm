@@ -1141,7 +1141,8 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	fclose(repo);
 	r = 0;
 
-	ln_pdagOptimize(ctx);
+	if(ctx->include_level == 1)
+		ln_pdagOptimize(ctx);
 done:
 	return r;
 }
