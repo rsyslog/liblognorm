@@ -299,7 +299,6 @@ pdagDeletePrs(ln_ctx ctx, ln_parser_t *const __restrict__ prs)
 {
 	// TODO: be careful here: once we move to real DAG from tree, we
 	// cannot simply delete the next node! (refcount? something else?)
-ln_dbgprintf(ctx, "  delete prs %p: %s", prs, prs->name);
 	if(prs->node != NULL)
 		ln_pdagDelete(prs->node);
 	free((void*)prs->name);
@@ -314,17 +313,7 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 	if(pdag == NULL)
 		goto done;
 
-ln_ctx ctx = pdag->ctx;
-ln_dbgprintf(pdag->ctx, "delete %p[%d]: %s", pdag, pdag->refcnt, pdag->rb_id);
-for(int i = 0 ; i < pdag->nparsers ; ++i) {
-	ln_parser_t *const prs = pdag->parsers+i;
-	LN_DBGPRINTF(pdag->ctx, "    %p: field type '%s', name '%s': '%s'", prs,
-		parserName(prs->prsid),
-		pdag->parsers[i].name,
-		(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(pdag->ctx, prs->parser_data) : "UNKNOWN");
-}
-
-
+	LN_DBGPRINTF(pdag->ctx, "delete %p[%d]: %s", pdag, pdag->refcnt, pdag->rb_id);
 	--pdag->refcnt;
 	if(pdag->refcnt > 0)
 		goto done;
@@ -336,11 +325,9 @@ for(int i = 0 ; i < pdag->nparsers ; ++i) {
 		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
-ln_dbgprintf(pdag->ctx, "free component ID %p", pdag->rb_id);
 	free((void*)pdag->rb_id);
 	free((void*)pdag->rb_file);
 	free(pdag);
-ln_dbgprintf(ctx, "");
 done:	return;
 }
 
@@ -490,7 +477,6 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 			if(prs->name == NULL) {
 				asprintf(&id, "%s%s", prefix,
 					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
-ln_dbgprintf(ctx, "created-1 component ID %p: %s", id, id);
 			} else {
 				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
 					prs->name,
@@ -501,7 +487,6 @@ ln_dbgprintf(ctx, "created-1 component ID %p: %s", id, id);
 			asprintf(&id, "%s%%%s:%s%%", prefix,
 				prs->name ? prs->name : "-",
 				parserName(prs->prsid));
-ln_dbgprintf(ctx, "created-3 component ID %p: %s", id, id);
 		}
 		ln_pdagComponentSetIDs(ctx, prs->node, id);
 		free(id);
@@ -905,7 +890,6 @@ ln_pdagAddParsers(ln_ctx ctx,
 	struct ln_pdag *dag = *pdag;
 	struct ln_pdag *nextnode = *p_nextnode;
 	
-ln_dbgprintf(ctx, "have alternative!");
 	const int lenarr = json_object_array_length(prscnf);
 	for(int i = 0 ; i < lenarr ; ++i) {
 		struct json_object *const curr_prscnf =
@@ -929,11 +913,7 @@ ln_dbgprintf(ctx, "have alternative!");
 	}
 
 	if(mode != PRS_ADD_MODE_SEQ)
-{
 		dag = nextnode;
-ln_dbgprintf(ctx, "alternative added, pdag now:");
-	ln_displayPDAGComponent(ctx->pdag, 0);
-}
 	*pdag = dag;
 	r = 0;
 done:
