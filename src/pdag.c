@@ -1048,7 +1048,7 @@ void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-	LN_DBGPRINTF(dag->ctx, "%s[ref %d]: %s", indent, dag->refcnt, dag->rb_id);
+	LN_DBGPRINTF(dag->ctx, "%s%p[ref %d]: %s", indent, dag, dag->refcnt, dag->rb_id);
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_displayPDAGComponentAlternative(dag->parsers[i].node, level + 1);
 	}
@@ -1094,12 +1094,17 @@ struct data_Literal { const char *lit; }; // TODO remove when this hack is no lo
 static void
 ln_genDotPDAGGraphRec(struct ln_pdag *dag, es_str_t **str)
 {
+	char s_refcnt[16];
 	LN_DBGPRINTF(dag->ctx, "in dot: %p, visited %d", dag, (int) dag->flags.visited);
 	if(dag->flags.visited)
 		return; /* already processed this subpart */
 	dag->flags.visited = 1;
 	dotAddPtr(str, dag);
-	es_addBufConstcstr(str, " [ label=\"n\"");
+	snprintf(s_refcnt, sizeof(s_refcnt), "%d", dag->refcnt);
+	s_refcnt[sizeof(s_refcnt)-1] = '\0';
+	es_addBufConstcstr(str, " [ label=\"");
+	es_addBuf(str, s_refcnt, strlen(s_refcnt));
+	es_addBufConstcstr(str, "\"");
 
 	if(isLeaf(dag)) {
 		es_addBufConstcstr(str, " style=\"bold\"");
