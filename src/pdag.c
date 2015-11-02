@@ -31,6 +31,9 @@ const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *c
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
+void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level);
+void ln_displayPDAGComponent(struct ln_pdag *dag, int level);
+
 #ifdef	ADVANCED_STATS
 uint64_t advstats_parsers_called = 0;
 uint64_t advstats_parsers_success = 0;
@@ -296,6 +299,7 @@ pdagDeletePrs(ln_ctx ctx, ln_parser_t *const __restrict__ prs)
 {
 	// TODO: be careful here: once we move to real DAG from tree, we
 	// cannot simply delete the next node! (refcount? something else?)
+ln_dbgprintf(ctx, "  delete prs %p: %s", prs, prs->name);
 	if(prs->node != NULL)
 		ln_pdagDelete(prs->node);
 	free((void*)prs->name);
@@ -310,6 +314,17 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 	if(pdag == NULL)
 		goto done;
 
+ln_ctx ctx = pdag->ctx;
+ln_dbgprintf(pdag->ctx, "delete %p[%d]: %s", pdag, pdag->refcnt, pdag->rb_id);
+for(int i = 0 ; i < pdag->nparsers ; ++i) {
+	ln_parser_t *const prs = pdag->parsers+i;
+	LN_DBGPRINTF(pdag->ctx, "    %p: field type '%s', name '%s': '%s'", prs,
+		parserName(prs->prsid),
+		pdag->parsers[i].name,
+		(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(pdag->ctx, prs->parser_data) : "UNKNOWN");
+}
+
+
 	--pdag->refcnt;
 	if(pdag->refcnt > 0)
 		goto done;
@@ -321,9 +336,11 @@ ln_pdagDelete(struct ln_pdag *const __restrict__ pdag)
 		pdagDeletePrs(pdag->ctx, pdag->parsers+i);
 	}
 	free(pdag->parsers);
+ln_dbgprintf(pdag->ctx, "free component ID %p", pdag->rb_id);
 	free((void*)pdag->rb_id);
 	free((void*)pdag->rb_file);
 	free(pdag);
+ln_dbgprintf(ctx, "");
 done:	return;
 }
 
@@ -404,6 +421,47 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 	return r;
 }
 
+
+static void
+deleteComponentID(struct ln_pdag *const __restrict dag)
+{
+	free((void*)dag->rb_id);
+	dag->rb_id = NULL;
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_parser_t *prs = dag->parsers+i;
+		deleteComponentID(prs->node);
+	}
+}
+/* fixes rb_ids for this node as well as it predecessors.
+ * This is required if the ALTERNATIVE parser type is used,
+ * which will create component IDs for each of it's invocations.
+ * As such, we do not only fix the string, but know that all
+ * children also need fixning. We do this be simply deleting
+ * all of their rb_ids, as we know they will be visited again.
+ * Note: if we introduce the same situation by new functionality,
+ * we may need to review this code here as well. Also note
+ * that the component ID will not be 100% correct after our fix,
+ * because that ID could acutally be created by two sets of rules.
+ * But this is the best we can do.
+ */
+static const char *
+fixComponentID(struct ln_pdag *const __restrict__ dag, const char *const new)
+{
+	char *updated;
+	const char *const curr = dag->rb_id;
+	int i;
+	int len = (int) strlen(curr);
+	for(i = 0 ; i < len ; ++i){
+		if(curr[i] != new [i])
+			break;
+	}
+	if(i >= 1 && curr[i-1] == '%')
+		--i;
+	asprintf(&updated, "%.*s[%s|%s]", i, curr, curr+i, new+i);
+	deleteComponentID(dag);
+	dag->rb_id = updated;
+	return updated;
+}
 /**
  * Assign human-readable identifiers (names) to each node. These are
  * later used in stats, debug output and whereever else this may make
@@ -414,7 +472,17 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 {
 	char *id = NULL;
 
-	dag->rb_id = prefix;
+	if(dag->rb_id == NULL) {
+		dag->rb_id = strdup(prefix);
+	} else {
+		LN_DBGPRINTF(ctx, "rb_id already exists - fixing as good as "
+			"possible. This happens with ALTERNATIVE parser. "
+			"old: '%s', new: '%s'",
+			dag->rb_id, prefix);
+		fixComponentID(dag, prefix);
+		LN_DBGPRINTF(ctx, "\"fixed\" rb_id: %s", dag->rb_id);
+		prefix = dag->rb_id;
+	}
 	/* now on to rest of processing */
 	for(int i = 0 ; i < dag->nparsers ; ++i) {
 		ln_parser_t *prs = dag->parsers+i;
@@ -422,6 +490,7 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 			if(prs->name == NULL) {
 				asprintf(&id, "%s%s", prefix,
 					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+ln_dbgprintf(ctx, "created-1 component ID %p: %s", id, id);
 			} else {
 				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
 					prs->name,
@@ -432,8 +501,10 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 			asprintf(&id, "%s%%%s:%s%%", prefix,
 				prs->name ? prs->name : "-",
 				parserName(prs->prsid));
+ln_dbgprintf(ctx, "created-3 component ID %p: %s", id, id);
 		}
 		ln_pdagComponentSetIDs(ctx, prs->node, id);
+		free(id);
 	}
 }
 
@@ -449,13 +520,13 @@ ln_pdagOptimize(ln_ctx ctx)
 	for(int i = 0 ; i < ctx->nTypes ; ++i) {
 		LN_DBGPRINTF(ctx, "optimizing component %s\n", ctx->type_pdags[i].name);
 		ln_pdagComponentOptimize(ctx, ctx->type_pdags[i].pdag);
-		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, strdup(""));
+		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, "");
 	}
 
 	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
 	LN_DBGPRINTF(ctx, "finished optimizing main pdag component\n");
-	ln_pdagComponentSetIDs(ctx, ctx->pdag, strdup(""));
+	ln_pdagComponentSetIDs(ctx, ctx->pdag, "");
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
 LN_DBGPRINTF(ctx, "=======================================");
@@ -769,6 +840,7 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	struct ln_pdag **nextnode)
 {
 	int r;
+	LN_DBGPRINTF(ctx, "ln_pdagAddParserInstance: %s", json_object_to_json_string(prscnf));
 	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
 	CHKN(parser);
 	LN_DBGPRINTF(ctx, "pdag: %p, parser %p", pdag, parser);
@@ -833,6 +905,7 @@ ln_pdagAddParsers(ln_ctx ctx,
 	struct ln_pdag *dag = *pdag;
 	struct ln_pdag *nextnode = *p_nextnode;
 	
+ln_dbgprintf(ctx, "have alternative!");
 	const int lenarr = json_object_array_length(prscnf);
 	for(int i = 0 ; i < lenarr ; ++i) {
 		struct json_object *const curr_prscnf =
@@ -856,7 +929,11 @@ ln_pdagAddParsers(ln_ctx ctx,
 	}
 
 	if(mode != PRS_ADD_MODE_SEQ)
+{
 		dag = nextnode;
+ln_dbgprintf(ctx, "alternative added, pdag now:");
+	ln_displayPDAGComponent(ctx->pdag, 0);
+}
 	*pdag = dag;
 	r = 0;
 done:
@@ -874,6 +951,7 @@ ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag,
 	int r = LN_BADCONFIG;
 	struct ln_pdag *dag = *pdag;
 	
+	LN_DBGPRINTF(ctx, "ln_pdagAddParserInternal: %s", json_object_to_json_string(prscnf));
 	if(json_object_get_type(prscnf) == json_type_object) {
 		/* check for special types we need to handle here */
 		struct json_object *json;
@@ -930,8 +1008,8 @@ ln_displayPDAGComponent(struct ln_pdag *dag, int level)
 	memset(indent, ' ', level * 2);
 	indent[level * 2] = '\0';
 
-	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers) [called %u, backtracked %u]",
-		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers,
+	LN_DBGPRINTF(dag->ctx, "%ssubDAG%s %p (children: %d parsers, ref %d) [called %u, backtracked %u]",
+		     indent, dag->flags.isTerminal ? " [TERM]" : "", dag, dag->nparsers, dag->refcnt,
 		     dag->stats.called, dag->stats.backtracked);
 
 for(int i = 0 ; i < dag->nparsers ; ++i) {
@@ -961,6 +1039,21 @@ for(int i = 0 ; i < dag->nparsers ; ++i) {
 }
 
 
+void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level)
+{
+	char indent[2048];
+
+	if(level > 1023)
+		level = 1023;
+	memset(indent, ' ', level * 2);
+	indent[level * 2] = '\0';
+
+	LN_DBGPRINTF(dag->ctx, "%s[ref %d]: %s", indent, dag->refcnt, dag->rb_id);
+	for(int i = 0 ; i < dag->nparsers ; ++i) {
+		ln_displayPDAGComponentAlternative(dag->parsers[i].node, level + 1);
+	}
+}
+
 
 /* developer debug aid, to be used for example as follows:
    LN_DBGPRINTF(dag->ctx, "---------------------------------------");
@@ -978,6 +1071,9 @@ ln_displayPDAG(ln_ctx ctx)
 
 	LN_DBGPRINTF(ctx, "MAIN COMPONENT:");
 	ln_displayPDAGComponent(ctx->pdag, 0);
+
+	LN_DBGPRINTF(ctx, "MAIN COMPONENT (alternative):");
+	ln_displayPDAGComponentAlternative(ctx->pdag, 0);
 }
 
 
