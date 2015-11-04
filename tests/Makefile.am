@@ -34,6 +34,7 @@ TESTS_SHELLSCRIPTS = \
 	runaway_rule.sh \
 	runaway_rule_comment.sh \
 	alternative_simple.sh \
+	alternative_three.sh \
 	alternative_nested.sh \
 	repeat_very_simple.sh \
 	repeat_simple.sh \
