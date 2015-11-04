@@ -962,7 +962,6 @@ ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag,
 	*pdag = dag;
 
 done:
-	json_object_put(prscnf);
 	return r;
 }
 
@@ -974,7 +973,9 @@ int
 ln_pdagAddParser(ln_ctx ctx, struct ln_pdag **pdag, json_object *const prscnf)
 {
 	struct ln_pdag *nextnode = NULL;
-	return ln_pdagAddParserInternal(ctx, pdag, PRS_ADD_MODE_SEQ, prscnf, &nextnode);
+	int r = ln_pdagAddParserInternal(ctx, pdag, PRS_ADD_MODE_SEQ, prscnf, &nextnode);
+	json_object_put(prscnf);
+	return r;
 }
 
 
