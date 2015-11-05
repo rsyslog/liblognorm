@@ -48,6 +48,7 @@ TESTS_SHELLSCRIPTS = \
 	parser_LF_jsoncnf.sh \
 	strict_prefix_actual_sample1.sh \
 	strict_prefix_matching_1.sh \
+	strict_prefix_matching_2.sh \
 	field_string.sh \
 	field_string_perm_chars.sh \
 	field_hexnumber.sh \

@@ -346,16 +346,16 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 	int r = 0;
 
 	while(prs != NULL) {
+		/* note the NOT prefix in the condition below! */
 		if(!(   prs->prsid == PRS_LITERAL
+		     && prs->name == NULL
 		     && prs->node->flags.isTerminal == 0
 		     && prs->node->nparsers == 1
 		     && prs->node->parsers[0].prsid == PRS_LITERAL)
 		  )
 			goto done;
-		// TODO: think about names if literal is actually to be parsed!
-		// check name == NULL?
 
-		/* ok, we have two literals in a row, let's compact the nodes */
+		/* ok, we have two compactable literals in a row, let's compact the nodes */
 		ln_parser_t *child_prs = prs->node->parsers;
 		LN_DBGPRINTF(ctx, "opt path compact: add %p to %p", child_prs, prs);
 		CHKR(ln_combineData_Literal(prs->parser_data, child_prs->parser_data));
