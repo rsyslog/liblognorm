@@ -336,7 +336,9 @@ done:	return;
  * pdag optimizer step: literal path compaction
  *
  * We compress as much as possible and evalute the path down to
- * the first non-compressable element.
+ * the first non-compressable element. Note that we must NOT
+ * compact those literals that are either terminal nodes OR
+ * contain names so that the literal is to be parsed out.
  */
 static inline int
 optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
@@ -345,13 +347,13 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 
 	while(prs != NULL) {
 		if(!(   prs->prsid == PRS_LITERAL
+		     && prs->node->flags.isTerminal == 0
 		     && prs->node->nparsers == 1
 		     && prs->node->parsers[0].prsid == PRS_LITERAL)
 		  )
 			goto done;
 		// TODO: think about names if literal is actually to be parsed!
 		// check name == NULL?
-		// also check if isTerminal!
 
 		/* ok, we have two literals in a row, let's compact the nodes */
 		ln_parser_t *child_prs = prs->node->parsers;
@@ -508,9 +510,9 @@ ln_pdagOptimize(ln_ctx ctx)
 		ln_pdagComponentSetIDs(ctx, ctx->type_pdags[i].pdag, "");
 	}
 
-	LN_DBGPRINTF(ctx, "optimizing main pdag component\n");
+	LN_DBGPRINTF(ctx, "optimizing main pdag component");
 	ln_pdagComponentOptimize(ctx, ctx->pdag);
-	LN_DBGPRINTF(ctx, "finished optimizing main pdag component\n");
+	LN_DBGPRINTF(ctx, "finished optimizing main pdag component");
 	ln_pdagComponentSetIDs(ctx, ctx->pdag, "");
 LN_DBGPRINTF(ctx, "---AFTER OPTIMIZATION------------------");
 ln_displayPDAG(ctx);
