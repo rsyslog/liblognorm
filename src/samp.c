@@ -372,7 +372,7 @@ addSampToTree(ln_ctx ctx,
 	CHKN(str = es_newStr(256));
 	i = 0;
 	while(i < es_strlen(rule)) {
-		ln_dbgprintf(ctx, "addSampToTree %zu of %d", i, es_strlen(rule));
+		LN_DBGPRINTF(ctx, "addSampToTree %zu of %d", i, es_strlen(rule));
 		CHKR(parseLiteral(ctx, &dag, rule, &i, &str));
 		/* After the literal there can be field only*/
 		if (i < es_strlen(rule)) {
@@ -384,7 +384,7 @@ addSampToTree(ln_ctx ctx,
 		}
 	}
 
-	ln_dbgprintf(ctx, "end addSampToTree %zu of %d", i, es_strlen(rule));
+	LN_DBGPRINTF(ctx, "end addSampToTree %zu of %d", i, es_strlen(rule));
 	/* we are at the end of rule processing, so this node is a terminal */
 	dag->flags.isTerminal = 1;
 	dag->tags = tagBucket;
