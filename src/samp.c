@@ -210,7 +210,6 @@ done:
  * to optimize the structure for a high-speed parsing process.
  *
  * @param[in] str a temporary work string. This is passed in to save the
-	CHKR(r);
  * 		  creation overhead
  * @returns 0 on success, something else otherwise
  */
