@@ -108,6 +108,7 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 	}
 
 	if(buf[i] != ':') {
+		ln_errprintf(ctx, 0, "missing colon in: %s", buf+(*bufOffs));
 		FAIL(LN_INVLDFDESCR);
 	}
 	++i; /* skip ':' */
@@ -131,6 +132,7 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 	i = next;
 
 	if(i == lenBuf) {
+		ln_errprintf(ctx, 0, "premature end (missing %%?) in: %s", buf+(*bufOffs));
 		FAIL(LN_INVLDFDESCR);
 	}
 
@@ -939,8 +941,10 @@ ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 	while(cont) {
 		fpos_t inner_fpos;
 		fgetpos(repo, &inner_fpos);
-		if((read = fread(buf, sizeof(char), sizeof(buf)-1, repo)) == 0)
+		if((read = fread(buf, sizeof(char), sizeof(buf)-1, repo)) == 0) {
+			r = 0;
 			goto done;
+		}
 		if(buf[0] == '\n') {
 			fsetpos(repo, &inner_fpos);
 			fread(buf, sizeof(char), 1, repo); /* skip '\n' */
