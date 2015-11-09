@@ -143,10 +143,13 @@ ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 	struct ln_type_pdag *td = NULL;
 	int i;
 
+	LN_DBGPRINTF(ctx, "ln_pdagFindType, name '%s', bAdd: %d, nTypes %d",
+		name, bAdd, ctx->nTypes);
 	for(i = 0 ; i < ctx->nTypes ; ++i) {
-		if(!strcmp(ctx->type_pdags[i].name, name))
+		if(!strcmp(ctx->type_pdags[i].name, name)) {
 			td = ctx->type_pdags + i;
 			goto done;
+		}
 	}
 
 	if(!bAdd) {
@@ -155,6 +158,7 @@ ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 	}
 
 	/* type does not yet exist -- create entry */
+	LN_DBGPRINTF(ctx, "custom type '%s' does not yet exist, adding...", name);
 	struct ln_type_pdag *newarr;
 	newarr = realloc(ctx->type_pdags, sizeof(struct ln_type_pdag) * (ctx->nTypes+1));
 	if(newarr == NULL) {
