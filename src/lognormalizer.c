@@ -237,6 +237,13 @@ genDOT()
 	fwrite(es_getBufAddr(str), 1, es_strlen(str), fpDOT);
 }
 
+static
+void printVersion(void)
+{
+	fprintf(stderr, "lognormalizer version: " VERSION "\n");
+	fprintf(stderr, "liblognorm version: %s\n", ln_version());
+}
+
 static void
 handle_generic_option(const char* opt) {
 	if (strcmp("allowRegex", opt) == 0) {
@@ -277,6 +284,7 @@ fprintf(stderr,
 	"    -L           Add source file line number information to unparsed line output\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
 	"    -v           Print debug. When used 3 times, prints parse DAG\n"
+	"    -V           Print version information\n"
 	"    -d           Print DOT file to stdout and exit\n"
 	"    -d<filename> Save DOT file to the filename\n"
 	"    -s<filename> Print parse dag statistics and exit\n"
@@ -301,8 +309,12 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vpPt:To:hHLx:")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vVpPt:To:hHLx:")) != -1) {
 		switch (opt) {
+		case 'V':
+			printVersion();
+			exit(1);
+			break;
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
 				fpDOT = stdout;
