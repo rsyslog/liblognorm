@@ -242,6 +242,8 @@ void printVersion(void)
 {
 	fprintf(stderr, "lognormalizer version: " VERSION "\n");
 	fprintf(stderr, "liblognorm version: %s\n", ln_version());
+	fprintf(stderr, "\tadvanced stats: %s\n",
+		ln_hasAdvancedStats() ? "available" : "not available");
 }
 
 static void

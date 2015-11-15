@@ -96,6 +96,14 @@ typedef struct ln_ctx_s* ln_ctx;
 char *ln_version(void);
 
 /**
+ * Return if library is build with advanced statistics
+ * activated.
+ *
+ * @return 1 if advanced stats are active, 0 if not
+ */
+int ln_hasAdvancedStats(void);
+
+/**
  * Initialize a library context.
  *
  * To prevent memory leaks, ln_exitCtx() must be called on a library

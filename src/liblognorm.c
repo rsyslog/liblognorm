@@ -48,6 +48,15 @@ ln_version(void)
 	return VERSION;
 }
 
+int
+ln_hasAdvancedStats(void)
+{
+#ifdef	ADVANCED_STATS
+	return 1;
+#else
+	return 0;
+#endif
+}
 
 ln_ctx
 ln_initCtx(void)
