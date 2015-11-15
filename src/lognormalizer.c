@@ -51,6 +51,7 @@ static int verbose = 0;
 static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
 				/**< controls which records to output */
 static int outputSummaryLine = 0;
+static int outputNbrUnparsed = 0;
 static int addErrLineNbr = 0;	/**< add line number info to unparsed events */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
@@ -212,7 +213,7 @@ normalize(void)
 			json = NULL;
 		}
 	}
-	if((recOutput & OUTPUT_PARSED_RECS) && numUnparsed > 0)
+	if(outputNbrUnparsed && numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
 	if(numWrongTag > 0)
 		fprintf(stderr, "%llu entries with wrong tag dropped\n", numWrongTag);
@@ -270,6 +271,7 @@ fprintf(stderr,
 	"Options:\n"
 	"    -r<rulebase> Rulebase to use. This is required option\n"
 	"    -H           print summary line (nbr of msgs Handled)\n"
+	"    -U           print number of unparsed messages (only if non-zero)\n"
 	"    -e<json|xml|csv|cee-syslog|raw>\n"
 	"                 Change output format. By default, json is used\n"
 	"                 Raw is exactly like the input. It is useful in combination\n"
@@ -311,7 +313,7 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vVpPt:To:hHLx:")) != -1) {
+	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vVpPt:To:hHULx:")) != -1) {
 		switch (opt) {
 		case 'V':
 			printVersion();
@@ -370,6 +372,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'H':
 			outputSummaryLine = 1;
+			break;
+		case 'U':
+			outputNbrUnparsed = 1;
 			break;
 		case 'L':
 			addErrLineNbr = 1;
