@@ -18,6 +18,14 @@ Command line options
 
 ::
 
+    -V
+
+Output version information, including information about the installed
+version of liblognorm and its optional features. So this may also be
+used to check the currently installed library version.
+
+::
+
     -r <FILENAME>
 
 Specifies name of the file containing the rulebase.
@@ -85,6 +93,14 @@ with GraphViz.
 
 At end of run, print a summary line with number of messages processed,
 parsed and unparsed to stdout.
+
+::
+
+    -U
+
+At end of run, print a summary line with number of messages unparsed to
+stdout. Note that this message is only printed if there was at least one
+unparsable message.
 
 ::
 
