@@ -68,6 +68,9 @@ ln_initCtx(void)
 #ifdef HAVE_JSON_GLOBAL_SET_STRING_HASH
 	json_global_set_string_hash(JSON_C_STR_HASH_PERLLIKE);
 #endif
+#ifdef HAVE_JSON_GLOBAL_SET_PRINTBUF_INITIAL_SIZE
+	json_global_set_printbuf_initial_size(2048);
+#endif
 	ctx->objID = LN_ObjID_CTX;
 	ctx->dbgCB = NULL;
 	ctx->opts = 0;

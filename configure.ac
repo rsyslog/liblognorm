@@ -57,6 +57,7 @@ CFLAGS="$CFLAGS $JSON_C_CFLAGS"
 LIBS="$LIBS $JSON_C_LIBS"
 AC_CHECK_FUNCS(json_object_object_get_ex,,)
 AC_CHECK_FUNCS(json_object_object_add_ex,,)
+AC_CHECK_FUNCS(json_global_set_printbuf_initial_size,,)
 AC_CHECK_FUNCS(json_object_get_string_len,,)
 AC_CHECK_TYPES(json_bool,,,[#include <json.h>])
 AC_CHECK_FUNCS(json_object_get_int64,,)
