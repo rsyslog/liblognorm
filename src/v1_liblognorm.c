@@ -80,8 +80,8 @@ ln_v1_loadSamples(ln_ctx ctx, const char *file)
 	struct ln_v1_samp *samp;
 	int isEof = 0;
 
+	char *fn_to_free = NULL;
 	CHECK_CTX;
-	char *fn_to_free;
 
 	ctx->conf_file = fn_to_free = strdup(file);
 	ctx->conf_ln_nbr = 0;
