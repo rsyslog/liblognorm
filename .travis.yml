@@ -6,6 +6,8 @@ compiler:
   - gcc
   - clang
 
+dist:
+  - trusty
 
 before_install:
 - travis_retry sudo apt-get update -qq
