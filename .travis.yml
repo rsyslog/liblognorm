@@ -1,13 +1,19 @@
-sudo: required
-
 language: c
 
 compiler:
   - gcc
   - clang
 
-dist:
-  - trusty
+#matrix:
+#  include:
+#    - compiler: gcc
+#       - sudo: required
+#       - sudo: required
+#         dist: trusty
+#    - compiler: clang
+#       - sudo: required
+#       - sudo: required
+#         dist: trusty
 
 before_install:
 - travis_retry sudo apt-get update -qq
@@ -18,8 +24,10 @@ before_install:
 
 install:
 - travis_retry sudo apt-get install -qq libestr-dev libjson0-dev
+- travis_retry sudo apt-get install -qq clang
 
 script:
+  - env
   - autoreconf --force --verbose --install
 # note: we enable regexp to check the v1 compatibility layer. v2 does 
 # not have it, nor is it recommended to enable it.
