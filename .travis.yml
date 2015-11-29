@@ -4,6 +4,22 @@ compiler:
   - gcc
   - clang
 
+matrix:
+  exclude:
+      - compiler: gcc
+      - compiler: clang
+  include:
+       - sudo: required
+         compiler: gcc
+       - sudo: required
+         compiler: gcc
+         dist: trusty
+       - sudo: required
+         compiler: clang
+       - sudo: required
+         compiler: clang
+         dist: trusty
+
 #matrix:
 #  include:
 #    - compiler: gcc
@@ -27,13 +43,13 @@ install:
 - travis_retry sudo apt-get install -qq clang
 
 script:
-  - env
   - autoreconf --force --verbose --install
 # note: we enable regexp to check the v1 compatibility layer. v2 does 
 # not have it, nor is it recommended to enable it.
   - if [ "$CC" == "gcc" ] ; then ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp --enable-valgrind; fi
   - if [ "$CC" == "gcc" ] ; then make && make dist && make check && sudo make install; fi
   # here come the clang test. So far, we just call the static analyzer
-  - if [ "$CC" == "clang" ] ; then export CFLAGS="-Werror" ; fi
+  - if [ "$CC" == "clang" ] ; then export CFLAGS="-Werror -std=c99" ; fi
   - if [ "$CC" == "clang" ] ; then scan-build ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp --enable-valgrind; fi
+  - cat config.log
   - if [ "$CC" == "clang" ] ; then scan-build make ; fi
