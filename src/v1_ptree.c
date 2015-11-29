@@ -901,7 +901,7 @@ done:	return r;
  * Data is sent to given file ptr.
  */
 void
-ln_fullPTreeStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
+ln_fullPTreeStats(ln_ctx ctx, FILE __attribute__((unused)) *const fp, const int  __attribute__((unused)) extendedStats)
 {
 	ln_displayPTree(ctx->ptree, 0);
 }
