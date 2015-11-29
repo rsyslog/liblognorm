@@ -1265,8 +1265,11 @@ PARSER(Regex)
 				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
 				if (pData->consume_group != pData->return_group) {
 					char* val = NULL;
-					CHKN(val = strndup(str + ovector[2 * pData->return_group],
-						ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group]));
+					if((val = strndup(str + ovector[2 * pData->return_group],
+						ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group])) == NULL) {
+						free(ovector);
+						FAIL(LN_NOMEM);
+					}
 					*value = json_object_new_string(val);
 					free(val);
 					if (*value == NULL) {
