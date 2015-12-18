@@ -968,6 +968,7 @@ PARSER_Destruct(CharTo)
 
 struct data_Literal {
 	const char *lit;
+	size_t litLen;
 	const char *json_conf;
 };
 /**
@@ -978,8 +979,15 @@ PARSER_Parse(Literal)
 	const char *const lit = data->lit;
 	size_t i = *offs;
 	size_t j;
+	size_t end_offs;
 
-	for(j = 0 ; lit[j] != '\0' && i < npb->strLen ; ++j) {
+	/* compute end, saves use checking one condition */
+	if(data->litLen < npb->strLen)
+		end_offs = i + data->litLen;
+	else
+		end_offs = i + npb->strLen;
+
+	for(j = 0 ; i < end_offs ; ++j) {
 		if(lit[j] != npb->str[i])
 			break;
 		++i;
@@ -1016,6 +1024,7 @@ PARSER_Construct(Literal)
 		goto done;
 	}
 	data->lit = strdup(json_object_get_string(text));
+	data->litLen = strlen(data->lit);
 	data->json_conf = strdup(json_object_to_json_string(json));
 
 	*pdata = data;
