@@ -29,6 +29,7 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_two.sh \
 	usrdef_twotypes.sh \
 	usrdef_actual1.sh \
+	usrdef_ipaddr.sh \
 	missing_line_ending.sh \
 	names.sh \
 	include.sh \
