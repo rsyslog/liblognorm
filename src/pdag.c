@@ -1317,7 +1317,7 @@ fixJSON(struct ln_pdag *dag,
 			/* Free the unneeded value */
 			json_object_put(*value);
 		}
-	} else if(prs->name != NULL && prs->name[0] == '.' && prs->name[1] == '\0') {
+	} else if(prs->name[0] == '.' && prs->name[1] == '\0') {
 		if(json_object_get_type(*value) == json_type_object) {
 			struct json_object_iterator it = json_object_iter_begin(*value);
 			struct json_object_iterator itEnd = json_object_iter_end(*value);
@@ -1335,8 +1335,36 @@ fixJSON(struct ln_pdag *dag,
 				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		}
 	} else {
-		json_object_object_add_ex(json, prs->name, *value,
-			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		int isDotDot = 0;
+		struct json_object *valDotDot = NULL;
+		if(json_object_get_type(*value) == json_type_object) {
+			/* TODO: this needs to be speeded up by just checking the first
+			 * member and ensuring there is only one member. This requires
+			 * extensions to libfastjson.
+			 */
+			int nSubobj = 0;
+			json_object_object_foreach(*value, key, val) {
+				++nSubobj;
+				if(key[0] == '.' && key[1] == '.' && key[2] == '\0') {
+					isDotDot = 1;
+					valDotDot = val;
+				} else {
+					isDotDot = 0;
+				}
+			}
+			if(nSubobj != 1)
+				isDotDot = 0;
+		}
+		if(isDotDot) {
+			LN_DBGPRINTF(dag->ctx, "subordinate field name is '..', combining");
+			json_object_get(valDotDot);
+			json_object_put(*value);
+			json_object_object_add_ex(json, prs->name, valDotDot,
+				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		} else {
+			json_object_object_add_ex(json, prs->name, *value,
+				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		}
 	}
 	r = 0;
 	return r;
