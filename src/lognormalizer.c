@@ -38,7 +38,6 @@
 #include <getopt.h>
 #include <libestr.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "ptree.h"
 #include "lognorm.h"

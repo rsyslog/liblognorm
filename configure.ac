@@ -36,7 +36,6 @@ AC_TYPE_SIZE_T
 #AC_STRUCT_TM
 
 # Checks for library functions.
-AC_FUNC_MALLOC
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 AC_FUNC_STRERROR_R
@@ -49,20 +48,7 @@ AC_SUBST(LIBLOGNORM_LIBS)
 
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
-PKG_CHECK_MODULES(JSON_C, libfastjson,, [PKG_CHECK_MODULES(JSON_C, json-c,, [PKG_CHECK_MODULES(JSON_C, json)]) ])
-
-CFLAGS_BEFORE="$CFLAGS"
-LIBS_BEFORE="$LIBS"
-CFLAGS="$CFLAGS $JSON_C_CFLAGS"
-LIBS="$LIBS $JSON_C_LIBS"
-AC_CHECK_FUNCS(json_object_object_get_ex,,)
-AC_CHECK_FUNCS(json_object_get_string_len,,)
-AC_CHECK_TYPES(json_bool,,,[#include <json.h>])
-AC_CHECK_FUNCS(json_object_get_int64,,)
-AC_CHECK_FUNCS(json_object_new_int64,,)
-AC_CHECK_MEMBERS([json_object_iter.key],,,[#include <json.h>])
-LIBS="$LIBS_BEFORE"
-CFLAGS="$CFLAGS_BEFORE"
+PKG_CHECK_MODULES(JSON_C, libfastjson,, )
 
 # Regular expressions
 AC_ARG_ENABLE(regexp,
