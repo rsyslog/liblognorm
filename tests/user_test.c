@@ -1,3 +1,5 @@
+#include "config.h"
+#include <json.h>
 #include <liblognorm.h>
 #include <string.h>
 
@@ -16,9 +18,6 @@ int main() {
 
 		ret = strcmp(json_object_get_string(from), "foo") ||
 			strcmp(json_object_get_string(msg), "hello!");
-
-		if (from != NULL) json_object_put(from);
-		if (msg != NULL) json_object_put(msg);
 	}
 
 	if (obj != NULL) json_object_put(obj);
