@@ -34,7 +34,7 @@ liblognorm_la_SOURCES = \
 
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr
-liblognorm_la_LDFLAGS = -version-info 2:0:0
+liblognorm_la_LDFLAGS = -version-info 3:0:0
 
 EXTRA_DIST = \
 	internal.h \
