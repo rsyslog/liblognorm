@@ -1,8 +1,8 @@
 #include "config.h"
-#include "json_compatibility.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <json.h>
 
 
 typedef struct json_object obj;

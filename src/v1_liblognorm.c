@@ -28,7 +28,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"

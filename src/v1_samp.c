@@ -31,7 +31,6 @@
 #include <ctype.h>
 
 #define LOGNORM_V1_SUBSYSTEM /* indicate we are old cruft */
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "internal.h"
 #include "lognorm.h"

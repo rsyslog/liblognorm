@@ -35,7 +35,6 @@
 #include <libestr.h>
 
 #define LOGNORM_V1_SUBSYSTEM /* indicate we are old cruft */
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "annot.h"
 #include "internal.h"

@@ -16,7 +16,6 @@
 #include <ctype.h>
 #include <libestr.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"

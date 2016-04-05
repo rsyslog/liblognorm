@@ -1,7 +1,7 @@
 check_PROGRAMS = json_eq
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
-json_eq_SOURCES = $(json_eq_self_sources) $(top_srcdir)/src/json_compatibility.c
+json_eq_SOURCES = $(json_eq_self_sources)
 json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) -I$(top_srcdir)/src
 json_eq_LDADD = $(JSON_C_LIBS)
 json_eq_LDFLAGS = -no-install

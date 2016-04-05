@@ -32,7 +32,6 @@
 #include <string.h>
 #include <strings.h>
 
-#include "json_compatibility.h"
 #include "v1_liblognorm.h"
 #include "internal.h"
 #include "lognorm.h"

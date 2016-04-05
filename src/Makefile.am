@@ -30,8 +30,7 @@ liblognorm_la_SOURCES = \
 	parser.c \
 	enc_syslog.c \
 	enc_csv.c \
-	enc_xml.c \
-	json_compatibility.c
+	enc_xml.c
 
 # Users violently requested that v2 shall be able to understand v1
 # rulebases. As both are very very different, we now include the
@@ -58,8 +57,7 @@ EXTRA_DIST = \
 	samp.h \
 	enc.h \
 	parser.h \
-	helpers.h \
-	json_compatibility.h
+	helpers.h
 
 # and now the old cruft:
 EXTRA_DIST += \

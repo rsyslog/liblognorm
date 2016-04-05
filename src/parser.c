@@ -32,8 +32,8 @@
 #include <string.h>
 #include <strings.h>
 #include <errno.h>
+#include <inttypes.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "internal.h"

@@ -38,7 +38,6 @@
 #include <getopt.h>
 #include <libestr.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "enc.h"

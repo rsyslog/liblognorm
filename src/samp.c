@@ -33,7 +33,6 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "lognorm.h"
 #include "samp.h"
