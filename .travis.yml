@@ -8,7 +8,7 @@ before_install:
 - travis_retry sudo apt-get update -qq
 
 install:
-- travis_retry sudo apt-get install -qq libestr-dev libjson0-dev
+- travis_retry sudo apt-get install -qq libestr-dev libfastjson-dev
 
 script:
   - autoreconf --force --verbose --install
