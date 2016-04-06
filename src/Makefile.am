@@ -46,7 +46,9 @@ liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr
 # info on version-info:
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
-liblognorm_la_LDFLAGS = -version-info 4:0:0
+# Note: v2 now starts at version 10, previously also had 4; versions lower 10 are
+# reserved for v1 changes
+liblognorm_la_LDFLAGS = -version-info 10:0:0
 
 EXTRA_DIST = \
 	internal.h \
