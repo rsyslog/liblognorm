@@ -185,11 +185,15 @@ ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str)
 	if((tags = json_object_object_get(json, "event.tags")) != NULL) {
 		CHKR(ln_addTags_Syslog(tags, str));
 	}
-	json_object_object_foreach(json, name, field) {
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *name = json_object_iter_peek_name(&it);
 		if (strcmp(name, "event.tags")) {
 			es_addChar(str, ' ');
-			ln_addField_Syslog(name, field, str);
+			ln_addField_Syslog(name, json_object_iter_peek_value(&it), str);
 		}
+		json_object_iter_next(&it);
 	}
 	es_addChar(str, ']');
 
