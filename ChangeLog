@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
 Version 1.1.3, 2016-03-07
+- new build requirement: libfastjson
 - add support for libfastjson
 - make work on Solaris
 - check for runaway rules.
