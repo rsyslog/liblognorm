@@ -10,14 +10,15 @@ typedef struct json_object obj;
 static int eq(obj* expected, obj* actual);
 
 static int obj_eq(obj* expected, obj* actual) {
-    struct json_object_iter iter;
-    int eql = 1;
-	json_object_object_foreachC(expected, iter) {
-        obj *actual_val;
-        json_object_object_get_ex(actual, iter.key, &actual_val);
-        eql &= eq(iter.val, actual_val);
-    }
-    return eql;
+	int eql = 1;
+	struct json_object_iterator it = json_object_iter_begin(expected);
+	struct json_object_iterator itEnd = json_object_iter_end(expected);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		obj *actual_val = json_object_object_get(actual, json_object_iter_peek_name(&it));
+		eql &= eq(json_object_iter_peek_value(&it), actual_val);
+		json_object_iter_next(&it);
+	}
+	return eql;
 }
 
 static int arr_eq(obj* expected, obj* actual) {

@@ -1322,9 +1322,13 @@ fixJSON(struct ln_pdag *dag,
 		}
 	} else if(prs->name != NULL && prs->name[0] == '.' && prs->name[1] == '\0') {
 		if(json_object_get_type(*value) == json_type_object) {
-			json_object_object_foreach(*value, key, val) {
+			struct json_object_iterator it = json_object_iter_begin(*value);
+			struct json_object_iterator itEnd = json_object_iter_end(*value);
+			while (!json_object_iter_equal(&it, &itEnd)) {
+				struct json_object *const val = json_object_iter_peek_value(&it); 
 				json_object_get(val);
-				json_object_object_add(json, key, val);
+				json_object_object_add(json, json_object_iter_peek_name(&it), val);
+				json_object_iter_next(&it);
 			}
 			json_object_put(*value);
 		} else {

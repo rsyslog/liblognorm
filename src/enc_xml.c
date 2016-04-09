@@ -206,10 +206,14 @@ ln_fmtEventToXML(struct json_object *json, es_str_t **str)
 	if(json_object_object_get_ex(json, "event.tags", &tags)) {
 		CHKR(ln_addTags_XML(tags, str));
 	}
-	json_object_object_foreach(json, name, field) {
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		char *const name = (char*) json_object_iter_peek_name(&it);
 		if (strcmp(name, "event.tags")) {
-			ln_addField_XML(name, field, str);
+			ln_addField_XML(name, json_object_iter_peek_value(&it), str);
 		}
+		json_object_iter_next(&it);
 	}
 
 	es_addBuf(str, "</event>", 8);

@@ -182,9 +182,13 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 	}
 	if(json != NULL) {
 		/* now we need to merge the json params into the main object */
-		json_object_object_foreach(json, key, v) {
+		struct json_object_iterator it = json_object_iter_begin(json);
+		struct json_object_iterator itEnd = json_object_iter_end(json);
+		while (!json_object_iter_equal(&it, &itEnd)) {
+			struct json_object *const v = json_object_iter_peek_value(&it);
 			json_object_get(v);
-			json_object_object_add(*prscnf, key, v);
+			json_object_object_add(*prscnf, json_object_iter_peek_name(&it), v);
+			json_object_iter_next(&it);
 		}
 	}
 

@@ -609,7 +609,11 @@ PARSER_Construct(HexNumber)
 	if(json == NULL)
 		goto done;
 
-	json_object_object_foreach(json, key, val) {
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
 		if(!strcmp(key, "maxval")) {
 			errno = 0;
 			data->maxval = json_object_get_int64(val);
@@ -621,6 +625,7 @@ PARSER_Construct(HexNumber)
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
 		}
+		json_object_iter_next(&it);
 	}
 
 done:
@@ -2590,11 +2595,16 @@ PARSER_Parse(Repeat)
 		 * around.
 		 */
 		struct json_object *toAdd = parsed_value;
-		json_object_object_foreach(parsed_value, key, val) {
+		struct json_object_iterator it = json_object_iter_begin(parsed_value);
+		struct json_object_iterator itEnd = json_object_iter_end(parsed_value);
+		while (!json_object_iter_equal(&it, &itEnd)) {
+			const char *key = json_object_iter_peek_name(&it);
+			struct json_object *const val = json_object_iter_peek_value(&it);
 			if(key[0] == '.' && key[1] == '\0') {
 				json_object_get(val); /* inc refcount! */
 				toAdd = val;
 			}
+			json_object_iter_next(&it);
 		}
 
 		json_object_array_add(json_arr, toAdd);
@@ -2637,7 +2647,11 @@ PARSER_Construct(Repeat)
 	if(json == NULL)
 		goto done;
 
-	json_object_object_foreach(json, key, val) {
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
 		if(!strcmp(key, "parser")) {
 			if(chkNoDupeDotInParserDefs(ctx, val) != 1) {
 				r = LN_BADCONFIG;
@@ -2658,6 +2672,7 @@ PARSER_Construct(Repeat)
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
 		}
+		json_object_iter_next(&it);
 	}
 
 done:
@@ -2749,7 +2764,11 @@ stringAddPermittedCharsViaArray(ln_ctx ctx, struct data_String *const data,
 	for(int i = 0 ; i < nelem ; ++i) {
 		struct json_object *const elem
 			= json_object_array_get_idx(arr, i);
-		json_object_object_foreach(elem, key, val) {
+		struct json_object_iterator it = json_object_iter_begin(elem);
+		struct json_object_iterator itEnd = json_object_iter_end(elem);
+		while (!json_object_iter_equal(&it, &itEnd)) {
+			const char *key = json_object_iter_peek_name(&it);
+			struct json_object *const val = json_object_iter_peek_value(&it);
 			if(!strcasecmp(key, "chars")) {
 				stringAddPermittedChars(data, val);
 			} else if(!strcasecmp(key, "class")) {
@@ -2770,6 +2789,7 @@ stringAddPermittedCharsViaArray(ln_ctx ctx, struct data_String *const data,
 						optval);
 				}
 			}
+		json_object_iter_next(&it);
 		}
 	}
 }
@@ -2902,7 +2922,11 @@ PARSER_Construct(String)
 	data->qchar_end = '"';
 	memset(data->perm_chars, 0xff, sizeof(data->perm_chars));
 	
-	json_object_object_foreach(json, key, val) {
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
 		if(!strcasecmp(key, "quoting.mode")) {
 			const char *const optval = json_object_get_string(val);
 			if(!strcasecmp(optval, "auto")) {
@@ -2966,6 +2990,7 @@ PARSER_Construct(String)
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
 		}
+		json_object_iter_next(&it);
 	}
 
 	if(data->quoteMode == ST_QUOTE_NONE)
