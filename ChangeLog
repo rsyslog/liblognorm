@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
 Version 2.0.0, 2015-??-??
+test
 - completely rewritten, much feature-enhanced version
 - requires libfastjson instead of json-c
 - big improvements to testbench runs, especially on travis
