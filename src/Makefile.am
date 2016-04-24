@@ -8,7 +8,7 @@ PTHREADS_CFLAGS = -pthread
 # milestone (latest at initial release!)
 bin_PROGRAMS = lognormalizer
 lognormalizer_SOURCES = lognormalizer.c
-lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
+lognormalizer_CPPFLAGS =  -I$(top_srcdir) $(WARN_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
 lognormalizer_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) ../compat/compat.la 
 lognormalizer_DEPENDENCIES = liblognorm.la
 
@@ -42,7 +42,7 @@ liblognorm_la_SOURCES += \
 	v1_ptree.c \
 	v1_samp.c
 
-liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
+liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
 liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr
 # info on version-info:
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
