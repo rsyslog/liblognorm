@@ -88,7 +88,7 @@ complain(const char *errmsg)
 /* rawmsg is, as the name says, the raw message, in case we have
  * "raw" formatter requested.
  */
-static inline void
+static void
 outputEvent(struct json_object *json, const char *const rawmsg)
 {
 	char *cstr = NULL;

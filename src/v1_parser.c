@@ -43,10 +43,6 @@
 #include <errno.h>			
 #endif
 
-/* we do not really maintain the v1 code any longer (except in emergencies),
- * as such, we need to turn off some warnings in order not to break the build.
- */
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 
 /* some helpers */
 static inline int
