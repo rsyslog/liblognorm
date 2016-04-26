@@ -43,22 +43,6 @@
 #include "v1_ptree.h"
 
 
-/**
- * Construct a sample object.
- */
-struct ln_samp*
-ln_sampCreate(ln_ctx __attribute__((unused)) ctx)
-{
-	struct ln_samp* samp;
-
-	if((samp = calloc(1, sizeof(struct ln_samp))) == NULL)
-		goto done;
-
-	/* place specific init code here (none at this time) */
-
-done:	return samp;
-}
-
 void
 ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
 {
