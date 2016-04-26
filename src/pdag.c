@@ -1343,14 +1343,6 @@ fixJSON(struct ln_pdag *dag,
 }
 
 // TODO: streamline prototype when done with changes
-int
-ln_normalizeRec(npb_t *const __restrict__ npb,
-	struct ln_pdag *dag,
-	const size_t offs,
-	const int bPartialMatch,
-	struct json_object *json,
-	struct ln_pdag **endNode
-	);
 
 static int
 tryParser(npb_t *const __restrict__ npb,

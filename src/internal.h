@@ -31,7 +31,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -57,6 +57,11 @@
 #define	INTERNAL_H_INCLUDED
 
 #include "liblognorm.h"
+
+/* we need to turn off this warning, as it also comes up in C99 mode, which
+ * we use.
+ */
+#pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
 
 /* support for simple error checking */
 

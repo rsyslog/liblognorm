@@ -2879,6 +2879,7 @@ cefParseExtensions(const char *const __restrict__ str,
 							break;
 					case '\\':	value[iDst] = '\\';
 							break;
+					default:	break;
 					}
 				} else {
 					value[iDst] = str[iValue+iSrc];

@@ -2281,6 +2281,7 @@ cefParseExtensions(npb_t *const npb,
 							break;
 					case '\\':	value[iDst] = '\\';
 							break;
+					default:	break;
 					}
 				} else {
 					value[iDst] = npb->str[iValue+iSrc];

@@ -159,8 +159,8 @@ int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
 	int r = 0;
-	CHECK_CTX;
 	const char *tofree;
+	CHECK_CTX;
 	ctx->conf_file = tofree = strdup(file);
 	ctx->conf_ln_nbr = 0;
 	++ctx->include_level;
