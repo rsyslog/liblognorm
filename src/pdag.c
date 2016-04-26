@@ -26,9 +26,6 @@
 #include "internal.h"
 #include "parser.h"
 #include "helpers.h"
-const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *const pdata);
-const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
-const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
 void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level);
 void ln_displayPDAGComponent(struct ln_pdag *dag, int level);
@@ -1170,7 +1167,7 @@ ln_genStatsDotPDAGGraphRec(struct ln_pdag *dag, FILE *const __restrict__ fp)
 }
 
 
-void
+static void
 ln_genStatsDotPDAGGraph(struct ln_pdag *dag, FILE *const fp)
 {
 	ln_pdagClearVisited(dag->ctx);

@@ -35,7 +35,7 @@
 #include <libestr.h>
 
 #define LOGNORM_V1_SUBSYSTEM /* indicate we are old cruft */
-#include "liblognorm.h"
+#include "v1_liblognorm.h"
 #include "annot.h"
 #include "internal.h"
 #include "lognorm.h"

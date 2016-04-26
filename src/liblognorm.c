@@ -41,7 +41,7 @@
 		goto done; \
 	}
 
-char *
+const char *
 ln_version(void)
 {
 	return VERSION;

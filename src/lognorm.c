@@ -54,7 +54,7 @@ rs_strerror_r(const int errnum, char *const buf, const size_t buflen) {
  * immediately.
  */
 void
-ln_dbgprintf(ln_ctx ctx, char *fmt, ...)
+ln_dbgprintf(ln_ctx ctx, const char *fmt, ...)
 {
 	va_list ap;
 	char buf[8*1024];

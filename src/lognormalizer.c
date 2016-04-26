@@ -59,21 +59,22 @@ static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg 
 					   be output. NULL=all */
 static enum { f_syslog, f_json, f_xml, f_csv, f_raw } outfmt = f_json;
 
-void
+static void
 errCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
 	fprintf(stderr, "liblognorm error: %s\n", msg);
 }
 
-void
+static void
 dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
 	fprintf(stderr, "liblognorm: %s\n", msg);
 }
 
-void complain(const char *errmsg)
+static void
+complain(const char *errmsg)
 {
 	fprintf(stderr, "%s\n", errmsg);
 }
@@ -162,7 +163,7 @@ amendLineNbr(json_object *const json, const int line_nbr)
 
 /* normalize input data
  */
-void
+static void
 normalize(void)
 {
 	FILE *fp = stdin;

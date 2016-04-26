@@ -86,4 +86,8 @@ done:
 	return NULL;
 }
 
+const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
+
 #endif /* #ifndef INTERNAL_H_INCLUDED */

@@ -10,7 +10,7 @@
  */
 /* 
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -41,6 +41,7 @@
 
 #include "lognorm.h"
 #include "internal.h"
+#include "enc.h"
 
 #if 0
 static char hexdigit[16] =
@@ -55,7 +56,7 @@ static char hexdigit[16] =
  * byte-by-byte basis, which simply is incorrect.
  * rgerhards, 2010-11-09
  */
-int
+static int
 ln_addValue_XML(const char *value, es_str_t **str)
 {
 	int r;
@@ -127,7 +128,7 @@ ln_addValue_XML(const char *value, es_str_t **str)
 }
 
 
-int
+static int
 ln_addField_XML(char *name, struct json_object *field, es_str_t **str)
 {
 	int r;
@@ -155,6 +156,12 @@ ln_addField_XML(char *name, struct json_object *field, es_str_t **str)
 	case json_type_int:
 		CHKN(value = json_object_get_string(field));
 		CHKR(ln_addValue_XML(value, str));
+		break;
+	case json_type_null:
+	case json_type_boolean:
+	case json_type_double:
+	case json_type_object:
+		CHKR(es_addBuf(str, "***unsupported type***", sizeof("***unsupported type***")-1));
 		break;
 	default:
 		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
