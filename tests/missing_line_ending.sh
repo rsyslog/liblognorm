@@ -5,7 +5,7 @@
 test_def $0 "dmac48 syntax"
 # we need to use a canned file, as we cannot easily reproduce the
 # malformed lines
-cp missing_line_ending.rb $(rulebase_file_name)
+cp $srcdir/missing_line_ending.rb $(rulebase_file_name)
 
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
