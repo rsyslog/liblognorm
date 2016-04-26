@@ -1,4 +1,8 @@
 ----------------------------------------------------------------------
+Version 1.1.4, 2016-04-??
+- support for libfastjson 0.99.3 added
+- some CI improvements
+----------------------------------------------------------------------
 Version 1.1.3, 2016-03-07
 - new build requirement: libfastjson
 - add support for libfastjson
