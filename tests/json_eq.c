@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <json.h>
+#include "internal.h"
 
 
 typedef struct json_object obj;
