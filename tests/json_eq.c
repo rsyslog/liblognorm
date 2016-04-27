@@ -69,6 +69,9 @@ static int eq(obj* expected, obj* actual) {
         return arr_eq(expected, actual);
     case json_type_string:
         return str_eq(expected, actual);
+    default:
+        fprintf(stderr, "unexpected type in %s:%d\n", __FILE__, __LINE__);
+	abort();
     }
     return 0;
 }
