@@ -15,7 +15,8 @@ static int obj_eq(obj* expected, obj* actual) {
 	struct json_object_iterator it = json_object_iter_begin(expected);
 	struct json_object_iterator itEnd = json_object_iter_end(expected);
 	while (!json_object_iter_equal(&it, &itEnd)) {
-		obj *actual_val = json_object_object_get(actual, json_object_iter_peek_name(&it));
+		obj *actual_val;
+		json_object_object_get_ex(actual, json_object_iter_peek_name(&it), &actual_val);
 		eql &= eq(json_object_iter_peek_value(&it), actual_val);
 		json_object_iter_next(&it);
 	}
