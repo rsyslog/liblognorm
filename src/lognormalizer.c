@@ -173,7 +173,7 @@ amendLineNbr(json_object *const json, const int line_nbr)
 
 #define DEFAULT_LINE_SIZE (10 * 1024)
 
-char*
+static char *
 read_line(FILE *fp)
 {
 	size_t line_capacity = DEFAULT_LINE_SIZE;
