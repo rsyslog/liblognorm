@@ -2011,6 +2011,8 @@ PARSER(CiscoInterfaceSpec)
 	CHKN(*value = json_object_new_object());
 	json_object *json;
 	if(bHaveInterface) {
+		/* idxInterface, lenInterface are set when bHaveIP2 is set to 1 */
+		#pragma GCC diagnostic ignored "-Wuninitialized"
 		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
 		json_object_object_add_ex(*value, "interface", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
@@ -2019,12 +2021,18 @@ PARSER(CiscoInterfaceSpec)
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
 	json_object_object_add_ex(*value, "port", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	if(bHaveIP2) {
+		/* idxIP2, lenIP2 are set when bHaveIP2 is set to 1 */
+		#pragma GCC diagnostic ignored "-Wuninitialized"
 		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
 		json_object_object_add_ex(*value, "ip2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		/* idxPort2 is set when bHaveIP2 is set to 1 */
+		#pragma GCC diagnostic ignored "-Wuninitialized"
 		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
 		json_object_object_add_ex(*value, "port2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	if(bHaveUser) {
+		/* lenUser, idxUser are set when bHaveUser is set to 1 */
+		#pragma GCC diagnostic ignored "-Wuninitialized"
 		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
 		json_object_object_add_ex(*value, "user", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}

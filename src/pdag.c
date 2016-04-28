@@ -446,6 +446,8 @@ fixComponentID(struct ln_pdag *const __restrict__ dag, const char *const new)
 	}
 	if(i >= 1 && curr[i-1] == '%')
 		--i;
+	/* don't bother checking success of printf */
+	#pragma GCC diagnostic ignored "-Wunused-result"
 	asprintf(&updated, "%.*s[%s|%s]", i, curr, curr+i, new+i);
 	deleteComponentID(dag);
 	dag->rb_id = updated;
@@ -477,15 +479,21 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 		ln_parser_t *prs = dag->parsers+i;
 		if(prs->prsid == PRS_LITERAL) {
 			if(prs->name == NULL) {
+			        /* don't bother checking success of printf */
+			        #pragma GCC diagnostic ignored "-Wunused-result"
 				asprintf(&id, "%s%s", prefix,
 					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
 			} else {
+			        /* don't bother checking success of printf */
+			        #pragma GCC diagnostic ignored "-Wunused-result"
 				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
 					prs->name,
 					parserName(prs->prsid),
 					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
 			}
 		} else {
+			/* don't bother checking success of printf */
+			#pragma GCC diagnostic ignored "-Wunused-result"
 			asprintf(&id, "%s%%%s:%s%%", prefix,
 				prs->name ? prs->name : "-",
 				parserName(prs->prsid));

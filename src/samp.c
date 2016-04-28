@@ -934,6 +934,8 @@ ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 		}
 		if(buf[0] == '\n') {
 			fsetpos(repo, &inner_fpos);
+			/* don't bother checking success of fread */
+			#pragma GCC diagnostic ignored "-Wunused-result"
 			fread(buf, sizeof(char), 1, repo); /* skip '\n' */
 			continue;
 		} else if(buf[0] == '#') {
@@ -1079,6 +1081,8 @@ tryOpenRBFile(ln_ctx ctx, const char *const file)
 	}
 
 	char *fname = NULL;
+	/* don't bother checking success of printf */
+	#pragma GCC diagnostic ignored "-Wunused-result"
 	asprintf(&fname, (rb_lib[strlen(rb_lib)-1] == '/') ? "%s%s" : "%s/%s", rb_lib, file);
 	if((repo = fopen(fname, "r")) == NULL) {
 		const int eno2 = errno;
