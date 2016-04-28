@@ -1322,7 +1322,7 @@ fixJSON(struct ln_pdag *dag,
 			struct json_object_iterator it = json_object_iter_begin(*value);
 			struct json_object_iterator itEnd = json_object_iter_end(*value);
 			while (!json_object_iter_equal(&it, &itEnd)) {
-				struct json_object *const val = json_object_iter_peek_value(&it); 
+				struct json_object *const val = json_object_iter_peek_value(&it);
 				json_object_get(val);
 				json_object_object_add(json, json_object_iter_peek_name(&it), val);
 				json_object_iter_next(&it);
@@ -1343,14 +1343,18 @@ fixJSON(struct ln_pdag *dag,
 			 * extensions to libfastjson.
 			 */
 			int nSubobj = 0;
-			json_object_object_foreach(*value, key, val) {
+			struct json_object_iterator it = json_object_iter_begin(*value);
+			struct json_object_iterator itEnd = json_object_iter_end(*value);
+			while (!json_object_iter_equal(&it, &itEnd)) {
 				++nSubobj;
+				const char *key = json_object_iter_peek_name(&it);
 				if(key[0] == '.' && key[1] == '.' && key[2] == '\0') {
 					isDotDot = 1;
-					valDotDot = val;
+					valDotDot = json_object_iter_peek_value(&it);
 				} else {
 					isDotDot = 0;
 				}
+				json_object_iter_next(&it);
 			}
 			if(nSubobj != 1)
 				isDotDot = 0;
