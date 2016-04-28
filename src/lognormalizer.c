@@ -12,7 +12,7 @@
  *
  *//*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
  * This file is part of liblognorm.
  *
@@ -42,6 +42,11 @@
 #include "lognorm.h"
 #include "enc.h"
 
+/* we need to turn off this warning, as it also comes up in C99 mode, which
+ * we use.
+ */
+#pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+
 static ln_ctx ctx;
 
 static int verbose = 0;
@@ -59,21 +64,22 @@ static es_str_t *mandatoryTag = NULL; /**< tag which must be given so that mesg 
 					   be output. NULL=all */
 static enum { f_syslog, f_json, f_xml, f_csv, f_raw } outfmt = f_json;
 
-void
+static void
 errCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
 	fprintf(stderr, "liblognorm error: %s\n", msg);
 }
 
-void
+static void
 dbgCallBack(void __attribute__((unused)) *cookie, const char *msg,
 	    size_t __attribute__((unused)) lenMsg)
 {
 	fprintf(stderr, "liblognorm: %s\n", msg);
 }
 
-void complain(const char *errmsg)
+static void
+complain(const char *errmsg)
 {
 	fprintf(stderr, "%s\n", errmsg);
 }
@@ -82,7 +88,7 @@ void complain(const char *errmsg)
 /* rawmsg is, as the name says, the raw message, in case we have
  * "raw" formatter requested.
  */
-static inline void
+static void
 outputEvent(struct json_object *json, const char *const rawmsg)
 {
 	char *cstr = NULL;
@@ -111,6 +117,11 @@ outputEvent(struct json_object *json, const char *const rawmsg)
 		break;
 	case f_raw:
 		fprintf(stderr, "program error: f_raw should not occur "
+			"here (file %s, line %d)\n", __FILE__, __LINE__);
+		abort();
+		break;
+	default:
+		fprintf(stderr, "program error: default case should not occur "
 			"here (file %s, line %d)\n", __FILE__, __LINE__);
 		abort();
 		break;
@@ -162,7 +173,7 @@ amendLineNbr(json_object *const json, const int line_nbr)
 
 /* normalize input data
  */
-void
+static void
 normalize(void)
 {
 	FILE *fp = stdin;
@@ -228,7 +239,7 @@ normalize(void)
  * Generate a command file for the GNU DOT tools.
  */
 static void
-genDOT()
+genDOT(void)
 {
 	es_str_t *str;
 
@@ -405,6 +416,7 @@ int main(int argc, char *argv[])
 			handle_generic_option(optarg);
 			break;
 		case 'h':
+		default:
 			usage();
 			ret = 1;
 			goto exit;

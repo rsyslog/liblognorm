@@ -1,8 +1,10 @@
 #include "config.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <json.h>
+#include "internal.h"
 
 
 typedef struct json_object obj;
@@ -14,7 +16,8 @@ static int obj_eq(obj* expected, obj* actual) {
 	struct json_object_iterator it = json_object_iter_begin(expected);
 	struct json_object_iterator itEnd = json_object_iter_end(expected);
 	while (!json_object_iter_equal(&it, &itEnd)) {
-		obj *actual_val = json_object_object_get(actual, json_object_iter_peek_name(&it));
+		obj *actual_val;
+		json_object_object_get_ex(actual, json_object_iter_peek_name(&it), &actual_val);
 		eql &= eq(json_object_iter_peek_value(&it), actual_val);
 		json_object_iter_next(&it);
 	}
@@ -66,6 +69,9 @@ static int eq(obj* expected, obj* actual) {
         return arr_eq(expected, actual);
     case json_type_string:
         return str_eq(expected, actual);
+    default:
+        fprintf(stderr, "unexpected type in %s:%d\n", __FILE__, __LINE__);
+	abort();
     }
     return 0;
 }

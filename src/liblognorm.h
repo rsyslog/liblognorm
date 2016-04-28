@@ -93,7 +93,7 @@ typedef struct ln_ctx_s* ln_ctx;
 /* Note: this MUST NOT be inline to make sure the actual library
  * has the right version, not just what was used to compile!
  */
-char *ln_version(void);
+const char *ln_version(void);
 
 /**
  * Return if library is build with advanced statistics
