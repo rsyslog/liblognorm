@@ -171,13 +171,46 @@ amendLineNbr(json_object *const json, const int line_nbr)
 	}
 }
 
+#define DEFAULT_LINE_SIZE (10 * 1024)
+
+char*
+read_line(FILE *fp)
+{
+	size_t line_capacity = DEFAULT_LINE_SIZE;
+	char *line = NULL;
+	size_t line_len = 0;
+	char ch = 0;
+	do {
+		ch = fgetc(fp);
+		if (ch == EOF) break;
+		if (line == NULL) {
+			line = malloc(line_capacity);
+		} else if (line_len == line_capacity) {
+			line_capacity *= 2;
+			line = realloc(line, line_capacity);
+		}
+		if (line == NULL) {
+			fprintf(stderr, "Couldn't allocate working-buffer for log-line\n");
+			return NULL;
+		}
+		line[line_len++] = ch;
+	} while(ch != '\n');
+
+	if (line != NULL) {
+		line[--line_len] = '\0';
+		if(line_len > 0 && line[line_len - 1] == '\r')
+			line[--line_len] = '\0';
+	}
+	return line;
+}
+
 /* normalize input data
  */
 static void
 normalize(void)
 {
 	FILE *fp = stdin;
-	char buf[10*1024];
+	char *line = NULL;
 	struct json_object *json = NULL;
 	long long unsigned numParsed = 0;
 	long long unsigned numUnparsed = 0;
@@ -189,16 +222,10 @@ normalize(void)
 		mandatoryTagCstr = es_str2cstr(mandatoryTag, NULL);
 	}
 
-	while((fgets(buf, sizeof(buf), fp)) != NULL) {
+	while((line = read_line(fp)) != NULL) {
 		++line_nbr;
-		size_t bufLen = strlen(buf) - 1;
-		buf[bufLen] = '\0';
-		if(bufLen > 0 && buf[bufLen-1] == '\r') {
-			buf[bufLen-1] = '\0';
-			--bufLen;
-		}
-		if(verbose > 0) fprintf(stderr, "To normalize: '%s'\n", buf);
-		ln_normalize(ctx, buf, bufLen, &json);
+		if(verbose > 0) fprintf(stderr, "To normalize: '%s'\n", line);
+		ln_normalize(ctx, line, strlen(line), &json);
 		if(json != NULL) {
 			if(eventHasTag(json, mandatoryTagCstr)) {
 				struct json_object *dummy;
@@ -207,13 +234,13 @@ normalize(void)
 				if(parsed) {
 					numParsed++;
 					if(recOutput & OUTPUT_PARSED_RECS) {
-						outputEvent(json, buf);
+						outputEvent(json, line);
 					}
 				} else {
 					numUnparsed++;
 					amendLineNbr(json, line_nbr);
 					if(recOutput & OUTPUT_UNPARSED_RECS) {
-						outputEvent(json, buf);
+						outputEvent(json, line);
 					}
 				}
 			} else {
@@ -222,6 +249,7 @@ normalize(void)
 			json_object_put(json);
 			json = NULL;
 		}
+        free(line);
 	}
 	if(outputNbrUnparsed && numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
