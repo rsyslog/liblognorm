@@ -239,7 +239,23 @@ contains the source IP address of the message. These names should also be
 chosen carefully, since the field name can be used in every rule and 
 therefore should fit for the same kind of information in different rules.
 
-If field name is "-", then this field is matched but not saved.
+Some special field names exist:
+
+* **dash** ("-"): this field is matched but not saved
+* **dot** ("."): this is useful if a parser returns a set of fields. Usually,
+  it does so by creating a json subtree. If the field is named ".", then
+  no subtree is created but instead the subfields are moved into the main
+  hierarchy.
+* **two dots** (".."): similiar to ".", but can be used at the lower level to denote
+  that a field is to be included with the name given by the upper-level
+  object. Note that ".." is only acted on if a subelement contains a single
+  field. The reason is that if there were more, we could not assign all of
+  them to the *single* name given by the upper-level-object. The prime
+  use case for this special name is in user-defined types that parse only
+  a single value. Without "..", they would always become a JSON subtree, which
+  seems unnatural and is different from built-in types. So it is suggested to
+  name such fields as "..", which means that the user can assign a name of his
+  liking, just like in the case of built-in parsers.
 
 **field type** -> selects the accordant parser, which are described below.
 
