@@ -19,7 +19,7 @@ then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-
 fi
 AC_PROG_LIBTOOL
 AX_IS_RELEASE([git-directory])
-AX_COMPILER_FLAGS
+AX_COMPILER_FLAGS()
 
 # Checks for libraries.
 save_LIBS=$LIBS

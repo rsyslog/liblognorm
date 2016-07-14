@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.0.0, 2015-??-??
+Version 2.0.0, 2016-07-12
 - completely rewritten, much feature-enhanced version
 - requires libfastjson instead of json-c
 - big improvements to testbench runs, especially on travis
@@ -8,7 +8,7 @@ Version 2.0.0, 2015-??-??
 - lognormalizer tool can now handle lines larger 10k characters
   Thanks to Janmejay Singh for the patch
 ----------------------------------------------------------------------
-Version 1.1.3, 2015-??-??
+Version 1.1.3, 2015-??-?? [not yet released, but included in 2.0.0]
 - make work on Solaris
 - check for runaway rules.
   A runaway rule is one that has unmatched percent signs and thus
