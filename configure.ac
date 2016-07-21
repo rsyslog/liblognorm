@@ -18,7 +18,6 @@ if test "$GCC" = "yes"
 then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
 fi
 AC_PROG_LIBTOOL
-AX_COMPILER_FLAGS
 
 # Checks for libraries.
 save_LIBS=$LIBS
