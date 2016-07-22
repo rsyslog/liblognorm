@@ -95,4 +95,9 @@ const char * ln_DataForDisplayCharTo(__attribute__((unused)) ln_ctx ctx, void *c
 const char * ln_DataForDisplayLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 const char * ln_JsonConfLiteral(__attribute__((unused)) ln_ctx ctx, void *const pdata);
 
+/* here we add some stuff from the compatibility layer */
+#ifndef HAVE_STRNDUP
+char * strndup(const char *s, size_t n);
+#endif
+
 #endif /* #ifndef INTERNAL_H_INCLUDED */
