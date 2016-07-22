@@ -58,6 +58,8 @@
 
 #include "liblognorm.h"
 
+#include <libestr.h>
+
 /* we need to turn off this warning, as it also comes up in C99 mode, which
  * we use.
  */
