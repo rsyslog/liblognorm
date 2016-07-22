@@ -14,15 +14,31 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_PROG_CC
 AM_PROG_CC_C_O
 AC_PROG_CC_C99
-if test "$GCC" = "yes"
-then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
-fi
 AC_PROG_LIBTOOL
+
+m4_ifdef([AX_IS_RELEASE], [
+	AX_IS_RELEASE([git-directory])
+	m4_ifdef([AX_COMPILER_FLAGS], [
+		AX_COMPILER_FLAGS()
+	], [
+		if test "$GCC" = "yes"
+		then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
+		fi
+		AC_MSG_WARN([missing AX_COMPILER_FLAGS macro, not using it])
+	])
+], [
+	if test "$GCC" = "yes"
+	then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
+	fi
+	AC_MSG_WARN([missing AX_IS_RELEASE macro, not using AX_COMPILER_FLAGS macro because of this])
+])
+
+
 
 # Checks for libraries.
 save_LIBS=$LIBS
 LIBS=
-AC_SEARCH_LIBS(clock_gettime, rt)
+AC_SEARCH_LIBS(clock_getm4_defn([AC_AUTOCONF_VERSION]), [2.68]time, rt)
 LIBS=$save_LIBS
 
 # Checks for header files.
