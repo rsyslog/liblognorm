@@ -202,7 +202,7 @@ done:
  * 		  creation overhead
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 addFieldDescr(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 	        size_t *bufOffs, es_str_t **str)
 {
@@ -249,7 +249,7 @@ done:
 /**
  *  Construct a literal parser json definition.
  */
-static inline struct json_object *
+static json_object *
 newLiteralParserJSONConf(char lit)
 {
 	char buf[] = "x";
@@ -287,7 +287,7 @@ newLiteralParserJSONConf(char lit)
  * @param    str a work buffer, provided to prevent creation of a new object
  * @return 0 on success, something else otherwise
  */
-static inline int
+static int
 parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 	     size_t *const __restrict__ bufOffs, es_str_t **str)
 {
@@ -347,7 +347,7 @@ done:
  *
  * @returns the new dag root (or NULL in case of error)
  */
-static inline int
+static int
 addSampToTree(ln_ctx ctx,
 	es_str_t *rule,
 	ln_pdag *dag,
@@ -396,7 +396,7 @@ done:
  * @param[out] str string with "linetype-word" (newly created)
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 getLineType(const char *buf, es_size_t lenBuf, size_t *offs, es_str_t **str)
 {
 	int r = -1;
@@ -426,7 +426,7 @@ done:	return r;
  * 	 	otherwise it is emptied.
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 getPrefix(const char *buf, es_size_t lenBuf, es_size_t offs, es_str_t **str)
 {
 	int r;
@@ -452,7 +452,7 @@ done:	return r;
  * @param[in] offs offset to-be-added text starts
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 extendPrefix(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	return es_addBuf(&ctx->rulePrefix, (char*)buf+offs, lenBuf - offs);
@@ -467,7 +467,7 @@ extendPrefix(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
  *                       the tagbucket is created if it is NULL
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct json_object **tagBucket)
 {
 	int r = -1;
@@ -500,7 +500,7 @@ done:	return r;
  *                       the tagbucket is created if it is NULL
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 processTags(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t *poffs, struct json_object **tagBucket)
 {
 	int r = -1;
@@ -550,7 +550,7 @@ done:	return r;
  * @param[in] offs offset where rule starts
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
@@ -577,7 +577,7 @@ done:	return r;
 }
 
 
-static inline int
+static int
 getTypeName(ln_ctx ctx,
 	const char *const __restrict__ buf,
 	const size_t lenBuf,
@@ -623,7 +623,7 @@ done:
  * @param[in] offs offset where rule starts
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 processType(ln_ctx ctx,
 	const char *const __restrict__ buf,
 	const size_t lenBuf,
@@ -665,7 +665,7 @@ done:	return r;
  * @param [out] strTag obtained tag, if successful
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 getFieldName(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
 {
 	int r = -1;
@@ -695,7 +695,7 @@ done:	return r;
  * @param[in] len length of buffer
  * @param[in/out] offs on entry: offset first unprocessed position
  */
-static inline void
+static void
 skipWhitespace(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs)
 {
 	while(*offs < lenBuf && isspace(buf[*offs])) {
@@ -723,7 +723,7 @@ skipWhitespace(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t le
  * @param [out] strTag obtained tag, if successful
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 getAnnotationOp(ln_ctx ctx, ln_annot *annot, const char *buf, es_size_t lenBuf, es_size_t *offs)
 {
 	int r = -1;
@@ -785,7 +785,7 @@ fail:	return -1;
  * @param[in] offs offset where annotation starts
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 processAnnotate(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r;
@@ -823,7 +823,7 @@ done:	return r;
  * @param[in] offs offset where annotation starts
  * @returns 0 on success, something else otherwise
  */
-static inline int
+static int
 processInclude(ln_ctx ctx, const char *buf, const size_t offs)
 {
 	int r;
