@@ -914,9 +914,10 @@ treeCreateRuleTableNonRoot(logrec_node_t *__restrict__ node,
 			tail = node->words[0]->word;
 		}
 		free((void*)msg);
-		asprintf((char**)&msg, "%s%s%s", beginOfMsg,
+		if(asprintf((char**)&msg, "%s%s%s", beginOfMsg,
 			tail,
-			(node->words[0]->flags.isSubword) ? "" : " ");
+			(node->words[0]->flags.isSubword) ? "" : " ") == -1)
+			{}; /* silence cc warning */
 		if(node->nterm) {
 			reportProgress("rule table create");
 			rule_table_etry_t *const rt_etry = ruleTableEtryCreate(rt);

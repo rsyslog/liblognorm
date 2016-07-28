@@ -433,7 +433,7 @@ deleteComponentID(struct ln_pdag *const __restrict dag)
  * because that ID could acutally be created by two sets of rules.
  * But this is the best we can do.
  */
-static const char *
+static void
 fixComponentID(struct ln_pdag *const __restrict__ dag, const char *const new)
 {
 	char *updated;
@@ -446,10 +446,11 @@ fixComponentID(struct ln_pdag *const __restrict__ dag, const char *const new)
 	}
 	if(i >= 1 && curr[i-1] == '%')
 		--i;
-	asprintf(&updated, "%.*s[%s|%s]", i, curr, curr+i, new+i);
+	if(asprintf(&updated, "%.*s[%s|%s]", i, curr, curr+i, new+i) == -1)
+		goto done;
 	deleteComponentID(dag);
 	dag->rb_id = updated;
-	return updated;
+done:	return;
 }
 /**
  * Assign human-readable identifiers (names) to each node. These are
@@ -461,6 +462,8 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 {
 	char *id = NULL;
 
+	if(prefix == NULL)
+		goto done;
 	if(dag->rb_id == NULL) {
 		dag->rb_id = strdup(prefix);
 	} else {
@@ -477,22 +480,26 @@ ln_pdagComponentSetIDs(ln_ctx ctx, struct ln_pdag *const dag, const char *prefix
 		ln_parser_t *prs = dag->parsers+i;
 		if(prs->prsid == PRS_LITERAL) {
 			if(prs->name == NULL) {
-				asprintf(&id, "%s%s", prefix,
-					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+				if(asprintf(&id, "%s%s", prefix,
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)) == -1)
+					goto done;
 			} else {
-				asprintf(&id, "%s%%%s:%s:%s%%", prefix,
+				if(asprintf(&id, "%s%%%s:%s:%s%%", prefix,
 					prs->name,
 					parserName(prs->prsid),
-					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data));
+					ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)) == -1)
+					goto done;
 			}
 		} else {
-			asprintf(&id, "%s%%%s:%s%%", prefix,
+			if(asprintf(&id, "%s%%%s:%s%%", prefix,
 				prs->name ? prs->name : "-",
-				parserName(prs->prsid));
+				parserName(prs->prsid)) == -1)
+					goto done;
 		}
 		ln_pdagComponentSetIDs(ctx, prs->node, id);
 		free(id);
 	}
+done:	return;
 }
 
 /**
