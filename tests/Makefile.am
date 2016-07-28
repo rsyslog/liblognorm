@@ -86,7 +86,7 @@ TESTS_SHELLSCRIPTS = \
 	field_checkpoint-lea_jsoncnf.sh \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
-	field_float.sh \ 
+	field_float.sh \
 	field_float_jsoncnf.sh \
 	very_long_logline_jsoncnf.sh
 
@@ -108,7 +108,7 @@ TESTS_SHELLSCRIPTS += \
 	field_cef_v1.sh \
 	field_checkpoint-lea_v1.sh \
 	field_duration_v1.sh \
-	field_float_v1.sh \ 
+	field_float_v1.sh \
 	field_cee-syslog_v1.sh \
 	field_tokenized.sh \
 	field_tokenized_with_invalid_ruledef.sh \
