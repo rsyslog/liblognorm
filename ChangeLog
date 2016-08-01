@@ -1,5 +1,13 @@
 ----------------------------------------------------------------------
-Version 2.0.1, 2016-??-??
+Version 2.0.1, 2016-08-01
+- fix public headers, which invalidly contained a strndup() definition
+  Thanks to Michael Biebel for this fix.
+- fix some issues in pkgconfig file
+  Thanks to Michael Biebel for this fix.
+- enhance build system to natively support systems with older
+  autoconf versions and/or missing autoconf-archive. In this case we
+  gracefully degrade functionality, but the build still is possible.
+  Among others, this enables builds on CentOS 5.
 ----------------------------------------------------------------------
 Version 2.0.0, 2016-07-21
 - completely rewritten, much feature-enhanced version
