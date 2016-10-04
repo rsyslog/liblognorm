@@ -179,7 +179,7 @@ read_line(FILE *fp)
 	size_t line_capacity = DEFAULT_LINE_SIZE;
 	char *line = NULL;
 	size_t line_len = 0;
-	char ch = 0;
+	int ch = 0;
 	do {
 		ch = fgetc(fp);
 		if (ch == EOF) break;
