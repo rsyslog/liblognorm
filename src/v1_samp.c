@@ -758,11 +758,11 @@ struct ln_v1_samp *
 ln_v1_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 {
 	struct ln_v1_samp *samp = NULL;
-    es_str_t *typeStr = NULL;
-    es_size_t offs;
+	es_str_t *typeStr = NULL;
+	es_size_t offs;
 
-    if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
-        goto done;
+	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
+		goto done;
 
 	if(!es_strconstcmp(typeStr, "prefix")) {
 		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
