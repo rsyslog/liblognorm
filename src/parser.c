@@ -161,7 +161,7 @@ PARSER_Parse(RFC5424Date)
 	int second;
 	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
 	__attribute__((unused)) int secfracPrecision;
-	char OffsetHour;	/* UTC offset in hours */
+	int OffsetHour;		/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
 	size_t len;
 	size_t orglen;
