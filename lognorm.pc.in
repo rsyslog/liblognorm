@@ -7,6 +7,6 @@ Name: lognorm
 Description: fast samples-based log normalization library
 Version: @VERSION@
 Requires: libfastjson
-Requires.private: libestr
 Libs: -L${libdir} -llognorm
+Libs.private: @pkg_config_libs_private@
 Cflags: -I${includedir}
