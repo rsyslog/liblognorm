@@ -350,6 +350,7 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 		if(!(   prs->prsid == PRS_LITERAL
 		     && prs->name == NULL
 		     && prs->node->flags.isTerminal == 0
+		     && prs->node->refcnt == 1
 		     && prs->node->nparsers == 1
 		     && prs->node->parsers[0].prsid == PRS_LITERAL)
 		  )
@@ -361,7 +362,6 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 		CHKR(ln_combineData_Literal(prs->parser_data, child_prs->parser_data));
 		ln_pdag *const node_del = prs->node;
 		prs->node = child_prs->node;
-
 		child_prs->node = NULL; /* remove, else this would be destructed! */
 		ln_pdagDelete(node_del);
 	}
@@ -834,7 +834,8 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	struct ln_pdag **nextnode)
 {
 	int r;
-	LN_DBGPRINTF(ctx, "ln_pdagAddParserInstance: %s", json_object_to_json_string(prscnf));
+	LN_DBGPRINTF(ctx, "ln_pdagAddParserInstance: %s, nextnode %p",
+		json_object_to_json_string(prscnf), *nextnode);
 	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
 	CHKN(parser);
 	LN_DBGPRINTF(ctx, "pdag: %p, parser %p", pdag, parser);
