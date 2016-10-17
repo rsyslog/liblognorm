@@ -43,6 +43,7 @@ TESTS_SHELLSCRIPTS = \
 	alternative_simple.sh \
 	alternative_three.sh \
 	alternative_nested.sh \
+	alternative_segfault.sh \
 	repeat_very_simple.sh \
 	repeat_simple.sh \
 	repeat_mismatch_in_while.sh \
