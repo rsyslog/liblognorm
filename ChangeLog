@@ -1,5 +1,12 @@
 ----------------------------------------------------------------------
 Version 2.0.2, 2016-10-17
+- bugfix: abort in literal path compaction when useing "alternative" parser
+  When using the "alternative" parser, literals nodes could be created with
+  multiple reference count. This is valid. However, literal path compaction
+  did not consider this case, and so "merged" these nodes, which lead to
+  pdag corruption and quickly to segfault.
+  closes https://github.com/rsyslog/liblognorm/issues/220
+  closes https://github.com/rsyslog/liblognorm/issues/153
 - bugfix: lognormalizer could loop
   This also caused the testbench to fail on some platforms.
   due too incorrect data type
