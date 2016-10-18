@@ -10,15 +10,15 @@ Version 2.0.2, 2016-10-17
 - bugfix: lognormalizer could loop
   This also caused the testbench to fail on some platforms.
   due too incorrect data type
-  Thanks to Michael Biebel for this fix.
+  Thanks to Michael Biebl for this fix.
 - fix misleading compiler warning
-  Thanks to Michael Biebel for this fix.
+  Thanks to Michael Biebl for this fix.
 ----------------------------------------------------------------------
 Version 2.0.1, 2016-08-01
 - fix public headers, which invalidly contained a strndup() definition
-  Thanks to Michael Biebel for this fix.
+  Thanks to Michael Biebl for this fix.
 - fix some issues in pkgconfig file
-  Thanks to Michael Biebel for this fix.
+  Thanks to Michael Biebl for this fix.
 - enhance build system to natively support systems with older
   autoconf versions and/or missing autoconf-archive. In this case we
   gracefully degrade functionality, but the build still is possible.
