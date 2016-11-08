@@ -65,6 +65,8 @@ AC_SUBST(LIBLOGNORM_LIBS)
 # modules we require
 PKG_CHECK_MODULES(LIBESTR, libestr >= 0.0.0)
 PKG_CHECK_MODULES(JSON_C, libfastjson,, )
+# add libestr flags to pkgconfig file for static linking
+AC_SUBST(pkg_config_libs_private, $LIBESTR_LIBS)
 
 # Regular expressions
 AC_ARG_ENABLE(regexp,
