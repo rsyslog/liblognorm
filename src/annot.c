@@ -220,7 +220,7 @@ ln_annotate(ln_ctx ctx, struct json_object *json, struct json_object *tagbucket)
 	const char *tagCstr;
 	int i;
 
-	ln_dbgprintf(ctx, "ln_annotate called");
+	ln_dbgprintf(ctx, "ln_annotate called [aroot=%p]", ctx->pas->aroot);
 	/* shortcut: terminate immediately if nothing to do... */
 	if(ctx->pas->aroot == NULL)
 		goto done;
