@@ -743,6 +743,11 @@ getAnnotationOp(ln_ctx ctx, ln_annot *annot, const char *buf, es_size_t lenBuf, 
 	case '+':
 		opc = ln_annot_ADD;
 		break;
+	case '#':
+		ln_dbgprintf(ctx, "inline comment in 'annotate' line: %s", buf);
+		*offs = lenBuf;
+		r = 0;
+		goto done;
 	case '-':
 		ln_dbgprintf(ctx, "annotate op '-' not yet implemented - failing");
 		/*FALLTHROUGH*/
