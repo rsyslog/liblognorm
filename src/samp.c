@@ -739,13 +739,14 @@ getAnnotationOp(ln_ctx ctx, ln_annot *annot, const char *buf, es_size_t lenBuf, 
 		goto done; /* nothing left to process (no error!) */
 	}
 
-	if(buf[i] == '+') {
+	switch(buf[i]) {
+	case '+':
 		opc = ln_annot_ADD;
-	} else if(buf[i] == '-') {
+		break;
+	case '-':
 		ln_dbgprintf(ctx, "annotate op '-' not yet implemented - failing");
-		goto fail;
-	} else {
-		ln_dbgprintf(ctx, "invalid annotate opcode '%c' - failing" , buf[i]);
+		/*FALLTHROUGH*/
+	default:ln_errprintf(ctx, 0, "invalid annotate operation '%c': %s", buf[i], buf+i);
 		goto fail;
 	}
 	i++;
