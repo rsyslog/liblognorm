@@ -27,7 +27,11 @@ execute() {
 	echo "====================="
 	set -x
     fi
-    echo "$1" | $cmd $ln_opts -r tmp.rulebase -e json > test.out 
+    if [ "$1" == "file" ]; then
+        $cmd $ln_opts -r tmp.rulebase -e json > test.out < $2
+    else
+        echo "$1" | $cmd $ln_opts -r tmp.rulebase -e json > test.out
+    fi
     echo "Out:"
     cat test.out
     if [ "x$debug" == "xon" ]; then

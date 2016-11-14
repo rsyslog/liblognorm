@@ -40,6 +40,7 @@ TESTS_SHELLSCRIPTS = \
 	seq_simple.sh \
 	runaway_rule.sh \
 	runaway_rule_comment.sh \
+	annotate.sh \
 	alternative_simple.sh \
 	alternative_three.sh \
 	alternative_nested.sh \
