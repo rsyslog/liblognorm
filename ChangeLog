@@ -1,5 +1,10 @@
 ----------------------------------------------------------------------
-Version 2.0.2, 2016-10-17
+Version 2.0.2, 2016-11-15
+- bugfix: no error was emitted on invalid "annotate" line
+- "annnotate": permit inline comments
+- fix a problem with cross-compilation
+  see also: https://github.com/rsyslog/liblognorm/pull/221
+  Thanks to Luca Boccassi for the patch
 - bugfix: abort in literal path compaction when useing "alternative" parser
   When using the "alternative" parser, literals nodes could be created with
   multiple reference count. This is valid. However, literal path compaction
@@ -13,6 +18,7 @@ Version 2.0.2, 2016-10-17
   Thanks to Michael Biebl for this fix.
 - fix misleading compiler warning
   Thanks to Michael Biebl for this fix.
+- testbench: add test for "annotate" functionality
 ----------------------------------------------------------------------
 Version 2.0.1, 2016-08-01
 - fix public headers, which invalidly contained a strndup() definition
