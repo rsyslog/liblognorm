@@ -1,4 +1,12 @@
 ----------------------------------------------------------------------
+Version 2.0.3, 2016-11-15
+- bugfix: no error was emitted on invalid "annotate" line
+- "annnotate": permit inline comments
+- fix a problem with cross-compilation
+  see also: https://github.com/rsyslog/liblognorm/pull/221
+  Thanks to Luca Boccassi for the patch
+- testbench: add test for "annotate" functionality
+----------------------------------------------------------------------
 Version 2.0.2, 2016-10-17
 - bugfix: abort in literal path compaction when useing "alternative" parser
   When using the "alternative" parser, literals nodes could be created with
