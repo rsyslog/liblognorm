@@ -5,6 +5,7 @@ Version 2.0.2, 2016-11-15
 - fix a problem with cross-compilation
   see also: https://github.com/rsyslog/liblognorm/pull/221
   Thanks to Luca Boccassi for the patch
+- testbench: add test for "annotate" functionality
 - bugfix: abort in literal path compaction when useing "alternative" parser
   When using the "alternative" parser, literals nodes could be created with
   multiple reference count. This is valid. However, literal path compaction
