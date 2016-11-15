@@ -21,17 +21,6 @@ matrix:
          compiler: clang
          dist: trusty
 
-#matrix:
-#  include:
-#    - compiler: gcc
-#       - sudo: required
-#       - sudo: required
-#         dist: trusty
-#    - compiler: clang
-#       - sudo: required
-#       - sudo: required
-#         dist: trusty
-
 before_install:
 - travis_retry sudo apt-get update -qq
 - travis_retry sudo apt-get install -qq libpcre3-dev libpcre3-dbg valgrind python-pip
@@ -42,6 +31,14 @@ before_install:
 install:
 - travis_retry sudo apt-get install -qq libestr-dev libfastjson-dev
 - travis_retry sudo apt-get install -qq clang
+# the following is a work-around to solve the
+# "too old autoconf-archive" problem
+- mkdir tmp
+- cd tmp
+- git clone git://git.sv.gnu.org/autoconf-archive.git
+- sudo cp autoconf-archive/m4/* /usr/share/aclocal
+- cd ..
+- rm -rf tmp
 
 script:
   - autoreconf --force --verbose --install
