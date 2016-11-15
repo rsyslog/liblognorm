@@ -114,7 +114,7 @@ parserName(const prsid_t id)
 	return name;
 }
 
-prsid_t 
+prsid_t
 ln_parserName2ID(const char *const __restrict__ name)
 {
 	unsigned i;
@@ -402,7 +402,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 		LN_DBGPRINTF(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
 			prs->node, i, parserName(prs->prsid), prs->name,
 			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
-		
+
 		optLitPathCompact(ctx, prs);
 
 		ln_pdagComponentOptimize(ctx, prs->node);
@@ -809,7 +809,7 @@ isLeaf(struct ln_pdag *dag)
  * @param[in] ctx
  * @param[in] prscnf json parser config *object* (no array!)
  * @param[in] pdag current pdag position (to which parser is to be added)
- * @param[in/out] nextnode contains point to the next node, either 
+ * @param[in/out] nextnode contains point to the next node, either
  *            an existing one or one newly created.
  *
  * The nextnode parameter permits to use this function to create
@@ -850,7 +850,7 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 			//        the order of json elements. We should do a JSON
 			//        comparison (a bit more complex). For now, it
 			//        works like we do it now.
-			// FIXME: if nextnode is set, check we can actually combine, 
+			// FIXME: if nextnode is set, check we can actually combine,
 			//        else err out
 			*nextnode = pdag->parsers[i].node;
 			r = 0;
@@ -935,7 +935,7 @@ done:
  * the next node, which is either newly created or previously existed.
  */
 static int
-ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag, 
+ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag,
 	const int mode, json_object *const prscnf, struct ln_pdag **nextnode)
 {
 	int r = LN_BADCONFIG;
@@ -1047,9 +1047,9 @@ void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level)
 
 
 /* developer debug aid, to be used for example as follows:
-   LN_DBGPRINTF(dag->ctx, "---------------------------------------");
-   ln_displayPDAG(dag);
-   LN_DBGPRINTF(dag->ctx, "=======================================");
+ * LN_DBGPRINTF(dag->ctx, "---------------------------------------");
+ * ln_displayPDAG(dag);
+ * LN_DBGPRINTF(dag->ctx, "=======================================");
  */
 void
 ln_displayPDAG(ln_ctx ctx)
@@ -1210,17 +1210,17 @@ done:
 static char *
 strrev(char *const __restrict__ str)
 {
-    char ch;
-    size_t i = strlen(str)-1,j=0;
-    while(i>j)
-    {
-        ch = str[i];
-        str[i]= str[j];
-        str[j] = ch;
-        i--;
-        j++;
-    }
-    return str;
+	char ch;
+	size_t i = strlen(str)-1,j=0;
+	while(i>j)
+	{
+		ch = str[i];
+		str[i]= str[j];
+		str[j] = ch;
+		i--;
+		j++;
+	}
+	return str;
 }
 
 /* note: "originalmsg" is NOT added as metadata in order to keep
@@ -1268,7 +1268,7 @@ addRuleMetadata(npb_t *const __restrict__ npb,
 		if(meta == NULL)
 			meta = json_object_new_object();
 		char hdr[128];
-		const size_t lenhdr 
+		const size_t lenhdr
 		  = snprintf(hdr, sizeof(hdr), "[PATHLEN:%d, PARSER CALLS gen:%d, literal:%d]",
 			     npb->astats.pathlen, npb->astats.parser_calls,
 			     npb->astats.lit_parser_calls);
@@ -1398,7 +1398,7 @@ tryParser(npb_t *const __restrict__ npb,
 	size_t parsedTo = npb->parsedTo;
 #	ifdef	ADVANCED_STATS
 	char hdr[16];
-	const size_t lenhdr 
+	const size_t lenhdr
 	  = snprintf(hdr, sizeof(hdr), "%d:", npb->astats.recursion_level);
 	es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
 	if(prs->prsid == PRS_LITERAL) {
@@ -1436,7 +1436,7 @@ tryParser(npb_t *const __restrict__ npb,
 		*pParsed = npb->parsedTo - *offs;
 		#ifdef	ADVANCED_STATS
 		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
-		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8); 
+		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8);
 		#endif
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(npb,
@@ -1486,7 +1486,7 @@ add_rule_to_mockup(npb_t *const __restrict__ npb,
 	const ln_parser_t *const __restrict__ prs)
 {
 	if(prs->prsid == PRS_LITERAL) {
-		const char *const val = 
+		const char *const val =
 			  ln_DataForDisplayLiteral(npb->ctx,
 				prs->parser_data);
 		add_str_reversed(npb, val, strlen(val));
@@ -1660,7 +1660,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 			CHKR(ln_annotate(ctx, *json_p, endNode->tags));
 		}
 		if(ctx->opts & LN_CTXOPT_ADD_ORIGINALMSG) {
-			/* originalmsg must be kept outside of metadata for 
+			/* originalmsg must be kept outside of metadata for
 			 * backward compatibility reasons.
 			 */
 			json_object_object_add(*json_p, ORIGINAL_MSG_KEY,

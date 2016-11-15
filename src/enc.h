@@ -26,10 +26,10 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
- 
+
 #ifndef LIBLOGNORM_ENC_H_INCLUDED
 #define	LIBLOGNORM_ENC_H_INCLUDED
-	
+
 int ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str);
 
 int ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData);

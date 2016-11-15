@@ -7,9 +7,9 @@
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *       http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -264,8 +264,8 @@ qs_compmi(const void *v1, const void *v2)
 	return strcmp(w1->word, w2->word);
 }
 #if 0 /* we don't need this at the moment, but want to preserve it
-       * in case we can need it again.
-       */
+	* in case we can need it again.
+	*/
 static int
 bs_compmi(const void *key, const void *mem)
 {
@@ -607,7 +607,7 @@ checkSubwords(logrec_node_t *const __restrict__ node)
 	if(checkCommonDelimiter(node, '=')) {
 		disjoinDelimiter(node, '=');
 	}
-#if 0 // this does not work, requies a seperate disjoin operation (4-parts) 
+#if 0 // this does not work, requies a seperate disjoin operation (4-parts)
 	if(checkCommonBraces(node, '[', ']')) {
 		disjoinDelimiter(node, '(');
 		disjoinDelimiter(node->child->child, ')');

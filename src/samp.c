@@ -98,7 +98,7 @@ ln_parseLegacyFieldDescr(ln_ctx ctx,
 
 	/* parse and process type (trailing whitespace must be trimmed) */
 	es_emptyStr(*str);
- 	size_t j = i;
+	size_t j = i;
 	/* scan for terminator */
 	while(j < lenBuf && buf[j] != ':' && buf[j] != '{' && buf[j] != '%')
 		++j;
@@ -319,7 +319,7 @@ parseLiteral(ln_ctx ctx, struct ln_pdag **pdag, es_str_t *rule,
 
 	/* we now add the string to the tree */
 	for(i = 0 ; cstr[i] != '\0' ; ++i) {
-		struct json_object *const prscnf = 
+		struct json_object *const prscnf =
 			newLiteralParserJSONConf(cstr[i]);
 		CHKN(prscnf);
 		CHKR(ln_pdagAddParser(ctx, pdag, prscnf));
@@ -472,7 +472,7 @@ addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct json_object **tagBucket)
 {
 	int r = -1;
 	char *cstr;
-	struct json_object *tag; 
+	struct json_object *tag;
 
 	if(*tagBucket == NULL) {
 		CHKN(*tagBucket = json_object_new_array());
@@ -615,7 +615,7 @@ done:
 
 /**
  * Process a type definition and add it to the PDAG
- * disconnected components. 
+ * disconnected components.
  *
  * @param[in] ctx current context
  * @param[in] buf line buffer

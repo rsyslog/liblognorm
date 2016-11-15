@@ -4,9 +4,9 @@
  * not to be installed.
  *//**
  * @mainpage
- * Liblognorm is an easy to use and fast samples-based log normalization 
+ * Liblognorm is an easy to use and fast samples-based log normalization
  * library.
- * 
+ *
  * It can be passed a stream of arbitrary log messages, one at a time, and for
  * each message it will output well-defined name-value pairs and a set of
  * tags describing the message.

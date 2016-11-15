@@ -52,7 +52,7 @@ static ln_ctx ctx;
 static int verbose = 0;
 #define OUTPUT_PARSED_RECS 0x01
 #define OUTPUT_UNPARSED_RECS 0x02
-static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS; 
+static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS;
 				/**< controls which records to output */
 static int outputSummaryLine = 0;
 static int outputNbrUnparsed = 0;
@@ -249,7 +249,7 @@ normalize(void)
 			json_object_put(json);
 			json = NULL;
 		}
-        free(line);
+	free(line);
 	}
 	if(outputNbrUnparsed && numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
@@ -399,7 +399,7 @@ int main(int argc, char *argv[])
 		case 'v':
 			verbose++;
 			break;
-		case 'E': /* encoder-specific format string (will be validated by encoder) */ 
+		case 'E': /* encoder-specific format string (will be validated by encoder) */
 			encFmt = es_newStrFromCStr(optarg, strlen(optarg));
 			break;
 		case 'p':

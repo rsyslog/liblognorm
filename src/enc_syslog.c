@@ -1,12 +1,12 @@
 /**
  * @file enc_syslog.c
  * Encoder for syslog format.
- * This file contains code from all related objects that is required in 
+ * This file contains code from all related objects that is required in
  * order to encode syslog format. The core idea of putting all of this into
  * a single file is that this makes it very straightforward to write
  * encoders for different encodings, as all is in one place.
  */
-/* 
+/*
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
@@ -108,7 +108,7 @@ ln_addField_Syslog(char *name, struct json_object *field, es_str_t **str)
 	int needComma = 0;
 	struct json_object *obj;
 	int i;
-	
+
 	assert(field != NULL);
 	assert(str != NULL);
 	assert(*str != NULL);
@@ -159,7 +159,7 @@ ln_addTags_Syslog(struct json_object *taglist, es_str_t **str)
 	int i;
 
 	assert(json_object_is_type(taglist, json_type_array));
-	
+
 	CHKR(es_addBuf(str, " event.tags=\"", 13));
 	for (i = json_object_array_length(taglist) - 1; i >= 0; i--) {
 		if(needComma)
@@ -181,14 +181,14 @@ ln_fmtEventToRFC5424(struct json_object *json, es_str_t **str)
 {
 	int r = -1;
 	struct json_object *tags;
-	
+
 	assert(json != NULL);
 	assert(json_object_is_type(json, json_type_object));
 	if((*str = es_newStr(256)) == NULL)
 		goto done;
 
 	es_addBuf(str, "[cee@115", 8);
-	
+
 	if(json_object_object_get_ex(json, "event.tags", &tags)) {
 		CHKR(ln_addTags_Syslog(tags, str));
 	}

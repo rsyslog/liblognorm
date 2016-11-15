@@ -142,7 +142,7 @@ ln_v1_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t *
 
 	/* parse and process type (trailing whitespace must be trimmed) */
 	es_emptyStr(*str);
- 	size_t j = i;
+	size_t j = i;
 	/* scan for terminator */
 	while(j < lenBuf && buf[j] != ':' && buf[j] != '%')
 		++j;
@@ -239,27 +239,27 @@ ln_v1_parseFieldDescr(ln_ctx ctx, es_str_t *rule, es_size_t *bufOffs, es_str_t *
 		node->parser_data_destructor = regex_parser_data_destructor;
 	}
 #endif
-    else if (!es_strconstcmp(*str, "recursive")) {
-        node->parser = ln_parseRecursive;
-        constructor_fn = recursive_parser_data_constructor;
-        node->parser_data_destructor = recursive_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "descent")) {
-        node->parser = ln_parseRecursive;
-        constructor_fn = descent_parser_data_constructor;
-        node->parser_data_destructor = recursive_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "interpret")) {
-        node->parser = ln_parseInterpret;
-        constructor_fn = interpret_parser_data_constructor;
-        node->parser_data_destructor = interpret_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "suffixed")) {
-        node->parser = ln_parseSuffixed;
-        constructor_fn = suffixed_parser_data_constructor;
-        node->parser_data_destructor = suffixed_parser_data_destructor;
-    } else if (!es_strconstcmp(*str, "named_suffixed")) {
-        node->parser = ln_parseSuffixed;
-        constructor_fn = named_suffixed_parser_data_constructor;
-        node->parser_data_destructor = suffixed_parser_data_destructor;
-    } else {
+	else if (!es_strconstcmp(*str, "recursive")) {
+		node->parser = ln_parseRecursive;
+		constructor_fn = recursive_parser_data_constructor;
+		node->parser_data_destructor = recursive_parser_data_destructor;
+	} else if (!es_strconstcmp(*str, "descent")) {
+		node->parser = ln_parseRecursive;
+		constructor_fn = descent_parser_data_constructor;
+		node->parser_data_destructor = recursive_parser_data_destructor;
+	} else if (!es_strconstcmp(*str, "interpret")) {
+		node->parser = ln_parseInterpret;
+		constructor_fn = interpret_parser_data_constructor;
+		node->parser_data_destructor = interpret_parser_data_destructor;
+	} else if (!es_strconstcmp(*str, "suffixed")) {
+		node->parser = ln_parseSuffixed;
+		constructor_fn = suffixed_parser_data_constructor;
+		node->parser_data_destructor = suffixed_parser_data_destructor;
+	} else if (!es_strconstcmp(*str, "named_suffixed")) {
+		node->parser = ln_parseSuffixed;
+		constructor_fn = named_suffixed_parser_data_constructor;
+		node->parser_data_destructor = suffixed_parser_data_destructor;
+	} else {
 		cstr = es_str2cstr(*str, NULL);
 		ln_errprintf(ctx, 0, "invalid field type '%s'", cstr);
 		free(cstr);
@@ -489,7 +489,7 @@ addTagStrToBucket(ln_ctx ctx, es_str_t *tagname, struct json_object **tagBucket)
 {
 	int r = -1;
 	char *cstr;
-	struct json_object *tag; 
+	struct json_object *tag;
 
 	if(*tagBucket == NULL) {
 		CHKN(*tagBucket = json_object_new_array());

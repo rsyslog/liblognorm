@@ -40,7 +40,7 @@
 
 #ifdef FEATURE_REGEXP
 #include <pcre.h>
-#include <errno.h>			
+#include <errno.h>
 #endif
 
 
@@ -65,7 +65,7 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 
 /* parsers for the primitive types
  *
- * All parsers receive 
+ * All parsers receive
  *
  * @param[in] str the to-be-parsed string
  * @param[in] strLen length of the to-be-parsed string
@@ -100,7 +100,7 @@ int ln_parse##ParserName(const char *const str, const size_t strLen, \
 parserdone: \
 	r = 0; \
 	goto done; /* suppress warnings */ \
-done: 
+done:
 
 #define ENDFailParser \
 	return r; \
@@ -211,7 +211,7 @@ PARSER(RFC5424Date)
 
 	year = hParseInt(&pszTS, &len);
 
-	/* We take the liberty to accept slightly malformed timestamps e.g. in 
+	/* We take the liberty to accept slightly malformed timestamps e.g. in
 	 * the format of 2003-9-1T1:0:0.  */
 	if(len == 0 || *pszTS++ != '-') goto done;
 	--len;
@@ -558,7 +558,7 @@ PARSER(Float)
 
 	i = *offs;
 
-	if (c[i] == '-') i++; 
+	if (c[i] == '-') i++;
 
 	for (; i < strLen; i++) {
 		if (c[i] == '.') {
@@ -566,11 +566,11 @@ PARSER(Float)
 			seen_point = 1;
 		} else if (! isdigit(c[i])) {
 			break;
-		} 
+		}
 	}
 	if (i == *offs)
 		goto done;
-		
+
 	/* success, persist */
 	*parsed = i - *offs;
 	r = 0; /* success */
@@ -713,7 +713,7 @@ PARSER(Word)
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != ' ') 
+	while(i < strLen && c[i] != ' ')
 		i++;
 
 	if(i == *offs)
@@ -759,7 +759,7 @@ PARSER(StringTo)
 		    j++;
 		    if(c[m] != toFind[j])
 			break;
-		    if (j == k) 
+		    if (j == k)
 			chkstr = 1;
 		}
 	    }
@@ -791,7 +791,7 @@ PARSER(Alpha)
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && isalpha(c[i])) 
+	while(i < strLen && isalpha(c[i]))
 		i++;
 
 	if(i == *offs) {
@@ -829,7 +829,7 @@ PARSER(CharTo)
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
+	while(i < strLen && c[i] != cTerm)
 		i++;
 
 	if(i == *offs || i == strLen || c[i] != cTerm)
@@ -866,7 +866,7 @@ PARSER(CharSeparated)
 	i = *offs;
 
 	/* search end of word */
-	while(i < strLen && c[i] != cTerm) 
+	while(i < strLen && c[i] != cTerm)
 		i++;
 
 	/* success, persist */
@@ -878,7 +878,7 @@ PARSER(CharSeparated)
 
 /**
  * Parse yet-to-be-matched portion of string by re-applying
- * top-level rules again. 
+ * top-level rules again.
  */
 #define DEFAULT_REMAINING_FIELD_NAME "tail"
 
@@ -1373,7 +1373,7 @@ void regex_parser_data_destructor(void** dataPtr) {
 
 /**
  * Parse yet-to-be-matched portion of string by re-applying
- * top-level rules again. 
+ * top-level rules again.
  */
 typedef enum interpret_type {
 	/* If you change this, be sure to update json_type_to_name() too */
@@ -1530,7 +1530,7 @@ void interpret_parser_data_destructor(void** dataPtr) {
 struct suffixed_parser_data_s {
 	int nsuffix;
 	int *suffix_offsets;
-    int *suffix_lengths;
+	int *suffix_lengths;
 	char* suffixes_str;
 	ln_ctx ctx;
 	char* value_field_name;
@@ -1544,8 +1544,8 @@ PARSER(Suffixed) {
 	json_object *unparsed = NULL;
 	json_object *parsed_raw = NULL;
 	json_object *parsed_value = NULL;
-    json_object *result = NULL;
-    json_object *suffix = NULL;
+	json_object *result = NULL;
+	json_object *suffix = NULL;
 
 	struct suffixed_parser_data_s *pData = (struct suffixed_parser_data_s*) node->parser_data;
 
@@ -1563,23 +1563,23 @@ PARSER(Suffixed) {
 		} else {
 			json_object_object_get_ex(parsed_raw, DEFAULT_MATCHED_FIELD_NAME, &parsed_value);
 			json_object_object_get_ex(parsed_raw, DEFAULT_REMAINING_FIELD_NAME, &unparsed);
-            const char* unparsed_frag = json_object_get_string(unparsed);
+		const char* unparsed_frag = json_object_get_string(unparsed);
 			for(i = 0; i < pData->nsuffix; i++) {
-                const char* possible_suffix = pData->suffixes_str + pData->suffix_offsets[i];
+		const char* possible_suffix = pData->suffixes_str + pData->suffix_offsets[i];
 				int len = pData->suffix_lengths[i];
 				if (strncmp(possible_suffix, unparsed_frag, len) == 0) {
-                    CHKN(result = json_object_new_object());
-                    CHKN(suffix = json_object_new_string(possible_suffix));
+				CHKN(result = json_object_new_object());
+				CHKN(suffix = json_object_new_string(possible_suffix));
 					json_object_get(parsed_value);
-                    json_object_object_add(result, pData->value_field_name, parsed_value);
-                    json_object_object_add(result, pData->suffix_field_name, suffix);
+				json_object_object_add(result, pData->value_field_name, parsed_value);
+				json_object_object_add(result, pData->suffix_field_name, suffix);
 					*parsed = strLen - *offs - json_object_get_string_len(unparsed) + len;
-                    break;
-                }
+				break;
+				}
 			}
-            if (result != NULL) {
-                *value = result;
-            }
+			if (result != NULL) {
+				*value = result;
+			}
 		}
 	}
 FAILParser
@@ -1644,7 +1644,7 @@ static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_field
 	while ((tok = strtok_r(tok_input, tokenizer, &tok_saveptr)) != NULL) {
 		tok_input = NULL;
 		pData->suffix_offsets[i] = tok - pData->suffixes_str;
-        pData->suffix_lengths[i++] = strlen(tok);
+	pData->suffix_lengths[i++] = strlen(tok);
 	}
 
 	CHKN(field_type = pcons_arg(args, 2, NULL));
@@ -1767,7 +1767,7 @@ PARSER(OpQuotedString)
 	i = *offs;
 
 	if(c[i] != '"') {
-		while(i < strLen && c[i] != ' ') 
+		while(i < strLen && c[i] != ' ')
 			i++;
 
 		if(i == *offs)
@@ -1781,7 +1781,7 @@ PARSER(OpQuotedString)
 	    ++i;
 
 	    /* search end of string */
-	    while(i < strLen && c[i] != '"') 
+	    while(i < strLen && c[i] != '"')
 		    i++;
 
 	    if(i == strLen || c[i] != '"')
@@ -1824,7 +1824,7 @@ PARSER(QuotedString)
 	++i;
 
 	/* search end of string */
-	while(i < strLen && c[i] != '"') 
+	while(i < strLen && c[i] != '"')
 		i++;
 
 	if(i == strLen || c[i] != '"')
@@ -1899,7 +1899,7 @@ done:
  *   outside:192.168.52.102/50349
  *   inside:192.168.1.15/56543 (192.168.1.112/54543)
  *   outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
- *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8)
  *   inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
  *   192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
  * From this, we conclude the format is:
@@ -2239,7 +2239,7 @@ done:
 }
 
 
-/* skip past the IPv6 address block, parse pointer is set to 
+/* skip past the IPv6 address block, parse pointer is set to
  * first char after the block. Returns an error if already at end
  * of string.
  * @param[in] str parse buffer
@@ -2358,11 +2358,11 @@ isValidIPTablesNameChar(const char c)
 	return ('A' <= c && c <= 'Z') ? 1 : 0;
 }
 
-/* helper to iptables parser, parses out a a single name=value pair 
+/* helper to iptables parser, parses out a a single name=value pair
  */
 static int
 parseIPTablesNameValue(const char *const __restrict__ str,
-	const size_t strLen, 
+	const size_t strLen,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot)
 {
@@ -2535,7 +2535,7 @@ isValidNameChar(const char c)
 		|| c == '-'
 		) ? 1 : 0;
 }
-/* helper to NameValue parser, parses out a a single name=value pair 
+/* helper to NameValue parser, parses out a a single name=value pair
  *
  * name must be alphanumeric characters, value must be non-whitespace
  * characters, if quoted than with symmetric quotes. Supported formats
@@ -2547,7 +2547,7 @@ isValidNameChar(const char c)
  */
 static int
 parseNameValue(const char *const __restrict__ str,
-	const size_t strLen, 
+	const size_t strLen,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot)
 {

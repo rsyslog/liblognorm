@@ -69,7 +69,7 @@ struct ln_fieldList_s {
  */
 struct ln_ptree {
 	ln_ctx		ctx;	/**< our context */
-	ln_ptree	**parentptr; /**< pointer to *us* *inside* the parent 
+	ln_ptree	**parentptr; /**< pointer to *us* *inside* the parent
 				BUT this is NOT a pointer to the parent! */
 	ln_fieldList_t	*froot; /**< root of field list */
 	ln_fieldList_t	*ftail; /**< tail of field list */
@@ -135,7 +135,7 @@ void ln_deletePTreeNode(ln_fieldList_t *node);
  * @memberof ln_ptree
  *
  * @param[in] tree pointer to ptree to modify
- * @param[in] fielddescr a fully populated (and initialized) 
+ * @param[in] fielddescr a fully populated (and initialized)
  * 		field description node
  * @returns 0 on success, something else otherwise
  */

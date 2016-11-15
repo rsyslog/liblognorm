@@ -2,13 +2,13 @@
  * @file enc-xml.c
  * Encoder for XML format.
  *
- * This file contains code from all related objects that is required in 
+ * This file contains code from all related objects that is required in
  * order to encode this format. The core idea of putting all of this into
  * a single file is that this makes it very straightforward to write
  * encoders for different encodings, as all is in one place.
  *
  */
-/* 
+/*
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
@@ -48,7 +48,7 @@ static char hexdigit[16] =
 	{'0', '1', '2', '3', '4', '5', '6', '7', '8',
 	 '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 #endif
-	 
+
 /* TODO: XML encoding for Unicode characters is as of RFC4627 not fully
  * supported. The algorithm is that we must build the wide character from
  * UTF-8 (if char > 127) and build the full 4-octet Unicode character out
@@ -67,9 +67,9 @@ ln_addValue_XML(const char *value, es_str_t **str)
 	int j;
 #endif
 
-	assert(str != NULL); 
+	assert(str != NULL);
 	assert(*str != NULL);
-	assert(value != NULL); 
+	assert(value != NULL);
 	// TODO: support other types!
 	es_addBuf(str, "<value>", 7);
 
@@ -137,7 +137,7 @@ ln_addField_XML(char *name, struct json_object *field, es_str_t **str)
 	struct json_object *obj;
 
 	assert(field != NULL);
-	assert(str != NULL); 
+	assert(str != NULL);
 	assert(*str != NULL);
 
 	CHKR(es_addBuf(str, "<field name=\"", 13));
