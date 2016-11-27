@@ -940,7 +940,7 @@ ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 		}
 		if(buf[0] == '\n') {
 			fsetpos(repo, &inner_fpos);
-			fread(buf, sizeof(char), 1, repo); /* skip '\n' */
+			if(fread(buf, sizeof(char), 1, repo)) {}; /* skip '\n' */
 			continue;
 		} else if(buf[0] == '#') {
 			fsetpos(repo, &inner_fpos);
@@ -1085,7 +1085,12 @@ tryOpenRBFile(ln_ctx ctx, const char *const file)
 	}
 
 	char *fname = NULL;
-	asprintf(&fname, (rb_lib[strlen(rb_lib)-1] == '/') ? "%s%s" : "%s/%s", rb_lib, file);
+	int len;
+	len = asprintf(&fname, (rb_lib[strlen(rb_lib)-1] == '/') ? "%s%s" : "%s/%s", rb_lib, file);
+	if(len == -1) {
+		ln_errprintf(ctx, errno, "alloc error: cannot open rulebase '%s'", file);
+		goto done;	
+	}
 	if((repo = fopen(fname, "r")) == NULL) {
 		const int eno2 = errno;
 		ln_errprintf(ctx, eno1, "cannot open rulebase '%s'", file);
