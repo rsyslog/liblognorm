@@ -58,7 +58,7 @@ struct ln_annot_s {
 
 /**
  * annotation set object
- * 
+ *
  * Note: we do not (yet) use a hash table. However, performance should
  * be gained by pre-processing rules so that tags directly point into
  * the annotation. This is even faster than hash table access.

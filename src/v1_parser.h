@@ -40,138 +40,138 @@
  * @return 0 on success, something else otherwise
  */
 
-/** 
+/**
  * Parser for RFC5424 date.
  */
 int ln_parseRFC5424Date(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for RFC3164 date.
  */
 int ln_parseRFC3164Date(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for numbers.
  */
 int ln_parseNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for real-number in floating-pt representation
  */
 int ln_parseFloat(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for hex numbers.
  */
 int ln_parseHexNumber(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Parser for kernel timestamps.
  */
 int ln_parseKernelTimestamp(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for whitespace
  */
 int ln_parseWhitespace(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Parser for Words (SP-terminated strings).
  */
 int ln_parseWord(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Parse everything up to a specific string.
  */
 int ln_parseStringTo(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for Alphabetic words (no numbers, punct, ctrl, space).
  */
 int ln_parseAlpha(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Parse everything up to a specific character.
  */
 int ln_parseCharTo(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse everything up to a specific character (relaxed constraints, suitable for CSV)
  */
 int ln_parseCharSeparated(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Get everything till the rest of string.
  */
 int ln_parseRest(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse an optionally quoted string.
  */
 int ln_parseOpQuotedString(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse a quoted string.
  */
 int ln_parseQuotedString(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse an ISO date.
  */
 int ln_parseISODate(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
 
-/** 
+/**
  * Parse a timestamp in 12hr format.
  */
 int ln_parseTime12hr(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse a timestamp in 24hr format.
  */
 int ln_parseTime24hr(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse a duration.
  */
 int ln_parseDuration(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for IPv4 addresses.
  */
 int ln_parseIPv4(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser for IPv6 addresses.
  */
 int ln_parseIPv6(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse JSON.
  */
 int ln_parseJSON(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse cee syslog.
  */
 int ln_parseCEESyslog(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parse iptables log, the new way
  */
 int ln_parsev2IPTables(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser Cisco interface specifiers
  */
 int ln_parseCiscoInterfaceSpec(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);
 
-/** 
+/**
  * Parser 48 bit MAC layer addresses.
  */
 int ln_parseMAC48(const char *str, size_t strlen, size_t *offs, const ln_fieldList_t *node, size_t *parsed, struct json_object **value);

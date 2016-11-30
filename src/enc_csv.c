@@ -6,13 +6,13 @@
  * has been made. At this time (2010-12), I do NOT even try to
  * stay inline with the discussion.
  *
- * This file contains code from all related objects that is required in 
+ * This file contains code from all related objects that is required in
  * order to encode this format. The core idea of putting all of this into
  * a single file is that this makes it very straightforward to write
  * encoders for different encodings, as all is in one place.
  *
  */
-/* 
+/*
  * liblognorm - a fast samples-based log normalization library
  * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
  *
@@ -69,9 +69,9 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 	char numbuf[4];
 	int j;
 
-	assert(str != NULL); 
+	assert(str != NULL);
 	assert(*str != NULL);
-	assert(buf != NULL); 
+	assert(buf != NULL);
 
 	for(i = 0; i < strlen(buf); i++) {
 		c = buf[i];
@@ -193,7 +193,7 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 		goto done;
 
 	CHKN(namelist = es_str2cstr(extraData, NULL));
-			
+
 	for (name = namelist; name != NULL; name = nn) {
 		for (nn = name; *nn != '\0' && *nn != ',' && *nn != ' '; nn++)
 			{ /* do nothing */ }

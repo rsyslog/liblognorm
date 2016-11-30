@@ -28,7 +28,7 @@ typedef uint8_t prsid_t;
 
 struct ln_type_pdag;
 
-/** 
+/**
  * parser IDs.
  *
  * These identfy a parser. VERY IMPORTANT: they must start at zero

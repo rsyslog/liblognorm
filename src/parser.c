@@ -43,7 +43,7 @@
 
 #ifdef FEATURE_REGEXP
 #include <pcre.h>
-#include <errno.h>			
+#include <errno.h>
 #endif
 
 
@@ -68,7 +68,7 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 
 /* parser _parse interface
  *
- * All parsers receive 
+ * All parsers receive
  *
  * @param[in] npb->str the to-be-parsed string
  * @param[in] npb->strLen length of the to-be-parsed string
@@ -101,14 +101,14 @@ int ln_v2_parse##ParserName( \
 parserdone: \
 	r = 0; \
 	goto done; /* suppress warnings */ \
-done: 
+done:
 
 #define ENDFailParser \
 	return r; \
 }
 
 
-/* Return printable representation of parser content for 
+/* Return printable representation of parser content for
  * display purposes. This must not be 100% exact, but provide
  * a good indication of what it contains for a human.
  * @param[data] data parser data block
@@ -172,7 +172,7 @@ PARSER_Parse(RFC5424Date)
 
 	year = hParseInt(&pszTS, &len);
 
-	/* We take the liberty to accept slightly malformed timestamps e.g. in 
+	/* We take the liberty to accept slightly malformed timestamps e.g. in
 	 * the format of 2003-9-1T1:0:0.  */
 	if(len == 0 || *pszTS++ != '-') goto done;
 	--len;
@@ -527,7 +527,7 @@ PARSER_Parse(Float)
 
 	i = *offs;
 
-	if (c[i] == '-') i++; 
+	if (c[i] == '-') i++;
 
 	for (; i < npb->strLen; i++) {
 		if (c[i] == '.') {
@@ -535,11 +535,11 @@ PARSER_Parse(Float)
 			seen_point = 1;
 		} else if (! myisdigit(c[i])) {
 			break;
-		} 
+		}
 	}
 	if (i == *offs)
 		goto done;
-		
+
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
@@ -747,7 +747,7 @@ PARSER_Parse(Word)
 	i = *offs;
 
 	/* search end of word */
-	while(i < npb->strLen && c[i] != ' ') 
+	while(i < npb->strLen && c[i] != ' ')
 		i++;
 
 	if(i == *offs)
@@ -860,7 +860,7 @@ PARSER_Parse(Alpha)
 	i = *offs;
 
 	/* search end of word */
-	while(i < npb->strLen && isalpha(c[i])) 
+	while(i < npb->strLen && isalpha(c[i]))
 		i++;
 
 	if(i == *offs) {
@@ -1162,7 +1162,7 @@ PARSER_Parse(OpQuotedString)
 	i = *offs;
 
 	if(c[i] != '"') {
-		while(i < npb->strLen && c[i] != ' ') 
+		while(i < npb->strLen && c[i] != ' ')
 			i++;
 
 		if(i == *offs)
@@ -1176,7 +1176,7 @@ PARSER_Parse(OpQuotedString)
 	    ++i;
 
 	    /* search end of string */
-	    while(i < npb->strLen && c[i] != '"') 
+	    while(i < npb->strLen && c[i] != '"')
 		    i++;
 
 	    if(i == npb->strLen || c[i] != '"')
@@ -1219,7 +1219,7 @@ PARSER_Parse(QuotedString)
 	++i;
 
 	/* search end of string */
-	while(i < npb->strLen && c[i] != '"') 
+	while(i < npb->strLen && c[i] != '"')
 		i++;
 
 	if(i == npb->strLen || c[i] != '"')
@@ -1296,7 +1296,7 @@ done:
  *   outside:192.168.52.102/50349
  *   inside:192.168.1.15/56543 (192.168.1.112/54543)
  *   outside:192.168.1.13/50179 (192.168.1.13/50179)(LOCAL\some.user)
- *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8) 
+ *   outside:192.168.1.25/41850(LOCAL\RG-867G8-DEL88D879BBFFC8)
  *   inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
  *   192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
  * From this, we conclude the format is:
@@ -1644,7 +1644,7 @@ done:
 }
 
 
-/* skip past the IPv6 address block, parse pointer is set to 
+/* skip past the IPv6 address block, parse pointer is set to
  * first char after the block. Returns an error if already at end
  * of string.
  * @param[in] npb->str parse buffer
@@ -1764,7 +1764,7 @@ isValidIPTablesNameChar(const char c)
 	return ('A' <= c && c <= 'Z') ? 1 : 0;
 }
 
-/* helper to iptables parser, parses out a a single name=value pair 
+/* helper to iptables parser, parses out a a single name=value pair
  */
 static int
 parseIPTablesNameValue(npb_t *const npb,
@@ -1940,7 +1940,7 @@ isValidNameChar(const char c)
 		|| c == '-'
 		) ? 1 : 0;
 }
-/* helper to NameValue parser, parses out a a single name=value pair 
+/* helper to NameValue parser, parses out a a single name=value pair
  *
  * name must be alphanumeric characters, value must be non-whitespace
  * characters, if quoted than with symmetric quotes. Supported formats
@@ -2658,12 +2658,12 @@ PARSER_Construct(Repeat)
 				r = LN_BADCONFIG;
 				goto done;
 			}
-			endnode = data->parser = ln_newPDAG(ctx); 
+			endnode = data->parser = ln_newPDAG(ctx);
 			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
 		} else if(!strcmp(key, "while")) {
-			endnode = data->while_cond = ln_newPDAG(ctx); 
+			endnode = data->while_cond = ln_newPDAG(ctx);
 			json_object_get(val); /* prevent free in pdagAddParser */
 			CHKR(ln_pdagAddParser(ctx, &endnode, val));
 			endnode->flags.isTerminal = 1;
@@ -2720,7 +2720,7 @@ stringSetPermittedChar(struct data_String *const data, char c, int val)
 	const int i = (unsigned) c / 8;
 	const int shft = (unsigned) c % 8;
 	const unsigned mask = ~(1 << shft);
-	perm_arr[i] = (perm_arr[i] & (0xff 
+	perm_arr[i] = (perm_arr[i] & (0xff
 #endif
 	data->perm_chars[(unsigned)c] = val;
 }

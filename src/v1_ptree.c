@@ -121,7 +121,7 @@ static int
 setPrefix(struct ln_ptree *tree, unsigned char *buf, size_t lenBuf, size_t offs)
 {
 	int r;
-LN_DBGPRINTF(tree->ctx, "setPrefix lenBuf %zu, offs %zu", lenBuf, offs); 
+LN_DBGPRINTF(tree->ctx, "setPrefix lenBuf %zu, offs %zu", lenBuf, offs);
 	tree->lenPrefix = lenBuf - offs;
 	if(tree->lenPrefix > sizeof(tree->prefix)) {
 		/* too-large for standard buffer, need to alloc one */
@@ -226,7 +226,7 @@ done:	return r;
  * a mismatch in the common prefix requires that. This function more or less
  * keeps the tree as it is, just changes the structure. No new node is added.
  * Usually, it is desired to add a new node. This must be made afterwards.
- * Note that we need to create a new tree *in front of* the current one, as 
+ * Note that we need to create a new tree *in front of* the current one, as
  * the current one contains field etc. subtree pointers.
  * @param[in] tree tree to split
  * @param[in] offs offset into common prefix (must be less than prefix length!)
@@ -356,7 +356,7 @@ done:	return r;
 }
 
 
-int 
+int
 ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 {
 	int r;
@@ -375,7 +375,7 @@ ln_addFDescrToPTree(struct ln_ptree **tree, ln_fieldList_t *node)
 	 * TODO: optimized, check logic
 	 */
 	for(curr = (*tree)->froot ; curr != NULL ; curr = curr->next) {
-		if(!es_strcmp(curr->name, node->name) 
+		if(!es_strcmp(curr->name, node->name)
 				&& curr->parser == node->parser
 				&& ((curr->raw_data == NULL && node->raw_data == NULL)
 					|| (curr->raw_data != NULL && node->raw_data != NULL
@@ -605,7 +605,7 @@ LN_DBGPRINTF(tree->ctx, "%zu enter iptables parser, len %zu", *offs, strLen);
 				++pstr;
 			}
 		} else {
-			CHKN(fval = es_newStrFromCStr("[*PRESENT*]", 
+			CHKN(fval = es_newStrFromCStr("[*PRESENT*]",
 					sizeof("[*PRESENT*]")-1));
 		}
 		char *cn, *cv;
@@ -743,7 +743,7 @@ LN_DBGPRINTF(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 					LN_DBGPRINTF(tree->ctx, "%zu: parser matches at %zu", offs, i);
 					if(es_strbufcmp(node->name, (unsigned char*)"-", 1)) {
 						/* Store the value here; create json if not already created */
-						if (value == NULL) { 
+						if (value == NULL) {
 							CHKN(cstr = strndup(str + i, parsed));
 							value = json_object_new_string(cstr);
 							free(cstr);
@@ -819,7 +819,7 @@ LN_DBGPRINTF(tree->ctx, "%zu got return %d", offs, r);
 		LN_DBGPRINTF(tree->ctx, "%zu: parser matches at %zu", offs, i);
 		if(es_strbufcmp(restMotifNode->name, (unsigned char*)"-", 1)) {
 			/* Store the value here; create json if not already created */
-			if (value == NULL) { 
+			if (value == NULL) {
 				CHKN(cstr = strndup(str + i, parsed));
 				value = json_object_new_string(cstr);
 				free(cstr);
