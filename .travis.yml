@@ -21,17 +21,6 @@ matrix:
          compiler: clang
          dist: trusty
 
-#matrix:
-#  include:
-#    - compiler: gcc
-#       - sudo: required
-#       - sudo: required
-#         dist: trusty
-#    - compiler: clang
-#       - sudo: required
-#       - sudo: required
-#         dist: trusty
-
 before_install:
 - travis_retry sudo apt-get update -qq
 - travis_retry sudo apt-get install -qq libpcre3-dev libpcre3-dbg valgrind python-pip
@@ -42,14 +31,22 @@ before_install:
 install:
 - travis_retry sudo apt-get install -qq libestr-dev libfastjson-dev
 - travis_retry sudo apt-get install -qq clang
+# the following is a work-around to solve the
+# "too old autoconf-archive" problem
+- mkdir tmp
+- cd tmp
+- git clone git://git.sv.gnu.org/autoconf-archive.git
+- sudo cp autoconf-archive/m4/* /usr/share/aclocal
+- cd ..
+- rm -rf tmp
 
 script:
   - autoreconf --force --verbose --install
 # note: we enable regexp to check the v1 compatibility layer. v2 does 
 # not have it, nor is it recommended to enable it.
-  - if [ "$CC" == "gcc" ] ; then ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp --enable-valgrind; fi
+  - if [ "$CC" == "gcc" ] ; then ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-docs --enable-regexp --enable-valgrind; fi
   - if [ "$CC" == "gcc" ] ; then make && make dist && make check && sudo make install; fi
   # here come the clang test. So far, we just call the static analyzer
   - if [ "$CC" == "clang" ] ; then export CFLAGS="-Werror -Wfatal-errors -std=c99" ; fi
-  - if [ "$CC" == "clang" ] ; then scan-build ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --disable-silent-rules --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-regexp ; fi
+  - if [ "$CC" == "clang" ] ; then scan-build ./configure --prefix=/opt/liblognorm --build=x86_64-pc-linux-gnu --host=x86_64-pc-linux-gnu --mandir=/usr/share/man --infodir=/usr/share/info --datadir=/usr/share --sysconfdir=/etc --localstatedir=/var/lib --disable-dependency-tracking --libdir=/usr/lib64 --enable-debug --enable-testbench --enable-regexp ; fi
   - if [ "$CC" == "clang" ] ; then scan-build --status-bugs make ; fi
