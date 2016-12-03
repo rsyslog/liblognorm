@@ -19,6 +19,12 @@ improve performance and simplicity for many client applications.
 Unfortunately, this change broke interface compatibility (and there was
 no way to avoid that, obviously...).
 
+In 2015, most parts of liblognorm were redesigned and rewritten as part
+of Rainer Gerhards' master thesis. For full technical details of how
+liblognorm operates, and why it is so fast, please have a look at
+
+https://www.researchgate.net/publication/310545144_Efficient_Normalization_of_IT_Log_Messages_under_Realtime_Conditions
+
 The current library is the result of that effort. Application developers
 are encouraged to switch to this version, as it provides the benefit of
 a simpler API. This version is now being tracked by the git master branch.
