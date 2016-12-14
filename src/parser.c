@@ -1967,10 +1967,22 @@ parseNameValue(npb_t *const npb,
 	const size_t lenName = i - iName;
 	++i; /* skip '=' */
 
+	char quoting = npb->str[i]; // end of string
+	if (i < npb->strLen && (quoting == '"' || quoting == '\''))
+		++i;
+	else
+		quoting = 0; // str[i] can't be null, is a good default value
+
 	const size_t iVal = i;
-	while(i < npb->strLen && !isspace(npb->str[i]))
+	while(i < npb->strLen &&
+	     ((quoting && npb->str[i] != quoting) || (!quoting && !isspace(npb->str[i]))))
 		++i;
 	const size_t lenVal = i - iVal;
+
+	if (i < npb->strLen && npb->str[i] == quoting)
+		++i;
+	else if (quoting)
+		goto done;
 
 	/* parsing OK */
 	*offs = i;
