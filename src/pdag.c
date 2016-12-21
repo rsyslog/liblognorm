@@ -352,7 +352,10 @@ optLitPathCompact(ln_ctx ctx, ln_parser_t *prs)
 		     && prs->node->flags.isTerminal == 0
 		     && prs->node->refcnt == 1
 		     && prs->node->nparsers == 1
-		     && prs->node->parsers[0].prsid == PRS_LITERAL)
+		     /* we need to do some checks on the child as well */
+		     && prs->node->parsers[0].prsid == PRS_LITERAL
+		     && prs->node->parsers[0].name == NULL
+		     && prs->node->parsers[0].node->refcnt == 1)
 		  )
 			goto done;
 
