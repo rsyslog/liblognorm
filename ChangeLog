@@ -1,4 +1,11 @@
 ----------------------------------------------------------------------
+Version 2.0.3, 2017-??-??
+- bugfix: literal parser does not always store value if name is specified
+  if
+  rule=:%{"type":"literal", "text":"a", "name":"var"}%
+  is used and matching message is provided, variable var ist not persisted.
+  see also http://lists.adiscon.net/pipermail/rsyslog/2016-December/043985.html
+----------------------------------------------------------------------
 Version 2.0.2, 2016-11-15
 - bugfix: no error was emitted on invalid "annotate" line
 - "annnotate": permit inline comments
