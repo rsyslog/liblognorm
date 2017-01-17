@@ -36,7 +36,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2013 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2017 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -223,6 +223,18 @@ void ln_enableDebug(ln_ctx ctx, int i);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_loadSamples(ln_ctx ctx, const char *file);
+
+/**
+ * Load a rulebase via a string.
+ *
+ * Note: this can only load v2 samples, v1 is NOT supported.
+ *
+ * @param[in] ctx The library context to apply callback to.
+ * @param[in] string The string with the actual rulebase.
+ *
+ * @return Returns zero on success, something else otherwise.
+ */
+int ln_loadSamplesFromString(ln_ctx ctx, const char *string);
 
 /**
  * Normalize a message.

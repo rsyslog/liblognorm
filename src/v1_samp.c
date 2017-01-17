@@ -809,7 +809,7 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 		} else if(c == '\n') {
 			++ctx->conf_ln_nbr;
 			if(inParser) {
-				if(ln_sampChkRunawayRule(ctx, repo)) {
+				if(ln_sampChkRunawayRule(ctx, repo, NULL)) {
 					/* ignore previous rule */
 					inParser = 0;
 					i = 0;
@@ -818,7 +818,7 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 			if(!inParser && i != 0)
 				done = 1;
 		} else if(c == '#' && i == 0) {
-			ln_sampSkipCommentLine(ctx, repo);
+			ln_sampSkipCommentLine(ctx, repo, NULL);
 			i = 0; /* back to beginning */
 		} else {
 			if(c == '%')
