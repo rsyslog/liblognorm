@@ -606,7 +606,8 @@ done:	return r;
  * @returns 0 on success, something else otherwise
  */
 static int
-getFieldName(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs, es_str_t **strTag)
+getFieldName(ln_ctx __attribute__((unused)) ctx, const char *buf, es_size_t lenBuf, es_size_t *offs,
+es_str_t **strTag)
 {
 	int r = -1;
 	es_size_t i;
