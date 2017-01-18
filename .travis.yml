@@ -1,3 +1,5 @@
+#group: deprecated
+
 language: c
 
 compiler:
@@ -24,7 +26,7 @@ matrix:
 before_install:
 - travis_retry sudo apt-get update -qq
 - travis_retry sudo apt-get install -qq libpcre3-dev libpcre3-dbg valgrind python-pip
-- travis_retry sudo pip install sphinx
+- travis_retry sudo pip install -U sphinx
 - travis_retry sudo add-apt-repository ppa:adiscon/v8-stable -y
 - travis_retry sudo apt-get update -qq
 
