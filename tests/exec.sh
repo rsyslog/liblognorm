@@ -39,6 +39,23 @@ execute() {
     fi
 }
 
+execute_with_string() {
+    # $1 must be rulebase string
+    # $2 must be sample string
+    if [ "x$debug" == "xon" ]; then
+	echo "======rulebase======="
+	cat tmp.rulebase
+	echo "====================="
+	set -x
+    fi
+    echo "$2" | $cmd $ln_opts -R "$1" -e json > test.out
+    echo "Out:"
+    cat test.out
+    if [ "x$debug" == "xon" ]; then
+	set +x
+    fi
+}
+
 assert_output_contains() {
     if [ "x$GREP" == "x" ]; then
        GREP=grep
