@@ -883,7 +883,8 @@ done:
 	return r;
 }
 
-static int ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag, const int mode, json_object *const prscnf, struct ln_pdag **nextnode);
+static int ln_pdagAddParserInternal(ln_ctx ctx, struct ln_pdag **pdag, const int mode, json_object *const prscnf,
+struct ln_pdag **nextnode);
 
 /**
  * add parsers to current pdag. This is used

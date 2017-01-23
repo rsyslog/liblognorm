@@ -43,6 +43,7 @@ install:
 - rm -rf tmp
 
 script:
+  - CI/check_codestyle.sh
   - autoreconf --force --verbose --install
 # note: we enable regexp to check the v1 compatibility layer. v2 does 
 # not have it, nor is it recommended to enable it.

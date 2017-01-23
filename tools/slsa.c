@@ -432,7 +432,8 @@ disjoinDelimiter(logrec_node_t *node,
 	for(int i = 0 ; i < node->nwords ; ++i) {
 		struct wordinfo *wi;
 		char *const delimptr = strchr(node->words[i]->word, Delimiter);
-//printf("splitting off tail %d of %d [%p]:'%s' [full: '%s']\n", i, node->nwords, delimptr+1, delimptr+1, node->words[i]->word);fflush(stdout);
+//printf("splitting off tail %d of %d [%p]:'%s' [full: '%s']\n"
+//, i, node->nwords, delimptr+1, delimptr+1, node->words[i]->word);fflush(stdout);
 		wi = wordinfoNew(strdup(delimptr+1));
 		wi->flags.isSubword = 1;
 		wordDetectSyntax(wi, strlen(wi->word), 0);

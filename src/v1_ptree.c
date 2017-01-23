@@ -435,8 +435,10 @@ ln_displayPTree(struct ln_ptree *tree, int level)
 	es_addBuf(&str, (char*) prefixBase(tree), tree->lenPrefix);
 	cstr = es_str2cstr(str, NULL);
 	es_deleteStr(str);
-	LN_DBGPRINTF(tree->ctx, "%ssubtree%s %p (prefix: '%s', children: %d literals, %d fields) [visited %u backtracked %u terminated %u]",
-		     indent, tree->flags.isTerminal ? " TERM" : "", tree, cstr, nChildLit, nChildField, tree->stats.visited, tree->stats.backtracked, tree->stats.terminated);
+	LN_DBGPRINTF(tree->ctx, "%ssubtree%s %p (prefix: '%s', children: %d literals, %d fields) [visited %u "
+	"backtracked %u terminated %u]",
+			indent, tree->flags.isTerminal ? " TERM" : "", tree, cstr, nChildLit, nChildField,
+			tree->stats.visited, tree->stats.backtracked, tree->stats.terminated);
 	free(cstr);
 	/* display char subtrees */
 	for(i = 0 ; i < 256 ; ++i) {
@@ -900,7 +902,8 @@ done:	return r;
  * Data is sent to given file ptr.
  */
 void
-ln_fullPTreeStats(ln_ctx ctx, FILE __attribute__((unused)) *const fp, const int  __attribute__((unused)) extendedStats)
+ln_fullPTreeStats(ln_ctx ctx, FILE __attribute__((unused)) *const fp,
+const int  __attribute__((unused)) extendedStats)
 {
 	ln_displayPTree(ctx->ptree, 0);
 }
