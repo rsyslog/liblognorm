@@ -902,14 +902,30 @@ done:
 }
 
 
+/**
+ * Read a character from our sample source.
+ */
+static int
+ln_sampReadChar(const ln_ctx ctx, FILE *const __restrict__ repo, const char **inpbuf)
+{
+	int c;
+	assert((repo != NULL && inpbuf == NULL) || (repo == NULL && inpbuf != NULL));
+	if(repo == NULL) {
+		c = (**inpbuf == '\0') ? EOF : *(*inpbuf)++;
+	} else {
+		c = fgetc(repo);
+	}
+	return c;
+}
+
 /* note: comments are only supported at beginning of line! */
 /* skip to end of line */
 void
-ln_sampSkipCommentLine(ln_ctx ctx, FILE * const __restrict__ repo)
+ln_sampSkipCommentLine(ln_ctx ctx, FILE * const __restrict__ repo, const char **inpbuf)
 {
 	int c;
 	do {
-		c = fgetc(repo);
+		c = ln_sampReadChar(ctx, repo, inpbuf);
 	} while(c != EOF && c != '\n');
 	++ctx->conf_ln_nbr;
 }
@@ -922,7 +938,7 @@ ln_sampSkipCommentLine(ln_ctx ctx, FILE * const __restrict__ repo)
  * @return 1 if this is a runaway rule, 0 if not
  */
 int
-ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
+ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo, const char **inpbuf)
 {
 	int r = 1;
 	fpos_t fpos;
@@ -945,7 +961,7 @@ ln_sampChkRunawayRule(ln_ctx ctx, FILE *const __restrict__ repo)
 		} else if(buf[0] == '#') {
 			fsetpos(repo, &inner_fpos);
 			const unsigned conf_ln_nbr_save = ctx->conf_ln_nbr;
-			ln_sampSkipCommentLine(ctx, repo);
+			ln_sampSkipCommentLine(ctx, repo, inpbuf);
 			ctx->conf_ln_nbr = conf_ln_nbr_save;
 			continue;
 		}
@@ -968,7 +984,6 @@ done:
 	return r;
 }
 
-
 /**
  * Read a rule (sample) from repository (sequentially).
  *
@@ -977,12 +992,16 @@ done:
  * pdag.
  *
  * @param[in] ctx current library context
- * @param[in] repo repository descriptor
+ * @param[in] repo repository descriptor if file input is desired
+ * @param[in/out] ptr to ptr of input buffer; this is used if a string is
+ *                provided instead of a file. If so, this pointer is advanced
+ *                as data is consumed.
  * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occured.
  * @return standard error code
  */
 static int
-ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ isEof)
+ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, const char **inpbuf,
+	int *const __restrict__ isEof)
 {
 	int r = 0;
 	char buf[64*1024]; /**< max size of rule - TODO: make configurable */
@@ -991,7 +1010,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 	int inParser = 0;
 	int done = 0;
 	while(!done) {
-		int c = fgetc(repo);
+		const int c = ln_sampReadChar(ctx, repo, inpbuf);
 		if(c == EOF) {
 			*isEof = 1;
 			if(i == 0)
@@ -1001,7 +1020,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 		} else if(c == '\n') {
 			++ctx->conf_ln_nbr;
 			if(inParser) {
-				if(ln_sampChkRunawayRule(ctx, repo)) {
+				if(ln_sampChkRunawayRule(ctx, repo, inpbuf)) {
 					/* ignore previous rule */
 					inParser = 0;
 					i = 0;
@@ -1010,7 +1029,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict__ i
 			if(!inParser && i != 0)
 				done = 1;
 		} else if(c == '#' && i == 0) {
-			ln_sampSkipCommentLine(ctx, repo);
+			ln_sampSkipCommentLine(ctx, repo, inpbuf);
 			i = 0; /* back to beginning */
 		} else {
 			if(c == '%')
@@ -1137,7 +1156,7 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	/* now we are in our native code */
 	++ctx->conf_ln_nbr; /* "version=2" is line 1! */
 	while(!isEof) {
-		CHKR(ln_sampRead(ctx, repo, &isEof));
+		CHKR(ln_sampRead(ctx, repo, NULL, &isEof));
 	}
 	fclose(repo);
 	r = 0;
@@ -1148,3 +1167,25 @@ done:
 	return r;
 }
 
+/* @return 0 if all is ok, 1 if an error occured */
+int
+ln_sampLoadFromString(ln_ctx ctx, const char *string)
+{
+	int r = 1;
+	int isEof = 0;
+
+	if(string == NULL)
+		goto done;
+
+	ln_dbgprintf(ctx, "loading v2 rulebase from string '%s'", string);
+	ctx->version = 2;
+	while(!isEof) {
+		CHKR(ln_sampRead(ctx, NULL, &string, &isEof));
+	}
+	r = 0;
+
+	if(ctx->include_level == 1)
+		ln_pdagOptimize(ctx);
+done:
+	return r;
+}

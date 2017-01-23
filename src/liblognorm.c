@@ -171,3 +171,20 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 done:
 	return r;
 }
+
+int
+ln_loadSamplesFromString(ln_ctx ctx, const char *string)
+{
+	int r = 0;
+	const char *tofree;
+	CHECK_CTX;
+	ctx->conf_file = tofree = strdup("--NO-FILE--");
+	ctx->conf_ln_nbr = 0;
+	++ctx->include_level;
+	r = ln_sampLoadFromString(ctx, string);
+	--ctx->include_level;
+	free((void*)tofree);
+	ctx->conf_file = NULL;
+done:
+	return r;
+}

@@ -47,7 +47,7 @@ liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -l
 # info on version-info:
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # Note: v2 now starts at version 5, as v1 previously also had 4
-liblognorm_la_LDFLAGS = -version-info 5:0:0
+liblognorm_la_LDFLAGS = -version-info 6:0:1
 
 EXTRA_DIST = \
 	internal.h \

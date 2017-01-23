@@ -34,6 +34,9 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_ipaddr_dotdot2.sh \
 	usrdef_ipaddr_dotdot3.sh \
 	missing_line_ending.sh \
+	lognormalizer-invld-call.sh \
+	string_rb_simple.sh \
+	string_rb_simple_2_lines.sh \
 	names.sh \
 	literal.sh \
 	include.sh \

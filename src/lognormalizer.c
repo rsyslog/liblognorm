@@ -217,7 +217,7 @@ normalize(void)
 	long long unsigned numWrongTag = 0;
 	char *mandatoryTagCstr = NULL;
 	int line_nbr = 0;	/* must be int to keep compatible with older json-c */
-	
+
 	if (mandatoryTag != NULL) {
 		mandatoryTagCstr = es_str2cstr(mandatoryTag, NULL);
 	}
@@ -340,6 +340,7 @@ int main(int argc, char *argv[])
 {
 	int opt;
 	char *repository = NULL;
+	int usedRB = 0; /* 0=no rule; 1=rule from rulebase; 2=rule from string */
 	int ret = 0;
 	FILE *fpStats = NULL;
 	FILE *fpStatsDOT = NULL;
@@ -350,8 +351,8 @@ int main(int argc, char *argv[])
 		ret = 1;
 		goto exit;
 	}
-	
-	while((opt = getopt(argc, argv, "d:s:S:e:r:E:vVpPt:To:hHULx:")) != -1) {
+
+	while((opt = getopt(argc, argv, "d:s:S:e:r:R:E:vVpPt:To:hHULx:")) != -1) {
 		switch (opt) {
 		case 'V':
 			printVersion();
@@ -434,7 +435,20 @@ int main(int argc, char *argv[])
 			}
 			break;
 		case 'r': /* rule base to use */
-			repository = optarg;
+			if(usedRB != 2) {
+				repository = optarg;
+				usedRB = 1;
+			} else {
+				usedRB = -1;
+			}
+			break;
+		case 'R':
+			if(usedRB != 1) {
+				repository = optarg;
+				usedRB = 2;
+			} else {
+				usedRB = -1;
+			}
 			break;
 		case 't': /* if given, only messages tagged with the argument
 			     are output */
@@ -451,9 +465,15 @@ int main(int argc, char *argv[])
 			break;
 		}
 	}
-	
+
 	if(repository == NULL) {
-		complain("Samples repository must be given (-r)");
+		complain("Samples repository or String must be given (-r or -R)");
+		ret = 1;
+		goto exit;
+	}
+
+	if(usedRB == -1) {
+		complain("Only use one rulebase (-r or -R)");
 		ret = 1;
 		goto exit;
 	}
@@ -464,9 +484,16 @@ int main(int argc, char *argv[])
 		ln_enableDebug(ctx, 1);
 	}
 
-	if(ln_loadSamples(ctx, repository)) {
-		fprintf(stderr, "fatal error: cannot load rulebase\n");
-		exit(1);
+	if(usedRB == 1) {
+		if(ln_loadSamples(ctx, repository)) {
+			fprintf(stderr, "fatal error: cannot load rulebase\n");
+			exit(1);
+		}
+	} else if(usedRB == 2) {
+		if(ln_loadSamplesFromString(ctx, repository)) {
+			fprintf(stderr, "fatal error: cannot load rule from String\n");
+			exit(1);
+		}
 	}
 
 	if(verbose > 0)
