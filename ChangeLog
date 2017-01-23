@@ -1,5 +1,9 @@
 ----------------------------------------------------------------------
 Version 2.0.3, 2017-??-??
+- add ability to load rulebase from a string
+  introduces new API:
+  int ln_loadSamplesFromString(ln_ctx ctx, const char *string);
+  closes https://github.com/rsyslog/liblognorm/issues/239
 - bugfix: literal parser does not always store value if name is specified
   if
   rule=:%{"type":"literal", "text":"a", "name":"var"}%
