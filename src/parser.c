@@ -2866,7 +2866,7 @@ PARSER_Parse(String)
 		goto done;
 
 	const size_t trmChkIdx = (bHaveQuotes) ? i+1 : i;
-	if(npb->str[trmChkIdx] != ' ')
+	if(npb->str[trmChkIdx] != ' ' && trmChkIdx != npb->strLen)
 		goto done;
 
 	/* success, persist */
