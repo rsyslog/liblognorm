@@ -75,6 +75,7 @@ TESTS_SHELLSCRIPTS = \
 	field_kernel_timestamp.sh \
 	field_kernel_timestamp_jsoncnf.sh \
 	field_whitespace.sh \
+	rule_last_str_long.sh \
 	field_whitespace_jsoncnf.sh \
 	field_rest.sh \
 	field_rest_jsoncnf.sh \
