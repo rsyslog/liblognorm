@@ -47,7 +47,6 @@
  */
 
 #include "config.h"
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -57,10 +56,9 @@
 #include <getopt.h>
 #include <limits.h>
 
-#include "json_compatibility.h"
 #include "liblognorm.h"
 #include "internal.h"
-#include "parser.h"
+#include "v1_parser.h"
 #include "syntaxes.h"
 
 #define MAXLINE 32*1024
