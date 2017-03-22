@@ -68,6 +68,7 @@ TESTS_SHELLSCRIPTS = \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
 	field_hexnumber_range_jsoncnf.sh \
+	rule_last_str_short.sh \
 	field_mac48.sh \
 	field_mac48_jsoncnf.sh \
 	field_name_value.sh \
@@ -75,6 +76,7 @@ TESTS_SHELLSCRIPTS = \
 	field_kernel_timestamp.sh \
 	field_kernel_timestamp_jsoncnf.sh \
 	field_whitespace.sh \
+	rule_last_str_long.sh \
 	field_whitespace_jsoncnf.sh \
 	field_rest.sh \
 	field_rest_jsoncnf.sh \
