@@ -46,6 +46,9 @@ assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor", "unparsed-data": "CEF:0|
 execute 'CEF:1|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a \= value cc=field 3'
 assert_output_json_eq '{ "originalmsg": "CEF:1|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a \\= value cc=field 3", "unparsed-data": "CEF:1|Vendor|Product|Version|Signature ID|some name|Severity| aa=field1 bb=this is a \\= value cc=field 3" }'
 
+execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|normalField=value spacedField=value with space emptyFieldMiddle= quotedField="/sample?arg\=value&other\=data" emptyFieldTail='
+assert_output_json_eq '{ "f": { "DeviceVendor": "Vendor", "DeviceProduct": "Product", "DeviceVersion": "Version", "SignatureID": "Signature ID", "Name": "some name", "Severity": "Severity", "Extensions": { "normalField": "value", "spacedField": "value with space", "emptyFieldMiddle": "", "quotedField": "\"\/sample?arg=value&other=data\"", "emptyFieldTail": "" } } }'
+
 execute ''
 assert_output_json_eq '{ "originalmsg": "", "unparsed-data": "" }'
 

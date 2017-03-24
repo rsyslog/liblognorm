@@ -2251,7 +2251,7 @@ cefParseExtensions(npb_t *const npb,
 			++i;
 		iName = i;
 		CHKR(cefParseName(npb, &i));
-		if(i+1 >= npb->strLen || npb->str[i] != '=')
+		if(i+1 > npb->strLen || npb->str[i] != '=')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
 		++i; /* skip '=' */
@@ -2388,7 +2388,6 @@ PARSER_Parse(CEF)
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &sigID));
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &name));
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &severity));
-	++i; /* skip over terminal '|' */
 
 	/* OK, we now know we have a good header. Now, we need
 	 * to process extensions.
