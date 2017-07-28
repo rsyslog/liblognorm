@@ -82,8 +82,8 @@ struct ln_parser_s {
 	prsid_t prsid;		/**< parser ID (for lookup table) */
 	ln_pdag *node;		/**< node to branch to if parser succeeded */
 	void *parser_data;	/**< opaque data that the field-parser understands */
-	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
-	int prio;		/**< priority (combination of user- and parser-specific parts) */
+	int custType;	   /**< index of custom type, if such is used */
+	int prio;		    /**< priority (combination of user- and parser-specific parts) */
 	const char *name;	/**< field name */
 	const char *conf;	/**< configuration as printable json for comparison reasons */
 };
@@ -92,7 +92,7 @@ struct ln_parser_info {
 	const char *name;	/**< parser name as used in rule base */
 	int prio;		/**< parser specific prio in range 0..255 */
 	int (*construct)(ln_ctx ctx, json_object *const json, void **);
-	int (*parser)(npb_t *npb, size_t*, void *const,
+	int (*parser)(npb_t *npb, size_t*, void *const, const char *,
 				  size_t*, struct json_object **); /**< parser to use */
 	void (*destruct)(ln_ctx, void *const); /* note: destructor is only needed if parser data exists */
 #ifdef ADVANCED_STATS
@@ -252,7 +252,7 @@ int ln_pdagOptimize(ln_ctx ctx);
 void ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int);
 ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
-struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
+int ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
 void ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp);
 
 /* friends */
@@ -262,7 +262,10 @@ ln_normalizeRec(npb_t *const __restrict__ npb,
 	const size_t offs,
 	const int bPartialMatch,
 	struct json_object *json,
-	struct ln_pdag **endNode
+	struct ln_pdag **endNode,
+	int failOnDuplicate,
+	json_object *cur_json_object,
+	const char *parser_name
 );
 
 #endif /* #ifndef LOGNORM_PDAG_H_INCLUDED */
