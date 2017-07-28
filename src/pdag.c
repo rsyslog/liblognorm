@@ -132,18 +132,21 @@ ln_parserName2ID(const char *const __restrict__ name)
 /* find type pdag in table. If "bAdd" is set, add it if not
  * already present, a new entry will be added.
  * Returns NULL on error, ptr to type pdag entry otherwise
+ *
+ * We return the index here so that previously parsed rules/types before a realloc
+ * don't end up with a pointer to freed memory
  */
-struct ln_type_pdag *
+int
 ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 {
-	struct ln_type_pdag *td = NULL;
+	int td = -1;
 	int i;
 
 	LN_DBGPRINTF(ctx, "ln_pdagFindType, name '%s', bAdd: %d, nTypes %d",
 		name, bAdd, ctx->nTypes);
 	for(i = 0 ; i < ctx->nTypes ; ++i) {
 		if(!strcmp(ctx->type_pdags[i].name, name)) {
-			td = ctx->type_pdags + i;
+			td = i;
 			goto done;
 		}
 	}
@@ -162,10 +165,10 @@ ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd)
 		goto done;
 	}
 	ctx->type_pdags = newarr;
-	td = ctx->type_pdags + ctx->nTypes;
-	++ctx->nTypes;
-	td->name = strdup(name);
-	td->pdag = ln_newPDAG(ctx);
+	/* td now is index of new member and nTypes is index+1 (count) */
+	td = ctx->nTypes++;
+	ctx->type_pdags[td].name = strdup(name);
+	ctx->type_pdags[td].pdag = ln_newPDAG(ctx);
 done:
 	return td;
 }
@@ -203,7 +206,7 @@ ln_newParser(ln_ctx ctx,
 	json_object *json;
 	const char *val;
 	prsid_t prsid;
-	struct ln_type_pdag *custType = NULL;
+	int custType = -1;
 	const char *name = NULL;
 	const char *textconf = json_object_to_json_string(prscnf);
 	int parserPrio;
@@ -219,7 +222,7 @@ ln_newParser(ln_ctx ctx,
 		prsid = PRS_CUSTOM_TYPE;
 		custType = ln_pdagFindType(ctx, val, 0);
 		parserPrio = 16; /* hopefully relatively specific... */
-		if(custType == NULL) {
+		if(custType < 0) {
 			ln_errprintf(ctx, 0, "unknown user-defined type '%s'", val);
 			goto done;
 		}
@@ -1316,6 +1319,37 @@ done:
 }
 
 
+static int
+checkDuplicate(const ln_parser_t *const prs,
+			   struct json_object *json,
+			   struct json_object *value,
+			   const char *check)
+{
+	int r = 0;
+
+	if (NULL != value && NULL != json) {
+		struct json_object_iterator it = json_object_iter_begin(value);
+		struct json_object_iterator itEnd = json_object_iter_end(value);
+		while (!json_object_iter_equal(&it, &itEnd)) {
+			const char *key = json_object_iter_peek_name(&it);
+			if(key[0] == '.' && key[1] == '.' && key[2] == '\0') {
+				key = prs->name;
+			}
+			if (json_object_object_get_ex(json, key, NULL)) {
+				r = 1;
+				break;
+			}
+			json_object_iter_next(&it);
+		}
+	}
+
+	if (r == 0 && NULL != json && NULL != check && json_object_object_get_ex(json, check, NULL)) {
+		r = 1;
+	}
+
+	return r;
+}
+
 /* Do some fixup to the json that we cannot do on a lower layer */
 static int
 fixJSON(struct ln_pdag *dag,
@@ -1396,12 +1430,16 @@ tryParser(npb_t *const __restrict__ npb,
 	size_t *offs,
 	size_t *const __restrict__ pParsed,
 	struct json_object **value,
-	const ln_parser_t *const prs
+	const ln_parser_t *const prs,
+	int failOnDuplicate,
+	struct json_object *cur_json_object,
+	const char *parser_name
 	)
 {
-	int r;
+	int r = LN_WRONGPARSER;
 	struct ln_pdag *endNode = NULL;
 	size_t parsedTo = npb->parsedTo;
+	struct ln_type_pdag *custType = NULL;;
 #	ifdef	ADVANCED_STATS
 	char hdr[16];
 	const size_t lenhdr
@@ -1433,12 +1471,17 @@ tryParser(npb_t *const __restrict__ npb,
 #	endif
 
 	if(prs->prsid == PRS_CUSTOM_TYPE) {
+		if (prs->custType < 0 || prs->custType >= dag->ctx->nTypes) {
+			LN_DBGPRINTF(dag->ctx, "tryParser: Invalid custom type index: %d (%d types)", prs->custType, dag->ctx->nTypes);
+			goto done;
+		}
 		if(*value == NULL)
 			*value = json_object_new_object();
-		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", prs->custType->name);
-		r = ln_normalizeRec(npb, prs->custType->pdag, *offs, 1, *value, &endNode);
+		custType = &dag->ctx->type_pdags[prs->custType];
+		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", custType->name);
+		r = ln_normalizeRec(npb, custType->pdag, *offs, 1, *value, &endNode, failOnDuplicate, cur_json_object, parser_name);
 		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, "
-			"offs %zd, *pParsed %zd", prs->custType->name, r, *offs, *pParsed);
+			"offs %zd, *pParsed %zd", custType->name, r, *offs, *pParsed);
 		*pParsed = npb->parsedTo - *offs;
 		#ifdef	ADVANCED_STATS
 		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
@@ -1446,8 +1489,9 @@ tryParser(npb_t *const __restrict__ npb,
 		#endif
 	} else {
 		r = parser_lookup_table[prs->prsid].parser(npb,
-			offs, prs->parser_data, pParsed, (prs->name == NULL) ? NULL : value);
+			offs, prs->parser_data, parser_name, pParsed, (prs->name == NULL) ? NULL : value);
 	}
+done:
 	LN_DBGPRINTF(npb->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
 	npb->parsedTo = parsedTo;
 
@@ -1534,7 +1578,10 @@ ln_normalizeRec(npb_t *const __restrict__ npb,
 	const size_t offs,
 	const int bPartialMatch,
 	struct json_object *json,
-	struct ln_pdag **endNode
+	struct ln_pdag **endNode,
+	int failOnDuplicate,
+	struct json_object *cur_json_object,
+	const char *parser_name
 	)
 {
 	int r = LN_WRONGPARSER;
@@ -1544,7 +1591,7 @@ ln_normalizeRec(npb_t *const __restrict__ npb,
 	size_t parsedTo = npb->parsedTo;
 	size_t parsed = 0;
 	struct json_object *value;
-	
+
 LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 
 	++dag->stats.called;
@@ -1554,8 +1601,12 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 #endif
 
 	/* now try the parsers */
-	for(iprs = 0 ; iprs < dag->nparsers && r != 0 ; ++iprs) {
+	for(iprs = 0 ; iprs < dag->nparsers && r != 0; ++iprs) {
 		const ln_parser_t *const prs = dag->parsers + iprs;
+		if (failOnDuplicate && checkDuplicate(prs, cur_json_object, NULL, prs->name)) {
+			LN_DBGPRINTF(dag->ctx, "parser field '%s' already exists with skip duplicate set, skipping", prs->name);
+			continue;
+		}
 		if(dag->ctx->debug) {
 			LN_DBGPRINTF(dag->ctx, "%zu/%d:trying '%s' parser for field '%s', "
 				     "data '%s'",
@@ -1566,15 +1617,16 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 		}
 		i = offs;
 		value = NULL;
-		localR = tryParser(npb, dag, &i, &parsed, &value, prs);
+		localR = tryParser(npb, dag, &i, &parsed, &value, prs, failOnDuplicate, json, prs->name);
 		if(localR == 0) {
 			parsedTo = i + parsed;
 			/* potential hit, need to verify */
 			LN_DBGPRINTF(dag->ctx, "%zu: potential hit, trying subtree %p",
 				offs, prs->node);
 			r = ln_normalizeRec(npb, prs->node, parsedTo,
-					    bPartialMatch, json, endNode);
+						bPartialMatch, json, endNode, failOnDuplicate, cur_json_object,	parser_name);
 			LN_DBGPRINTF(dag->ctx, "%zu: subtree returns %d, parsedTo %zu", offs, r, parsedTo);
+
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
@@ -1644,7 +1696,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		CHKN(*json_p = json_object_new_object());
 	}
 
-	r = ln_normalizeRec(&npb, ctx->pdag, 0, 0, *json_p, &endNode);
+	r = ln_normalizeRec(&npb, ctx->pdag, 0, 0, *json_p, &endNode, 0, NULL, NULL);
 
 	if(ctx->debug) {
 		if(r == 0) {

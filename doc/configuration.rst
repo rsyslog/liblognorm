@@ -1117,6 +1117,11 @@ generate such messages (note the flags part)::
 
     Aug 18 13:18:45 192.168.0.1 %ASA-6-106015: Deny TCP (no connection) from 10.252.88.66/443 to 10.79.249.222/52746 flags RST  on interface outside
 
+option.failOnDuplicate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If set to "True", causes parsers to fail if the name already exists
+in the tree.  A no-op unless using .. to cause a merger
+
 cee-syslog
 ##########
 This parses cee syslog from the message. This format has been defined
