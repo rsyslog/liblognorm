@@ -2581,6 +2581,8 @@ PARSER_Parse(Repeat)
 			r, npb->parsedTo, json_object_to_json_string(parsed_value));
 
 		if(r != 0) {
+			json_object_put(parsed_value);
+			parsed_value = NULL;
 			if(data->permitMismatchInParser) {
 				strtoffs = lastKnownGood; /* go back to final match */
 				LN_DBGPRINTF(npb->ctx, "mismatch in repeat, "
