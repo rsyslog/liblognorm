@@ -41,7 +41,7 @@ execute 'ABCD:EF01:2345:6789:ABCD:EF01:2345::6789' # :: with too many blocks
 assert_output_json_eq '{ "originalmsg": "ABCD:EF01:2345:6789:ABCD:EF01:2345::6789", "unparsed-data": "ABCD:EF01:2345:6789:ABCD:EF01:2345::6789" }'
 
 execute 'ABCD:EF01:2345:6789:ABCD:EF01:2345:1:6798' # too many blocks (9)
-assert_output_json_eq '{"originalmsg": "ABCD:EF01:2345:6789:ABCD:EF01:2345:1:6798", "unparsed-data": "ABCD:EF01:2345:6789:ABCD:EF01:2345:1:6798" }'
+assert_output_json_eq '{"originalmsg": "ABCD:EF01:2345:6789:ABCD:EF01:2345:1:6798", "unparsed-data": ":6798" }'
 
 execute ':0:0:0:0:0:0:1' # missing first digit
 assert_output_json_eq '{ "originalmsg": ":0:0:0:0:0:0:1", "unparsed-data": ":0:0:0:0:0:0:1" }'

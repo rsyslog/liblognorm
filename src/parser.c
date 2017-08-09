@@ -1188,7 +1188,9 @@ PARSER_Parse(OpQuotedString)
 	    /* create JSON value to save quoted string contents */
 	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
 	}
-	CHKN(*value = json_object_new_string(cstr));
+	if (NULL != value) {
+		CHKN(*value = json_object_new_string(cstr));
+	}
 
 	r = 0; /* success */
 done:
@@ -1702,11 +1704,14 @@ PARSER_Parse(IPv6)
 		if(skipIPv6AddrBlock(npb, &i) != 0) goto done;
 		nBlocks++;
 		if(i == npb->strLen) goto chk_ok;
-		if(isspace(c[i])) goto chk_ok;
+        /* no more valid chars, check address */
+		if(c[i] != ':' && c[i] != '.') goto chk_ok;
 		if(c[i] == '.'){ /* IPv4 processing! */
 			hasIPv4 = 1;
 			break;
 		}
+        /* maximum blocks consumed and not ipv4, check if valid */
+        if (nBlocks == 8) goto chk_ok;
 		if(c[i] != ':') goto done;
 		i++; /* "eat" ':' */
 		if(i == npb->strLen) goto chk_ok;
