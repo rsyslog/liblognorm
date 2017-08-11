@@ -1363,6 +1363,7 @@ fixJSON(struct ln_pdag *dag,
 			/* Free the unneeded value */
 			json_object_put(*value);
 		}
+        *value = NULL;
 	} else if(prs->name[0] == '.' && prs->name[1] == '\0') {
 		if(json_object_get_type(*value) == json_type_object) {
 			struct json_object_iterator it = json_object_iter_begin(*value);
@@ -1417,6 +1418,7 @@ fixJSON(struct ln_pdag *dag,
 		}
 	}
 	r = 0;
+    *value = NULL;
 	return r;
 }
 
@@ -1473,8 +1475,9 @@ tryParser(npb_t *const __restrict__ npb,
 			LN_DBGPRINTF(dag->ctx, "tryParser: Invalid custom type index: %d (%d types)", prs->custType, dag->ctx->nTypes);
 			goto done;
 		}
-		if(*value == NULL)
+		if(*value == NULL) 
 			*value = json_object_new_object();
+
 		custType = &dag->ctx->type_pdags[prs->custType];
 		LN_DBGPRINTF(dag->ctx, "calling custom parser '%s'", custType->name);
 		r = ln_normalizeRec(npb, custType->pdag, *offs, 1, *value, &endNode, failOnDuplicate, cur_json_object, parser_name);
@@ -1588,7 +1591,7 @@ ln_normalizeRec(npb_t *const __restrict__ npb,
 	size_t iprs;
 	size_t parsedTo = npb->parsedTo;
 	size_t parsed = 0;
-	struct json_object *value;
+	struct json_object *value = NULL;
 
 LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, json);
 
@@ -1614,7 +1617,6 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 				 	 : "UNKNOWN");
 		}
 		i = offs;
-		value = NULL;
 		localR = tryParser(npb, dag, &i, &parsed, &value, prs, failOnDuplicate, json, prs->name);
 		if(localR == 0) {
 			parsedTo = i + parsed;
@@ -1628,9 +1630,14 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
 				CHKR(fixJSON(dag, &value, json, prs));
+                value = NULL;
 				if(npb->ctx->opts & LN_CTXOPT_ADD_RULE) {
 					add_rule_to_mockup(npb, prs);
 				}
+                /* did we have a longer parser --> then update */
+                if(parsedTo > npb->parsedTo)
+                    npb->parsedTo = parsedTo;
+
 			} else {
 				++dag->stats.backtracked;
 				#ifdef	ADVANCED_STATS
@@ -1639,15 +1646,17 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 				#endif
 				LN_DBGPRINTF(dag->ctx, "%zu nonmatch, backtracking required, parsed to=%zu",
 						offs, parsedTo);
-				if (value != NULL) { /* Free the value if it was created */
-					json_object_put(value);
-				}
 			}
 		}
-		/* did we have a longer parser --> then update */
-		if(parsedTo > npb->parsedTo)
-			npb->parsedTo = parsedTo;
-		LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, npb->parsedTo);
+        if (value != NULL) { /* Free the value if it was created */
+            json_object_put(value);
+            value = NULL;
+        }
+
+        /* did we have a longer parser --> then update */
+        if(parsedTo > npb->longestParsedTo)
+            npb->longestParsedTo = parsedTo;
+        LN_DBGPRINTF(dag->ctx, "parsedTo %zu, *pParsedTo %zu", parsedTo, npb->parsedTo);
 	}
 
 LN_DBGPRINTF(dag->ctx, "offs %zu, strLen %zu, isTerm %d", offs, npb->strLen, dag->flags.isTerminal);
@@ -1725,7 +1734,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		addRuleMetadata(&npb, *json_p, endNode);
 		r = 0;
 	} else {
-		addUnparsedField(str, strLen, npb.parsedTo, *json_p);
+		addUnparsedField(str, strLen, npb.longestParsedTo, *json_p);
 	}
 
 	if(ctx->opts & LN_CTXOPT_ADD_RULE) {
