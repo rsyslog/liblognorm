@@ -159,6 +159,7 @@ struct npb {
 	const char *str;		/**< to-be-normalized message */
 	size_t strLen;			/**< length of it */
 	size_t parsedTo;		/**< up to which byte could this be parsed? */
+	size_t longestParsedTo;	/**< up to which byte could this be parsed? */
 	es_str_t *rule;			/**< a mock-up of the rule used to parse */
 	es_str_t *exec_path;
 #ifdef ADVANCED_STATS
