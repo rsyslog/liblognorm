@@ -3010,10 +3010,12 @@ PARSER_Parse(Repeat)
 	struct data_Repeat *const data = (struct data_Repeat*) pdata;
 	struct ln_pdag *endNode = NULL;
 	size_t strtoffs = *offs;
+	size_t lastMatch = strtoffs;
 	size_t lastKnownGood = strtoffs;
 	struct json_object *json_arr = NULL;
 	struct json_object *parsed_value = NULL;
 	const size_t parsedTo_save = npb->parsedTo;
+	const size_t longestParsedTo_save = npb->longestParsedTo;
 	int mergeResults = parser_name != NULL && parser_name[0] == '.' && parser_name[1] == '\0';
 
 	do {
@@ -3035,6 +3037,8 @@ PARSER_Parse(Repeat)
 					"parse ptr back to %zd", strtoffs);
 				goto success;
 			} else {
+				// Reset longest match
+				npb->longestParsedTo = lastMatch > longestParsedTo_save ? lastMatch : longestParsedTo_save;
 				goto done;
 			}
 		}
@@ -3074,6 +3078,7 @@ PARSER_Parse(Repeat)
 
 		/* now check if we shall continue */
 		npb->parsedTo = 0;
+		lastMatch = lastKnownGood;
 		lastKnownGood = strtoffs; /* record pos in case of fail in while */
 		r = ln_normalizeRec(npb, data->while_cond, strtoffs, 1, NULL, &endNode, 0, NULL, parser_name);
 		LN_DBGPRINTF(npb->ctx, "repeat while returns %d, parsed %zu",
