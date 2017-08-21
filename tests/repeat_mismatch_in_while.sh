@@ -24,7 +24,7 @@ assert_output_json_eq '{ "originalmsg": "Aug 18 13:18:45 192.168.99.2 %ASA-6-106
 reset_rules
 add_rule 'version=2'
 add_rule 'prefix=%timestamp:date-rfc3164% %hostname:word%'
-add_rule 'rule=cisco,fwblock: \x25ASA-6-106015\x3a Deny %proto:word% (no connection) from %source:cisco-interface-spec% to %dest:cisco-interface-spec% flags %flags:repeat{ "option.permitMismatchInParser":true, "parser": {"type":"word", "name":"."}, "while":{"type":"literal", "text":" "} }%\x20  on interface %srciface:word%'
+add_rule 'rule=cisco,fwblock: \x25ASA-6-106015\x3a Deny %proto:word% (no connection) from %source:cisco-interface-spec% to %dest:cisco-interface-spec% flags %flags:repeat{ "option.permitMismatchInParser":true, "parser": {"type":"word", "name":"."}, "while":{"type":"literal", "text":" "} }%\x20 on interface %srciface:word%'
 
 echo step 2
 execute 'Aug 18 13:18:45 192.168.99.2 %ASA-6-106015: Deny TCP (no connection) from 173.252.88.66/443 to 76.79.249.222/52746 flags RST  on interface outside'
