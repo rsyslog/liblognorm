@@ -47,7 +47,7 @@
 	void ln_destruct##parser(ln_ctx ctx, void *const pdata)
 
 PARSERDEF_NO_DATA(RFC5424Date);
-PARSERDEF_NO_DATA(RFC3164Date);
+PARSERDEF(RFC3164Date);
 PARSERDEF(Number);
 PARSERDEF(Float);
 PARSERDEF(HexNumber);

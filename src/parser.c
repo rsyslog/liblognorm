@@ -33,6 +33,7 @@
 #include <strings.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "liblognorm.h"
 #include "lognorm.h"
@@ -50,7 +51,9 @@
 /* how should output values be formatted? */
 enum FMT_MODE {
 	FMT_AS_STRING = 0,
-	FMT_AS_NUMBER = 1
+	FMT_AS_NUMBER = 1,
+	FMT_AS_TIMESTAMP_UX = 2,
+	FMT_AS_TIMESTAMP_UX_MS = 3
 	};
 
 /* some helpers */
@@ -151,6 +154,154 @@ int ln_construct##ParserName( \
 #define PARSER_Destruct(ParserName) \
 void ln_destruct##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
 
+
+
+/* the following table saves us from computing an additional date to get
+ * the ordinal day of the year - at least from 1967-2099
+ * Note: non-2038+ compliant systems (Solaris) will generate compiler
+ * warnings on the post 2038-rollover years.
+ */
+static const int yearInSec_startYear = 1967;
+/* for x in $(seq 1967 2099) ; do
+ *   printf %s', ' $(date --date="Dec 31 ${x} UTC 23:59:59" +%s)
+ * done |fold -w 70 -s */
+static const time_t yearInSecs[] = {
+	-63158401, -31536001, -1, 31535999, 63071999, 94694399, 126230399,
+	157766399, 189302399, 220924799, 252460799, 283996799, 315532799,
+	347155199, 378691199, 410227199, 441763199, 473385599, 504921599,
+	536457599, 567993599, 599615999, 631151999, 662687999, 694223999,
+	725846399, 757382399, 788918399, 820454399, 852076799, 883612799,
+	915148799, 946684799, 978307199, 1009843199, 1041379199, 1072915199,
+	1104537599, 1136073599, 1167609599, 1199145599, 1230767999,
+	1262303999, 1293839999, 1325375999, 1356998399, 1388534399,
+	1420070399, 1451606399, 1483228799, 1514764799, 1546300799,
+	1577836799, 1609459199, 1640995199, 1672531199, 1704067199,
+	1735689599, 1767225599, 1798761599, 1830297599, 1861919999,
+	1893455999, 1924991999, 1956527999, 1988150399, 2019686399,
+	2051222399, 2082758399, 2114380799, 2145916799, 2177452799,
+	2208988799, 2240611199, 2272147199, 2303683199, 2335219199,
+	2366841599, 2398377599, 2429913599, 2461449599, 2493071999,
+	2524607999, 2556143999, 2587679999, 2619302399, 2650838399,
+	2682374399, 2713910399, 2745532799, 2777068799, 2808604799,
+	2840140799, 2871763199, 2903299199, 2934835199, 2966371199,
+	2997993599, 3029529599, 3061065599, 3092601599, 3124223999,
+	3155759999, 3187295999, 3218831999, 3250454399, 3281990399,
+	3313526399, 3345062399, 3376684799, 3408220799, 3439756799,
+	3471292799, 3502915199, 3534451199, 3565987199, 3597523199,
+	3629145599, 3660681599, 3692217599, 3723753599, 3755375999,
+	3786911999, 3818447999, 3849983999, 3881606399, 3913142399,
+	3944678399, 3976214399, 4007836799, 4039372799, 4070908799,
+	4102444799};
+
+/**
+ * convert syslog timestamp to time_t
+ * Note: it would be better to use something similar to mktime() here.
+ * Unfortunately, mktime() semantics are problematic: first of all, it
+ * works on local time, on the machine's time zone. In syslog, we have
+ * to deal with multiple time zones at once, so we cannot plainly rely
+ * on the local zone, and so we cannot rely on mktime(). One solution would
+ * be to refactor all time-related functions so that they are all guarded
+ * by a mutex to ensure TZ consistency (which would also enable us to
+ * change the TZ at will for specific function calls). But that would
+ * potentially mean a lot of overhead.
+ * Also, mktime() has some side effects, at least setting of tzname. With
+ * a refactoring as described above that should probably not be a problem,
+ * but would also need more work. For some more thoughts on this topic,
+ * have a look here:
+ * http://stackoverflow.com/questions/18355101/is-standard-c-mktime-thread-safe-on-linux
+ * In conclusion, we keep our own code for generating the unix timestamp.
+ * rgerhards, 2016-03-02 (taken from rsyslog sources)
+ */
+static time_t
+syslogTime2time_t(const int year, const int month, const int day,
+	const int hour, const int minute, const int second,
+	const int OffsetHour, const int OffsetMinute, const char OffsetMode)
+{
+	long MonthInDays, NumberOfYears, NumberOfDays;
+	int utcOffset;
+	time_t TimeInUnixFormat;
+
+	if(year < 1970 || year > 2100) {
+		TimeInUnixFormat = 0;
+		goto done;
+	}
+
+	/* Counting how many Days have passed since the 01.01 of the
+	 * selected Year (Month level), according to the selected Month*/
+
+	switch(month)
+	{
+		case 1:
+			MonthInDays = 0;         //until 01 of January
+			break;
+		case 2:
+			MonthInDays = 31;        //until 01 of February - leap year handling down below!
+			break;
+		case 3:
+			MonthInDays = 59;        //until 01 of March
+			break;
+		case 4:
+			MonthInDays = 90;        //until 01 of April
+			break;
+		case 5:
+			MonthInDays = 120;       //until 01 of Mai
+			break;
+		case 6:
+			MonthInDays = 151;       //until 01 of June
+			break;
+		case 7:
+			MonthInDays = 181;       //until 01 of July
+			break;
+		case 8:
+			MonthInDays = 212;       //until 01 of August
+			break;
+		case 9:
+			MonthInDays = 243;       //until 01 of September
+			break;
+		case 10:
+			MonthInDays = 273;       //until 01 of Oktober
+			break;
+		case 11:
+			MonthInDays = 304;       //until 01 of November
+			break;
+		case 12:
+			MonthInDays = 334;       //until 01 of December
+			break;
+		default: /* this cannot happen (and would be a program error)
+		          * but we need the code to keep the compiler silent.
+			  */
+			MonthInDays = 0;	/* any value fits ;) */
+			break;
+	}
+	/* adjust for leap years */
+	if((year % 100 != 0 && year % 4 == 0) || (year == 2000)) {
+		if(month > 2)
+			MonthInDays++;
+	}
+
+
+	/*	1) Counting how many Years have passed since 1970
+		2) Counting how many Days have passed since the 01.01 of the selected Year
+			(Day level) according to the Selected Month and Day. Last day doesn't count,
+			it should be until last day
+		3) Calculating this period (NumberOfDays) in seconds*/
+
+	NumberOfYears = year - yearInSec_startYear - 1;
+	NumberOfDays = MonthInDays + day - 1;
+	TimeInUnixFormat = (yearInSecs[NumberOfYears] + 1) + NumberOfDays * 86400;
+
+	/*Add Hours, minutes and seconds */
+	TimeInUnixFormat += hour*60*60;
+	TimeInUnixFormat += minute*60;
+	TimeInUnixFormat += second;
+	/* do UTC offset */
+	utcOffset = OffsetHour*3600 + OffsetMinute*60;
+	if(OffsetMode == '+')
+		utcOffset *= -1; /* if timestamp is ahead, we need to "go back" to UTC */
+	TimeInUnixFormat += utcOffset;
+done:
+	return TimeInUnixFormat;
+}
 
 
 /**
@@ -262,18 +413,20 @@ done:
 }
 
 
+struct data_RFC3164Date {
+	enum FMT_MODE fmt_mode;
+};
 /**
  * Parse a RFC3164 Date.
  */
 PARSER_Parse(RFC3164Date)
 	const unsigned char *p;
 	size_t len, orglen;
+	struct data_RFC3164Date *const data = (struct data_RFC3164Date*) pdata;
 	/* variables to temporarily hold time information while we parse */
-	__attribute__((unused)) int month;
+	int year;
+	int month;
 	int day;
-#if 0 /* TODO: why does this still exist? */
-	int year = 0; /* 0 means no year provided */
-#endif
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
@@ -481,11 +634,68 @@ PARSER_Parse(RFC3164Date)
 	/* we had success, so update parse pointer */
 	*parsed = orglen - len;
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(data->fmt_mode == FMT_AS_STRING) {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		} else {
+			/* we assume year == current year, so let's obtain current year */
+			struct tm tm;
+			const time_t curr = time(NULL);
+			gmtime_r(&curr, &tm);
+			year = tm.tm_year + 1900;
+			int64_t timestamp = syslogTime2time_t(year, month, day,
+				hour, minute, second, 0, 0, '+');
+			if(data->fmt_mode == FMT_AS_TIMESTAMP_UX_MS) {
+				/* we do not have more precise info, just bring
+				 * into common format!
+				 */
+				timestamp *= 1000;
+			}
+			*value = json_object_new_int64(timestamp);
+		}
 	}
 	r = 0; /* success */
 done:
 	return r;
+}
+PARSER_Construct(RFC3164Date)
+{
+	int r = 0;
+	struct data_RFC3164Date *data = (struct data_RFC3164Date*) calloc(1, sizeof(struct data_RFC3164Date));
+	data->fmt_mode = FMT_AS_STRING;
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcmp(key, "format")) {
+			const char *fmtmode = json_object_get_string(val);
+			if(!strcmp(fmtmode, "timestamp-unix")) {
+				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
+			} else if(!strcmp(fmtmode, "timestamp-unix-ms")) {
+				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
+			} else if(!strcmp(fmtmode, "string")) {
+				data->fmt_mode = FMT_AS_STRING;
+			} else {
+				ln_errprintf(ctx, 0, "invalid value for date-rfc3164:format %s",
+					fmtmode);
+			}
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for date-rfc3164 %s", key);
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(RFC3164Date)
+{
+	free(pdata);
 }
 
 
@@ -589,12 +799,12 @@ PARSER_Destruct(Number)
 	free(pdata);
 }
 
-/**
- * Parse a Real-number in floating-pt form.
- */
 struct data_Float {
 	enum FMT_MODE fmt_mode;
 };
+/**
+ * Parse a Real-number in floating-pt form.
+ */
 PARSER_Parse(Float)
 	const char *c;
 	size_t i;

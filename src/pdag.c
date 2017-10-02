@@ -70,7 +70,7 @@ int advstats_lit_parser_calls[ADVSTATS_MAX_ENTITIES];
 static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("literal", Literal, 4),
 	PARSER_ENTRY("repeat", Repeat, 4),
-	PARSER_ENTRY_NO_DATA("date-rfc3164", RFC3164Date, 8),
+	PARSER_ENTRY("date-rfc3164", RFC3164Date, 8),
 	PARSER_ENTRY_NO_DATA("date-rfc5424", RFC5424Date, 8),
 	PARSER_ENTRY("number", Number, 16),
 	PARSER_ENTRY("float", Float, 16),
