@@ -145,7 +145,7 @@ done:	return r;
  * does not contain any subtrees.
  * @return 1 if it is a leaf, 0 otherwise
  */
-static inline int
+static int
 isLeaf(struct ln_ptree *tree)
 {
 	int r = 0;
@@ -231,7 +231,7 @@ done:	return r;
  * @param[in] tree tree to split
  * @param[in] offs offset into common prefix (must be less than prefix length!)
  */
-static inline struct ln_ptree*
+static struct ln_ptree*
 splitTree(struct ln_ptree *tree, unsigned short offs)
 {
 	unsigned char *c;
@@ -529,7 +529,7 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
 /**
  * add unparsed string to event.
  */
-static inline int
+static int
 addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *json)
 {
 	int r = 1;
