@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2017 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -46,6 +46,12 @@
 #include <errno.h>
 #endif
 
+
+/* how should output values be formatted? */
+enum FMT_MODE {
+	FMT_AS_STRING = 0,
+	FMT_AS_NUMBER = 1
+	};
 
 /* some helpers */
 static inline int
@@ -553,6 +559,7 @@ done:
 
 struct data_HexNumber {
 	uint64_t maxval;
+	enum FMT_MODE fmt_mode;
 };
 /**
  * Parse a hex Number.
@@ -595,7 +602,11 @@ PARSER_Parse(HexNumber)
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(data->fmt_mode == FMT_AS_STRING) {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		} else {
+			*value = json_object_new_int64((int64_t) val);
+		}
 	}
 	r = 0; /* success */
 done:
@@ -605,6 +616,7 @@ PARSER_Construct(HexNumber)
 {
 	int r = 0;
 	struct data_HexNumber *data = (struct data_HexNumber*) calloc(1, sizeof(struct data_HexNumber));
+	data->fmt_mode = FMT_AS_STRING;
 
 	if(json == NULL)
 		goto done;
@@ -621,9 +633,18 @@ PARSER_Construct(HexNumber)
 				ln_errprintf(ctx, errno, "param 'maxval' must be integer but is: %s",
 					 json_object_to_json_string(val));
 			}
+		} else if(!strcmp(key, "format")) {
+			const char *fmtmode = json_object_get_string(val);
+			if(!strcmp(fmtmode, "number")) {
+				data->fmt_mode = FMT_AS_NUMBER;
+			} else if(!strcmp(fmtmode, "string")) {
+				data->fmt_mode = FMT_AS_STRING;
+			} else {
+				ln_errprintf(ctx, 0, "invalid value for hexnumber:format %s",
+					fmtmode);
+			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
-				 json_object_to_json_string(val));
+			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s", key);
 		}
 		json_object_iter_next(&it);
 	}

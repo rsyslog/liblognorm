@@ -65,6 +65,7 @@ TESTS_SHELLSCRIPTS = \
 	field_string.sh \
 	field_string_perm_chars.sh \
 	field_hexnumber.sh \
+	field_hexnumber-fmt_number.sh \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
 	field_hexnumber_range_jsoncnf.sh \
