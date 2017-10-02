@@ -415,7 +415,7 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 
 
 static void
-deleteComponentID(struct ln_pdag *const __restrict dag)
+deleteComponentID(struct ln_pdag *const __restrict__ dag)
 {
 	free((void*)dag->rb_id);
 	dag->rb_id = NULL;
