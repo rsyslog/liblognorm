@@ -64,7 +64,11 @@ TESTS_SHELLSCRIPTS = \
 	strict_prefix_matching_2.sh \
 	field_string.sh \
 	field_string_perm_chars.sh \
+	field_number.sh \
+	field_number-fmt_number.sh \
+	field_number_maxval.sh \
 	field_hexnumber.sh \
+	field_hexnumber-fmt_number.sh \
 	field_hexnumber_jsoncnf.sh \
 	field_hexnumber_range.sh \
 	field_hexnumber_range_jsoncnf.sh \
@@ -95,6 +99,7 @@ TESTS_SHELLSCRIPTS = \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
 	field_float.sh \
+	field_float-fmt_number.sh \
 	field_float_jsoncnf.sh \
 	very_long_logline_jsoncnf.sh
 
