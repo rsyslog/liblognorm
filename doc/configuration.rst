@@ -69,7 +69,8 @@ that are typically used. It does not understand these parsers:
  * named_suffixed
 
 The recursive and descent parsers should be replaced by user-defined types
-in. The tokenized parsers should be replaced by repeat. For the others,
+in. The tokenized parsers should be replaced by repeat. The interpret functionality
+is provided via the parser's "format" parameters. For the others,
 currently there exists no replacement, but will the exception of regex,
 will be added based on demand. If you think regex support is urgently
 needed, please read our
@@ -431,11 +432,41 @@ number
 
 One or more decimal digits.
 
+Parameters
+..........
+
+format
+~~~~~~
+
+Specifies the format of the json object. Possible values are "string" and
+"number", with string being the default. If "number" is used, the json
+object will be a native json integer.
+
+maxval
+~~~~~~
+
+Maximum value permitted for this number. If the value is higher than this,
+it will not be detected by this parser definition and an alternate detection
+path will be pursued.
 
 float
 #####
 
 A floating-pt number represented in non-scientific form.
+
+Parameters
+..........
+
+format
+~~~~~~
+
+Specifies the format of the json object. Possible values are "string" and
+"number", with string being the default. If "number" is used, the json
+object will be a native json floating point number. Note that we try to
+preserve the original string serialization format, but keep on your mind
+that floating point numbers are inherently imprecise, so slight variance
+may occur depending on processing them.
+
 
 hexnumber
 #########
@@ -444,6 +475,28 @@ A hexadecimal number as seen by this parser begins with the string
 "0x", is followed by 1 or more hex digits and is terminated by white
 space. Any interleaving non-hex digits will cause non-detection. The
 rules are strict to avoid false positives.
+
+Parameters
+..........
+
+format
+~~~~~~
+
+Specifies the format of the json object. Possible values are "string" and
+"number", with string being the default. If "number" is used, the json
+object will be a native json integer. Note that json numbers are always
+decimal, so if "number" is selected, the hex number will be converted
+to decimal. The original hex string is no longer available in this case.
+
+maxval
+~~~~~~
+
+Maximum value permitted for this number. If the value is higher than this,
+it will not be detected by this parser definition and an alternate detection
+path will be pursued. This is most useful if fixed-size hex numbers need to
+be processed. For example, for byte values the "maxval" could be set to 255,
+which ensures that invalid values are not misdetected.
+
 
 kernel-timestamp
 ################
@@ -497,9 +550,6 @@ Specifies how the string is quoted. Possible modes:
 * **none** - no quoting is permitted
 * **required** - quotes must be present
 * **auto** - quotes are permitted, but not required
-
-Not!>!/
-parameters.
 
 Default is ``auto``.
 
