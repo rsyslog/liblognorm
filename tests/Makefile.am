@@ -101,6 +101,8 @@ TESTS_SHELLSCRIPTS = \
 	field_float.sh \
 	field_float-fmt_number.sh \
 	field_float_jsoncnf.sh \
+	field_rfc5424timestamp-fmt_timestamp-unix.sh \
+	field_rfc5424timestamp-fmt_timestamp-unix-ms.sh \
 	very_long_logline_jsoncnf.sh
 
 # now come tests for the legacy (v1) engine

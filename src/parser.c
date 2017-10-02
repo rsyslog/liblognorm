@@ -155,7 +155,6 @@ int ln_construct##ParserName( \
 void ln_destruct##ParserName(__attribute__((unused)) ln_ctx ctx, void *const pdata)
 
 
-
 /* the following table saves us from computing an additional date to get
  * the ordinal day of the year - at least from 1967-2099
  * Note: non-2038+ compliant systems (Solaris) will generate compiler
@@ -304,22 +303,27 @@ done:
 }
 
 
+struct data_RFC5424Date {
+	enum FMT_MODE fmt_mode;
+};
 /**
  * Parse a TIMESTAMP as specified in RFC5424 (subset of RFC3339).
  */
 PARSER_Parse(RFC5424Date)
 	const unsigned char *pszTS;
+	struct data_RFC5424Date *const data = (struct data_RFC5424Date*) pdata;
 	/* variables to temporarily hold time information while we parse */
-	__attribute__((unused)) int year;
+	int year;
 	int month;
 	int day;
 	int hour; /* 24 hour clock */
 	int minute;
 	int second;
-	__attribute__((unused)) int secfrac;	/* fractional seconds (must be 32 bit!) */
-	__attribute__((unused)) int secfracPrecision;
+	int secfrac;	/* fractional seconds (must be 32 bit!) */
+	int secfracPrecision;
 	int OffsetHour;		/* UTC offset in hours */
 	int OffsetMinute;	/* UTC offset in minutes */
+	char OffsetMode;
 	size_t len;
 	size_t orglen;
 	/* end variables to temporarily hold time information while we parse */
@@ -374,9 +378,13 @@ PARSER_Parse(RFC5424Date)
 	if(len == 0) goto done;
 
 	if(*pszTS == 'Z') {
+		OffsetHour = 0;
+		OffsetMinute = 0;
+		OffsetMode = '+';
 		--len;
 		pszTS++; /* eat Z */
 	} else if((*pszTS == '+') || (*pszTS == '-')) {
+		OffsetMode = *pszTS;
 		--len;
 		pszTS++;
 
@@ -404,12 +412,73 @@ PARSER_Parse(RFC5424Date)
 	*parsed = orglen - len;
 
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(data->fmt_mode == FMT_AS_STRING) {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		} else {
+			int64_t timestamp = syslogTime2time_t(year, month, day,
+				hour, minute, second, OffsetHour, OffsetMinute, OffsetMode);
+			if(data->fmt_mode == FMT_AS_TIMESTAMP_UX_MS) {
+				timestamp *= 1000;
+				/* simulate pow(), do not use math lib! */
+				int div = 1;
+				if(secfracPrecision == 1) {
+					secfrac *= 100;
+				} else if(secfracPrecision == 2) {
+					secfrac *= 10;
+				} else if(secfracPrecision > 3) {
+					for(int i = 0 ; i < (secfracPrecision - 3) ; ++i)
+						div *= 10;
+				}
+				timestamp += secfrac / div;
+			}
+			*value = json_object_new_int64(timestamp);
+		}
 	}
 
 	r = 0; /* success */
 done:
 	return r;
+}
+PARSER_Construct(RFC5424Date)
+{
+	int r = 0;
+	struct data_RFC5424Date *data =
+		(struct data_RFC5424Date*) calloc(1, sizeof(struct data_RFC5424Date));
+	data->fmt_mode = FMT_AS_STRING;
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcmp(key, "format")) {
+			const char *fmtmode = json_object_get_string(val);
+			if(!strcmp(fmtmode, "timestamp-unix")) {
+				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
+			} else if(!strcmp(fmtmode, "timestamp-unix-ms")) {
+				data->fmt_mode = FMT_AS_TIMESTAMP_UX_MS;
+			} else if(!strcmp(fmtmode, "string")) {
+				data->fmt_mode = FMT_AS_STRING;
+			} else {
+				ln_errprintf(ctx, 0, "invalid value for date-rfc5424:format %s",
+					fmtmode);
+			}
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for date-rfc5424 %s", key);
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(RFC5424Date)
+{
+	free(pdata);
 }
 
 
@@ -676,7 +745,7 @@ PARSER_Construct(RFC3164Date)
 			if(!strcmp(fmtmode, "timestamp-unix")) {
 				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
 			} else if(!strcmp(fmtmode, "timestamp-unix-ms")) {
-				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
+				data->fmt_mode = FMT_AS_TIMESTAMP_UX_MS;
 			} else if(!strcmp(fmtmode, "string")) {
 				data->fmt_mode = FMT_AS_STRING;
 			} else {
