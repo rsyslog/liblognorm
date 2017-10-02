@@ -64,6 +64,9 @@ TESTS_SHELLSCRIPTS = \
 	strict_prefix_matching_2.sh \
 	field_string.sh \
 	field_string_perm_chars.sh \
+	field_number.sh \
+	field_number-fmt_number.sh \
+	field_number_maxval.sh \
 	field_hexnumber.sh \
 	field_hexnumber-fmt_number.sh \
 	field_hexnumber_jsoncnf.sh \

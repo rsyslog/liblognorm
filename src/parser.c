@@ -489,6 +489,10 @@ done:
 }
 
 
+struct data_Number {
+	int64_t maxval;
+	enum FMT_MODE fmt_mode;
+};
 /**
  * Parse a Number.
  * Note that a number is an abstracted concept. We always represent it
@@ -497,24 +501,92 @@ done:
 PARSER_Parse(Number)
 	const char *c;
 	size_t i;
+	int64_t val = 0;
+	struct data_Number *const data = (struct data_Number*) pdata;
+
+	enum FMT_MODE fmt_mode = FMT_AS_STRING;
+	int64_t maxval = 0;
+	if(data != NULL) {
+		fmt_mode = data->fmt_mode;
+		maxval = data->maxval;
+	}
 
 	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	c = npb->str;
 
-	for (i = *offs; i < npb->strLen && myisdigit(c[i]); i++);
+	for (i = *offs; i < npb->strLen && myisdigit(c[i]); i++)
+		val = val * 10 + c[i] - '0';
+
+	if(maxval > 0 && val > maxval) {
+		LN_DBGPRINTF(npb->ctx, "number parser: val too large (max %" PRIu64
+			     ", actual %" PRIu64 ")",
+			     maxval, val);
+		goto done;
+	}
+
 	if (i == *offs)
 		goto done;
 	
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(fmt_mode == FMT_AS_STRING) {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		} else {
+			*value = json_object_new_int64(val);
+		}
 	}
 	r = 0; /* success */
 done:
 	return r;
+}
+
+PARSER_Construct(Number)
+{
+	int r = 0;
+	struct data_Number *data = (struct data_Number*) calloc(1, sizeof(struct data_Number));
+	data->fmt_mode = FMT_AS_STRING;
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcmp(key, "maxval")) {
+			errno = 0;
+			data->maxval = json_object_get_int64(val);
+			if(errno != 0) {
+				ln_errprintf(ctx, errno, "param 'maxval' must be integer but is: %s",
+					 json_object_to_json_string(val));
+			}
+		} else if(!strcmp(key, "format")) {
+			const char *fmtmode = json_object_get_string(val);
+			if(!strcmp(fmtmode, "number")) {
+				data->fmt_mode = FMT_AS_NUMBER;
+			} else if(!strcmp(fmtmode, "string")) {
+				data->fmt_mode = FMT_AS_STRING;
+			} else {
+				ln_errprintf(ctx, 0, "invalid value for number:format %s",
+					fmtmode);
+			}
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for number: %s", key);
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(Number)
+{
+	free(pdata);
 }
 
 /**
