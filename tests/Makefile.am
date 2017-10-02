@@ -99,6 +99,7 @@ TESTS_SHELLSCRIPTS = \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
 	field_float.sh \
+	field_float-fmt_number.sh \
 	field_float_jsoncnf.sh \
 	very_long_logline_jsoncnf.sh
 

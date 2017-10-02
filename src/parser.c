@@ -592,40 +592,105 @@ PARSER_Destruct(Number)
 /**
  * Parse a Real-number in floating-pt form.
  */
+struct data_Float {
+	enum FMT_MODE fmt_mode;
+};
 PARSER_Parse(Float)
 	const char *c;
 	size_t i;
+	const struct data_Float *const data = (struct data_Float*) pdata;
 
 	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	c = npb->str;
 
+	int isNeg = 0;
+	double val = 0;
 	int seen_point = 0;
+	double frac = 10;
 
 	i = *offs;
 
-	if (c[i] == '-') i++;
+	if (c[i] == '-') {
+		isNeg = 1;
+		i++;
+	}
 
 	for (; i < npb->strLen; i++) {
 		if (c[i] == '.') {
-			if (seen_point != 0) break;
+			if (seen_point != 0)
+				break;
 			seen_point = 1;
-		} else if (! myisdigit(c[i])) {
+		} else if (myisdigit(c[i])) {
+			if(seen_point) {
+				val += (c[i] - '0') / frac;
+				frac *= 10;
+			} else {
+				val = val * 10 + c[i] - '0';
+			}
+		} else {
 			break;
 		}
 	}
 	if (i == *offs)
 		goto done;
 
+	if(isNeg)
+		val *= -1;
+
 	/* success, persist */
 	*parsed = i - *offs;
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(data->fmt_mode == FMT_AS_STRING) {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		} else {
+			char *serialized = strndup(npb->str+(*offs), *parsed);
+			*value = json_object_new_double_s(val, serialized);
+			free(serialized);
+		}
 	}
 	r = 0; /* success */
 done:
 	return r;
+}
+PARSER_Construct(Float)
+{
+	int r = 0;
+	struct data_Float *data = (struct data_Float*) calloc(1, sizeof(struct data_Float));
+	data->fmt_mode = FMT_AS_STRING;
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcmp(key, "format")) {
+			const char *fmtmode = json_object_get_string(val);
+			if(!strcmp(fmtmode, "number")) {
+				data->fmt_mode = FMT_AS_NUMBER;
+			} else if(!strcmp(fmtmode, "string")) {
+				data->fmt_mode = FMT_AS_STRING;
+			} else {
+				ln_errprintf(ctx, 0, "invalid value for float:format %s",
+					fmtmode);
+			}
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for float: %s", key);
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(Float)
+{
+	free(pdata);
 }
 
 
