@@ -1,5 +1,9 @@
 ----------------------------------------------------------------------
-Version 2.0.4, 2017-??-??
+Version 2.0.4, 2017-10-04
+- added support for native JSON number formats
+  supported by parsers: number, float, hex
+- added support for creating unix timestamps
+  supported by parsers: date-rfc3164, date-rfc5424
 - fixed build problems on Solaris
   ... but there still seem to be some code issues, manifested in
   testbench failures. So use with care!
