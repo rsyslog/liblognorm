@@ -748,12 +748,46 @@ Valid date/time in RFC3164 format, i.e.: 'Oct 29 09:47:08'.
 This parser implements several quirks to match malformed
 timestamps from some devices.
 
+Parameters
+..........
+
+format
+~~~~~~
+
+Specifies the format of the json object. Possible values are
+
+- **string** - string representation as given in input data
+- **timestamp-unix** - string converted to an unix timestamp (seconds since epoch)
+- **timestamp-unix-ms** - a kind of unix-timestamp, but with millisecond resolution.
+  This format is understood for example by ElasticSearch. Note that RFC3164 does **not**
+  contain subsecond resolution, so this option makes no sense for RFC3164-data only.
+  It is usefull, howerver, if processing mixed sources, some of which contain higher
+  precision.
+
+
 date-rfc5424
 ############
 
 Valid date/time in RFC5424 format, i.e.:
 '1985-04-12T19:20:50.52-04:00'.
 Slightly different formats are allowed.
+
+Parameters
+..........
+
+format
+~~~~~~
+
+Specifies the format of the json object. Possible values are
+
+- **string** - string representation as given in input data
+- **timestamp-unix** - string converted to an unix timestamp (seconds since epoch).
+  If subsecond resolution is given in the original timestamp, it is lost.
+- **timestamp-unix-ms** - a kind of unix-timestamp, but with millisecond resolution.
+  This format is understood for example by ElasticSearch. Note that a RFC5424
+  timestamp can contain higher than ms resolution. If so, the timestamp is
+  truncated to millisecond resolution.
+
 
 
 ipv4

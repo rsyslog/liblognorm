@@ -46,8 +46,8 @@
 	int ln_v2_parse##parser(npb_t *npb, size_t *offs, void *const, size_t *parsed, struct json_object **value); \
 	void ln_destruct##parser(ln_ctx ctx, void *const pdata)
 
-PARSERDEF_NO_DATA(RFC5424Date);
-PARSERDEF_NO_DATA(RFC3164Date);
+PARSERDEF(RFC5424Date);
+PARSERDEF(RFC3164Date);
 PARSERDEF(Number);
 PARSERDEF(Float);
 PARSERDEF(HexNumber);
