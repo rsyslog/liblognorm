@@ -734,7 +734,7 @@ done:
  */
 PARSER(StringTo)
 	const char *c;
-	const char *toFind;
+	char *toFind = NULL;
 	size_t i, j, k, m;
 	int chkstr;
 	assert(str != NULL);
@@ -772,6 +772,7 @@ PARSER(StringTo)
 
 	r = 0; /* success */
 done:
+	if(toFind != NULL) free(toFind);
 	return r;
 }
 
