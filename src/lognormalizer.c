@@ -385,6 +385,7 @@ int main(int argc, char *argv[])
 		case 'S': /* generate pdag statistic file */
 			extendedStats = 1;
 			/* INTENTIONALLY NO BREAK! - KEEP order! */
+			/*FALLTHROUGH*/
 		case 's': /* generate pdag statistic file */
 			if(!strcmp(optarg, "-")) {
 				fpStats = stdout;
