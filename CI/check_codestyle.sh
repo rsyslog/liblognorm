@@ -5,4 +5,4 @@ git clone https://github.com/rsyslog/codestyle
 cd codestyle
 gcc --std=c99 stylecheck.c -o stylecheck
 cd ../..
-find . -name "*.[ch]" | xargs _tmp_stylecheck/codestyle/stylecheck
+find . -name "*.[ch]" | xargs _tmp_stylecheck/codestyle/stylecheck -l 130

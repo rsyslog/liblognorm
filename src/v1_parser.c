@@ -908,7 +908,8 @@ PARSER(Recursive)
 			json_object_put(*value);
 			*value = NULL;
 			*parsed = 0;
-		} else if (pData->remaining_field != NULL && json_object_object_get_ex(*value, pData->remaining_field, &unparsed)) {
+		} else if (pData->remaining_field != NULL
+			&& json_object_object_get_ex(*value, pData->remaining_field, &unparsed)) {
 			*parsed = strLen - *offs - json_object_get_string_len(unparsed);
 			json_object_object_del(*value, pData->remaining_field);
 		} else {
@@ -948,8 +949,9 @@ done:
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
 		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation "
 		"doneed for field: %s", name);
-		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
-															  "recursive/descent field: %s", name);
+		else if (pData->remaining_field == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
+				"recursive/descent field: %s", name);
 
 		recursive_parser_data_destructor((void**) &pData);
 	}
@@ -959,8 +961,8 @@ done:
 }
 
 static ln_ctx identity_recursive_parse_ctx_constructor(ln_ctx parent_ctx,
-													   __attribute__((unused)) pcons_args_t* args,
-													   __attribute__((unused)) const char* field_name) {
+	__attribute__((unused)) pcons_args_t* args,
+	__attribute__((unused)) const char* field_name) {
 	return parent_ctx;
 }
 
@@ -1053,9 +1055,11 @@ PARSER(Tokenized)
 
 			if (remaining) json_object_put(remaining);
 
-			if (pData->use_default_field && json_object_object_get_ex(json_p, DEFAULT_MATCHED_FIELD_NAME, &match)) {
+			if (pData->use_default_field
+				&& json_object_object_get_ex(json_p, DEFAULT_MATCHED_FIELD_NAME, &match)) {
 				json_object_array_add(matches, json_object_get(match));
-			} else if (! (pData->use_default_field || json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
+			} else if (! (pData->use_default_field
+				|| json_object_object_get_ex(json_p, UNPARSED_DATA_KEY, &match))) {
 				json_object_array_add(matches, json_object_get(json_p));
 			} else {
 				if (json_object_array_length(matches) > 0) {
@@ -1348,7 +1352,7 @@ done:
 	if (r != 0) {
 		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory regex-field name");
 		else if (! ctx->opts & LN_CTXOPT_ALLOW_REGEX) ln_dbgprintf(ctx, "regex support is not enabled for: '%s' "
-												 "(please check lognorm context initialization)", name);
+			 "(please check lognorm context initialization)", name);
 		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
 		else if (unescaped_exp == NULL) ln_dbgprintf(ctx, "regular-expression missing for field: '%s'", name);
@@ -1356,7 +1360,7 @@ done:
 		else if (grp_parse_err != NULL)  ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
 		else if (pData->re == NULL)
 			ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
-												 "for regex-matched field: '%s'", error, erroffset, name);
+				 "for regex-matched field: '%s'", error, erroffset, name);
 		regex_parser_data_destructor((void**)&pData);
 	}
 	if (exp != NULL) free(exp);
@@ -1595,10 +1599,10 @@ FAILParser
 } ENDFailParser
 
 static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_fieldList_t *node,
-																 ln_ctx ctx,
-																 es_str_t* raw_args,
-																 const char* value_field,
-																 const char* suffix_field) {
+	ln_ctx ctx,
+	es_str_t* raw_args,
+	const char* value_field,
+	const char* suffix_field) {
 	int r = LN_BADCONFIG;
 	pcons_args_t* args = NULL;
 	char* name = NULL;
