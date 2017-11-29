@@ -944,10 +944,14 @@ _recursive_parser_data_constructor(ln_fieldList_t *node,
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "recursive/descent normalizer context creation "
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for recursive/descent field name");
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData->ctx == NULL)
+			ln_dbgprintf(ctx, "recursive/descent normalizer context creation "
 		"doneed for field: %s", name);
 		else if (pData->remaining_field == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for remaining-field name for "
@@ -980,10 +984,15 @@ static ln_ctx child_recursive_parse_ctx_constructor(ln_ctx parent_ctx, pcons_arg
 	CHKR(ln_v1_loadSamples(ctx, rb));
 done:
 	if (r != 0) {
-		if (rb == NULL) ln_dbgprintf(parent_ctx, "file-name for descent rulebase not provided for field: %s", field_name);
-		else if (ctx == NULL) ln_dbgprintf(parent_ctx, "couldn't allocate memory to create descent-field "
-		"normalizer context for field: %s", field_name);
-		else ln_dbgprintf(parent_ctx, "couldn't load samples into descent context for field: %s", field_name);
+		if (rb == NULL)
+			ln_dbgprintf(parent_ctx, "file-name for descent rulebase not provided for field: %s",
+				field_name);
+		else if (ctx == NULL)
+			ln_dbgprintf(parent_ctx, "couldn't allocate memory to create descent-field normalizer "
+				"context for field: %s", field_name);
+		else
+			ln_dbgprintf(parent_ctx, "couldn't load samples into descent context for field: %s",
+				field_name);
 		if (ctx != NULL) ln_exitCtx(ctx);
 		ctx = NULL;
 	}
@@ -1077,7 +1086,8 @@ PARSER(Tokenized)
 				if (remaining_len > 0) {
 					remaining_str = json_object_get_string(json_object_get(remaining));
 					json_object_object_del(json_p, pData->remaining_field);
-					if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str, es_strlen(pData->tok_str))) {
+					if (es_strbufcmp(pData->tok_str, (const unsigned char *)remaining_str,
+					es_strlen(pData->tok_str))) {
 						json_object_put(remaining);
 						break;
 					} else {
@@ -1219,17 +1229,26 @@ void* tokenized_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for tokenized-field name");
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
-		else if (tok == NULL) ln_dbgprintf(ctx, "token-separator not provided for field: %s", name);
-		else if (pData->tok_str == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for token-separator "
-		"for field: %s", name);
-		else if (field_descr == NULL) ln_dbgprintf(ctx, "field-type not provided for field: %s", name);
-		else if (field == NULL) ln_dbgprintf(ctx, "couldn't resolve single-token field-type for tokenized field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't initialize normalizer-context for field: %s", name);
-		else if (pData->remaining_field == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for "
-															  "remaining-field-name for field: %s", name);
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for tokenized-field name");
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (tok == NULL)
+			ln_dbgprintf(ctx, "token-separator not provided for field: %s", name);
+		else if (pData->tok_str == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for token-separator "
+			"for field: %s", name);
+		else if (field_descr == NULL)
+			ln_dbgprintf(ctx, "field-type not provided for field: %s", name);
+		else if (field == NULL)
+			ln_dbgprintf(ctx, "couldn't resolve single-token field-type for tokenized field: %s", name);
+		else if (pData->ctx == NULL)
+			ln_dbgprintf(ctx, "couldn't initialize normalizer-context for field: %s", name);
+		else if (pData->remaining_field == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for "
+				"remaining-field-name for field: %s", name);
 		if (pData) tokenized_parser_data_destructor((void**) &pData);
 	}
 	if (name != NULL) free(name);
@@ -1273,7 +1292,8 @@ PARSER(Regex)
 				if (pData->consume_group != pData->return_group) {
 					char* val = NULL;
 					if((val = strndup(str + ovector[2 * pData->return_group],
-						ovector[2 * pData->return_group + 1] - ovector[2 * pData->return_group])) == NULL) {
+						ovector[2 * pData->return_group + 1] -
+						ovector[2 * pData->return_group])) == NULL) {
 						free(ovector);
 						FAIL(LN_NOMEM);
 					}
@@ -1342,22 +1362,31 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	pcons_unescape_arg(args, 0);
 	CHKN(exp = pcons_arg_copy(args, 0, NULL));
 
-	if ((grp_parse_err = regex_parser_configure_consume_and_return_group(args, pData)) != NULL) FAIL(LN_BADCONFIG);
+	if ((grp_parse_err = regex_parser_configure_consume_and_return_group(args, pData)) != NULL)
+		FAIL(LN_BADCONFIG);
 
 	CHKN(pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL));
 
-	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group : pData->return_group) + 1;
+	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group :
+					pData->return_group) + 1;
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory regex-field name");
-		else if (! ctx->opts & LN_CTXOPT_ALLOW_REGEX) ln_dbgprintf(ctx, "regex support is not enabled for: '%s' "
-			 "(please check lognorm context initialization)", name);
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (unescaped_exp == NULL) ln_dbgprintf(ctx, "regular-expression missing for field: '%s'", name);
-		else if (exp == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for regex-string for field: '%s'", name);
-		else if (grp_parse_err != NULL)  ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory regex-field name");
+		else if (! ctx->opts & LN_CTXOPT_ALLOW_REGEX)
+			ln_dbgprintf(ctx, "regex support is not enabled for: '%s' "
+				"(please check lognorm context initialization)", name);
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (unescaped_exp == NULL)
+			ln_dbgprintf(ctx, "regular-expression missing for field: '%s'", name);
+		else if (exp == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for regex-string for field: '%s'", name);
+		else if (grp_parse_err != NULL)
+			ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
 		else if (pData->re == NULL)
 			ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
 				 "for regex-matched field: '%s'", error, erroffset, name);
@@ -1506,16 +1535,23 @@ void* interpret_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for interpret-field name");
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (type_str == NULL) ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
-		else if (bad_interpret != 0) ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s",
-												  type_str, name);
-		else if (field_type == NULL) ln_dbgprintf(ctx, "field-type to actually match the content not provided for "
-												  "field: %s", name);
-		else if (pData->ctx == NULL) ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching "
-												  "field: %s", name);
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for interpret-field name");
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (type_str == NULL)
+			ln_dbgprintf(ctx, "no type provided for interpretation of field: %s", name);
+		else if (bad_interpret != 0)
+			ln_dbgprintf(ctx, "interpretation to unknown type '%s' requested for field: %s",
+				type_str, name);
+		else if (field_type == NULL)
+			ln_dbgprintf(ctx, "field-type to actually match the content not provided for "
+				"field: %s", name);
+		else if (pData->ctx == NULL)
+			ln_dbgprintf(ctx, "couldn't instantiate the normalizer context for matching "
+				"field: %s", name);
 
 		interpret_parser_data_destructor((void**) &pData);
 	}
@@ -1662,26 +1698,37 @@ static struct suffixed_parser_data_s* _suffixed_parser_data_constructor(ln_field
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory suffixed-field name");
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory suffixed-field name");
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for parser-data for field: %s", name);
 		else if (pData->value_field_name == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for value-field's name for field: %s", name);
 		else if (pData->suffix_field_name == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-field's name for field: %s", name);
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (escaped_tokenizer == NULL) ln_dbgprintf(ctx, "suffix token-string missing for field: '%s'", name);
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (escaped_tokenizer == NULL)
+			ln_dbgprintf(ctx, "suffix token-string missing for field: '%s'", name);
 		else if (tokenizer == NULL)
-			ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'", name);
-		else if (uncopied_suffixes_str == NULL)  ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
-		else if (suffixes_str == NULL)  ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
-		else if (pData->nsuffix == 0)  ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
+			ln_dbgprintf(ctx, "couldn't allocate memory for unescaping token-string for field: '%s'",
+				name);
+		else if (uncopied_suffixes_str == NULL)
+			ln_dbgprintf(ctx, "suffix-list missing for field: '%s'", name);
+		else if (suffixes_str == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
+		else if (pData->nsuffix == 0)
+			ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
 		else if (pData->suffix_offsets == NULL)
-			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: '%s'", name);
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: "
+				"'%s'", name);
 		else if (pData->suffix_lengths == NULL)
-			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element lengths for field: '%s'", name);
+			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element lengths for field: '%s'",
+				name);
 		else if (pData->suffixes_str == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
-		else if (field_type == NULL)  ln_dbgprintf(ctx, "field-type declaration missing for field: '%s'", name);
+		else if (field_type == NULL)
+			ln_dbgprintf(ctx, "field-type declaration missing for field: '%s'", name);
 		else if (pData->ctx == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for normalizer-context for field: '%s'", name);
 		suffixed_parser_data_destructor((void**)&pData);
@@ -1712,17 +1759,24 @@ void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	CHKN(remaining_args = pcons_arg(args, 2, NULL));
 	CHKN(unnamed_suffix_args = es_newStrFromCStr(remaining_args, strlen(remaining_args)));
 	
-	CHKN(pData = _suffixed_parser_data_constructor(node, ctx, unnamed_suffix_args, value_field_name, suffix_field_name));
+	CHKN(pData = _suffixed_parser_data_constructor(node, ctx, unnamed_suffix_args, value_field_name,
+		suffix_field_name));
 	r = 0;
 done:
 	if (r != 0) {
-		if (name == NULL) ln_dbgprintf(ctx, "couldn't allocate memory named_suffixed-field name");
-		else if (args == NULL) ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
-		else if (value_field_name == NULL) ln_dbgprintf(ctx, "key-name for value not provided for field: %s", name);
-		else if (suffix_field_name == NULL) ln_dbgprintf(ctx, "key-name for suffix not provided for field: %s", name);
+		if (name == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory named_suffixed-field name");
+		else if (args == NULL)
+			ln_dbgprintf(ctx, "couldn't allocate memory for argument-parsing for field: %s", name);
+		else if (value_field_name == NULL)
+			ln_dbgprintf(ctx, "key-name for value not provided for field: %s", name);
+		else if (suffix_field_name == NULL)
+			ln_dbgprintf(ctx, "key-name for suffix not provided for field: %s", name);
 		else if (unnamed_suffix_args == NULL)
-			ln_dbgprintf(ctx, "couldn't allocate memory for unnamed-suffix-field args for field: %s", name);
-		else if (pData == NULL) ln_dbgprintf(ctx, "couldn't create parser-data for field: %s", name);
+			ln_dbgprintf(ctx, "couldn't allocate memory for unnamed-suffix-field args for field: %s",
+				name);
+		else if (pData == NULL)
+			ln_dbgprintf(ctx, "couldn't create parser-data for field: %s", name);
 		suffixed_parser_data_destructor((void**)&pData);
 	}
 	if (unnamed_suffix_args != NULL) free(unnamed_suffix_args);
@@ -2026,7 +2080,8 @@ PARSER(CiscoInterfaceSpec)
 	json_object *json;
 	if(bHaveInterface) {
 		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
-		json_object_object_add_ex(*value, "interface", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		json_object_object_add_ex(*value, "interface", json,
+			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
 	json_object_object_add_ex(*value, "ip", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
@@ -2034,13 +2089,16 @@ PARSER(CiscoInterfaceSpec)
 	json_object_object_add_ex(*value, "port", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	if(bHaveIP2) {
 		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
-		json_object_object_add_ex(*value, "ip2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		json_object_object_add_ex(*value, "ip2", json,
+			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
-		json_object_object_add_ex(*value, "port2", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		json_object_object_add_ex(*value, "port2", json,
+			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 	if(bHaveUser) {
 		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
-		json_object_object_add_ex(*value, "user", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		json_object_object_add_ex(*value, "user", json,
+			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 	}
 
 success: /* success, persist */

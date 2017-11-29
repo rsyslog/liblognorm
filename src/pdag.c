@@ -404,7 +404,8 @@ for(int i = 0 ; i < dag->nparsers ; ++i) { /* TODO: remove when confident enough
 		ln_parser_t *prs = dag->parsers+i;
 		LN_DBGPRINTF(dag->ctx, "optimizing %p: field %d type '%s', name '%s': '%s':",
 			prs->node, i, parserName(prs->prsid), prs->name,
-			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
+			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data)
+				: "UNKNOWN");
 
 		optLitPathCompact(ctx, prs);
 
@@ -1020,7 +1021,8 @@ for(int i = 0 ; i < dag->nparsers ; ++i) {
 		LN_DBGPRINTF(dag->ctx, "%sfield type '%s', name '%s': '%s':", indent,
 			parserName(prs->prsid),
 			dag->parsers[i].name,
-			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) : "UNKNOWN");
+			(prs->prsid == PRS_LITERAL) ?  ln_DataForDisplayLiteral(dag->ctx, prs->parser_data) :
+				"UNKNOWN");
 		if(prs->prsid == PRS_REPEAT) {
 			struct data_Repeat *const data = (struct data_Repeat*) prs->parser_data;
 			LN_DBGPRINTF(dag->ctx, "%sparser:", indent);

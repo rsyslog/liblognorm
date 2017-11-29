@@ -86,6 +86,8 @@ int main(int argc, char** argv) {
 	int result = eq(expected, actual) ? 0 : 1;
 	json_object_put(expected);
 	json_object_put(actual);
-	if (result != 0) { printf("JSONs weren't equal. \n\tExpected: \n\t\t%s\n\tActual: \n\t\t%s\n", argv[1], argv[2]);}
+	if (result != 0) {
+		printf("JSONs weren't equal. \n\tExpected: \n\t\t%s\n\tActual: \n\t\t%s\n", argv[1], argv[2]);
+	}
 	return result;
 }
