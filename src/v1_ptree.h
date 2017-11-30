@@ -54,7 +54,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	es_str_t *raw_data;		/**< extra untouched (unescaping is not done) data availble to be used by parser */
+	es_str_t *raw_data;	/**< extra untouched (unescaping is not done) data availble to be used by parser */
 	void *parser_data; /** opaque data that the field-parser understands */
 	void (*parser_data_destructor)(void **); /** destroy opaque data that field-parser understands */
 	int (*parser)(const char*, size_t, size_t*, const ln_fieldList_t *,

@@ -773,7 +773,8 @@ LN_DBGPRINTF(tree->ctx, "%zu: enter parser, tree %p", offs, tree);
 				}
 				if(left > 0 && left < r)
 					r = left;
-				LN_DBGPRINTF(tree->ctx, "%zu nonmatch, backtracking required, left=%d, r now %d", offs, left, r);
+				LN_DBGPRINTF(tree->ctx, "%zu nonmatch, backtracking required, left=%d, r now %d",
+						offs, left, r);
 				++tree->stats.backtracked;
 			}
 		}
