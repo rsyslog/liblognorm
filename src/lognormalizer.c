@@ -35,7 +35,11 @@
 #include "config.h"
 #include <stdio.h>
 #include <string.h>
+#ifdef _AIX
+#include <unistd.h>
+#else
 #include <getopt.h>
+#endif
 #include <libestr.h>
 
 #include "liblognorm.h"
