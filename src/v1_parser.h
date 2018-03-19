@@ -22,8 +22,8 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
-#ifndef LIBLOGNORM_PARSER_H_INCLUDED
-#define	LIBLOGNORM_PARSER_H_INCLUDED
+#ifndef LIBLOGNORM_V1_PARSER_H_INCLUDED
+#define	LIBLOGNORM_V1_PARSER_H_INCLUDED
 #include "v1_ptree.h"
 
 
@@ -269,4 +269,4 @@ void* suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void* named_suffixed_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx);
 void suffixed_parser_data_destructor(void** dataPtr);
 
-#endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
+#endif /* #ifndef LIBLOGNORM_V1_PARSER_H_INCLUDED */
