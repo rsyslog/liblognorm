@@ -467,7 +467,9 @@ PARSER_Construct(RFC5424Date)
 					fmtmode);
 			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for date-rfc5424 %s", key);
+			if(!(strcmp(key, "name") == 0 && strcmp(json_object_get_string(val), "-") == 0)) {
+				ln_errprintf(ctx, 0, "invalid param for date-rfc5424 %s", key);
+			}
 		}
 		json_object_iter_next(&it);
 	}
@@ -753,7 +755,9 @@ PARSER_Construct(RFC3164Date)
 					fmtmode);
 			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for date-rfc3164 %s", key);
+			if(!(strcmp(key, "name") == 0 && strcmp(json_object_get_string(val), "-") == 0)) {
+				ln_errprintf(ctx, 0, "invalid param for date-rfc3164 %s", key);
+			}
 		}
 		json_object_iter_next(&it);
 	}
@@ -854,7 +858,9 @@ PARSER_Construct(Number)
 					fmtmode);
 			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for number: %s", key);
+			if(!(strcmp(key, "name") == 0 && strcmp(json_object_get_string(val), "-") == 0)) {
+				ln_errprintf(ctx, 0, "invalid param for number: %s", key);
+			}
 		}
 		json_object_iter_next(&it);
 	}
@@ -958,7 +964,9 @@ PARSER_Construct(Float)
 					fmtmode);
 			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for float: %s", key);
+			if(!(strcmp(key, "name") == 0 && strcmp(json_object_get_string(val), "-") == 0)) {
+				ln_errprintf(ctx, 0, "invalid param for float: %s", key);
+			}
 		}
 		json_object_iter_next(&it);
 	}
@@ -1060,7 +1068,9 @@ PARSER_Construct(HexNumber)
 					fmtmode);
 			}
 		} else {
-			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s", key);
+			if(!(strcmp(key, "name") == 0 && strcmp(json_object_get_string(val), "-") == 0)) {
+				ln_errprintf(ctx, 0, "invalid param for hexnumber: %s", key);
+			}
 		}
 		json_object_iter_next(&it);
 	}
