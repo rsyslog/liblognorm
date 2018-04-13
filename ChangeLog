@@ -1,3 +1,4 @@
+TEST
 ----------------------------------------------------------------------
 Version 2.0.5, 2017-??-??
 - bugfix: es_str2cstr leak in string-to v1 parser

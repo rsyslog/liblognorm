@@ -3,6 +3,7 @@
 #        Most important use case is to use GNU grep (ggrep)
 #        on Solaris. If unset, use "grep".
 set -e
+ln_opts=-v
 
 if [ "x$debug" == "xon" ]; then #get core-dump on crash
     ulimit -c unlimited
