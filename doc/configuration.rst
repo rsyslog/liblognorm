@@ -517,7 +517,11 @@ whitespace
 ##########
 
 This parses all whitespace until the first non-whitespace character
-is found. This is primarily a tool to skip to the next "word" if
+is found. This check is performed using the ``isspace()`` C library
+function to check for space, horizontal tab, newline, vertical tab,
+feed and carriage return characters.
+
+This parser is primarily a tool to skip to the next "word" if
 the exact number of whitspace characters (and type of whitespace)
 is not known. The current parsing position MUST be on a whitspace,
 else the parser does not match.
