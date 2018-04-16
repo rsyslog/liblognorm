@@ -36,11 +36,4 @@ strndup(const char *s, size_t n)
 	new_s[len] = '\0';
 	return new_s;
 }
-#else /* #ifndef HAVE_STRNDUP */
-/* Solaris must have at least one symbol inside a file, so we provide
- * it here ;-)
- */
-void dummy_dummy_required_for_solaris_do_not_use(void)
-{
-}
 #endif /* #ifndef HAVE_STRNDUP */
