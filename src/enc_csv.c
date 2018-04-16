@@ -89,9 +89,6 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 			case '\"':
 				es_addBuf(str, "\\\"", 2);
 				break;
-			case '/':
-				es_addBuf(str, "\\/", 2);
-				break;
 			case '\\':
 				es_addBuf(str, "\\\\", 2);
 				break;
