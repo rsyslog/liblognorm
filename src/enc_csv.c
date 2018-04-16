@@ -14,7 +14,7 @@
  */
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -133,7 +133,7 @@ ln_addField_CSV(struct json_object *field, es_str_t **str)
 {
 	int r, i;
 	struct json_object *obj;
-	int needComma;
+	int needComma = 0;
 	const char *value;
 	
 	assert(field != NULL);
