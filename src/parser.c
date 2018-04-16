@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2017 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -3439,6 +3439,9 @@ PARSER_Construct(String)
 		data->flags.esc_md = ST_ESC_NONE;
 	*pdata = data;
 done:
+	if(r != 0) {
+		free(data);
+	}
 	return r;
 }
 PARSER_Destruct(String)
