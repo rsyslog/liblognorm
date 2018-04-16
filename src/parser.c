@@ -2214,6 +2214,7 @@ parseIPTablesNameValue(npb_t *const npb,
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
+	char *name = NULL;
 
 	const size_t iName = i;
 	while(i < npb->strLen && isValidIPTablesNameChar(npb->str[i]))
@@ -2241,7 +2242,6 @@ parseIPTablesNameValue(npb_t *const npb,
 	if(valroot == NULL)
 		goto done;
 
-	char *name;
 	CHKN(name = malloc(lenName+1));
 	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
@@ -2252,8 +2252,8 @@ parseIPTablesNameValue(npb_t *const npb,
 		CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	}
 	json_object_object_add(valroot, name, json);
-	free(name);
 done:
+	free(name);
 	return r;
 }
 
@@ -2398,6 +2398,7 @@ parseNameValue(npb_t *const npb,
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
+	char *name = NULL;
 
 	const size_t iName = i;
 	while(i < npb->strLen && isValidNameChar(npb->str[i]))
@@ -2420,15 +2421,14 @@ parseNameValue(npb_t *const npb,
 	if(valroot == NULL)
 		goto done;
 
-	char *name;
 	CHKN(name = malloc(lenName+1));
 	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
 	json_object *json;
 	CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	json_object_object_add(valroot, name, json);
-	free(name);
 done:
+	free(name);
 	return r;
 }
 
