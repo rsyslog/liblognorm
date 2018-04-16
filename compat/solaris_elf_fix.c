@@ -1,13 +1,17 @@
-/* compatibility file for systems without strndup.
+/* This file ensure that is at least one symbol in our compat
+ * convenience library. Otherwise, at least the Solaris linker
+ * bails out with an error message like this:
  *
- * Copyright 2015 Rainer Gerhards and Adiscon
+ * ld: elf error: file ../compat/.libs/compat.a: elf_getarsym
  *
- * This file is part of liblognorm.
+ * Copyright 2016 Rainer Gerhards and Adiscon
+ *
+ * This file is part of rsyslog.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *       http://www.apache.org/licenses/LICENSE-2.0
  *       -or-
  *       see COPYING.ASL20 in the source distribution
@@ -19,21 +23,6 @@
  * limitations under the License.
  */
 #include "config.h"
-#ifndef HAVE_STRNDUP
-
-#include <stdlib.h>
-#include <string.h>
-char *
-strndup(const char *s, size_t n)
-{
-	const size_t len = strlen(s);
-	if(len <= n)
-		return strdup(s);
-	char *const new_s = malloc(len+1);
-	if(new_s == NULL)
-		return NULL;
-	memcpy(new_s, s, len);
-	new_s[len] = '\0';
-	return new_s;
-}
-#endif /* #ifndef HAVE_STRNDUP */
+#ifdef OS_SOLARIS
+int SOLARIS_wants_a_symbol_inside_the_lib;
+#endif

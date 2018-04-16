@@ -1,3 +1,4 @@
+#/bin/bash
 . $srcdir/exec.sh
 
 test_def $0 "multiple formats including string (see also: rule_last_str_short.sh)"

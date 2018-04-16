@@ -16,22 +16,49 @@ AM_PROG_CC_C_O
 AC_PROG_CC_C99
 AC_PROG_LIBTOOL
 
-m4_ifdef([AX_IS_RELEASE], [
-	AX_IS_RELEASE([git-directory])
-	m4_ifdef([AX_COMPILER_FLAGS], [
-		AX_COMPILER_FLAGS()
+case "${host}" in
+  *-*-linux*)
+    AC_DEFINE([OS_LINUX], [1], [Indicator for a Linux OS])
+    os_type="linux"
+  ;;
+  *-*-*darwin*|*-*-dragonfly*|*-*-freebsd*|*-*-netbsd*|*-*-openbsd*)
+    AC_DEFINE([OS_BSD], [1], [Indicator for a BSD OS])
+    os_type="bsd"
+  ;;
+  *-*-kfreebsd*)
+    # kernel is FreeBSD, but userspace is glibc - i.e. like linux
+    # do not DEFINE OS_BSD
+    os_type="bsd"
+  ;;
+  *-*-solaris*)
+    os_type="solaris"
+    AC_DEFINE([OS_SOLARIS], [1], [Indicator for a Solaris OS])
+    CPPFLAGS="-std=c99 $CPPFLAGS"
+    CFLAGS="-std=c99 $CFLAGS"
+  ;;
+  *-*-aix*)
+    os_type="aix"
+    AC_DEFINE([OS_AIX], [1], [Indicator for a AIX OS])
+  ;;
+esac
+
+if test "$GCC" = "yes"
+then
+	m4_ifdef([AX_IS_RELEASE], [
+		AX_IS_RELEASE([git-directory])
+		m4_ifdef([AX_COMPILER_FLAGS], [
+			AX_COMPILER_FLAGS()
+		], [
+			CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
+			AC_MSG_WARN([missing AX_COMPILER_FLAGS macro, not using it])
+		])
 	], [
-		if test "$GCC" = "yes"
-		then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
-		fi
-		AC_MSG_WARN([missing AX_COMPILER_FLAGS macro, not using it])
+		CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
+		AC_MSG_WARN([missing AX_IS_RELEASE macro, not using AX_COMPILER_FLAGS macro because of this])
 	])
-], [
-	if test "$GCC" = "yes"
-	then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
-	fi
-	AC_MSG_WARN([missing AX_IS_RELEASE macro, not using AX_COMPILER_FLAGS macro because of this])
-])
+else
+	AC_MSG_WARN([compiler is not GCC or close compatible, not using ax_compiler_flags because of this (CC=$CC)])
+fi
 
 
 

@@ -3,7 +3,7 @@ check_PROGRAMS = json_eq
 json_eq_self_sources = json_eq.c
 json_eq_SOURCES = $(json_eq_self_sources)
 json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
-json_eq_LDADD = $(JSON_C_LIBS) -lm -lestr
+json_eq_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS) $(LIBESTR_LIBS) -lm ../compat/compat.la 
 json_eq_LDFLAGS = -no-install
 
 #user_test_SOURCES = user_test.c

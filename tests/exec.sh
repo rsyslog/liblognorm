@@ -1,3 +1,4 @@
+#/bin/bash
 # environment variables:
 # GREP - if set, can be used to use alternative grep version
 #        Most important use case is to use GNU grep (ggrep)
@@ -87,7 +88,8 @@ add_rule() {
 
 add_rule_no_LF() {
     rb_file=$(rulebase_file_name $2)
-    echo -n $1 >> $rb_file
+    # note: echo -n is NOT portable and does not work on e.g. Solaris
+    printf %s "$1" >> $rb_file
 }
 
 
