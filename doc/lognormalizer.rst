@@ -11,7 +11,7 @@ or write files.
 
 An example of the command::
 
-    $ lognormalizer -r messages.sampdb -o json <messages.log
+    $ lognormalizer -r messages.sampdb -e json <messages.log
 
 Command line options
 --------------------
