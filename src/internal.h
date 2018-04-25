@@ -31,7 +31,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2016 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -55,6 +55,12 @@
  */
 #ifndef INTERNAL_H_INCLUDED
 #define	INTERNAL_H_INCLUDED
+
+/* the jump-misses-init gcc warning is overdoing when we jump to the
+ * exit of a function to get proper finalization. So let's disable it.
+ * rgerhards, 2018-04-25
+ */
+#pragma GCC diagnostic ignored "-Wjump-misses-init"
 
 #include "liblognorm.h"
 
