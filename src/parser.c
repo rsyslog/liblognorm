@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2017 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -2214,6 +2214,7 @@ parseIPTablesNameValue(npb_t *const npb,
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
+	char *name = NULL;
 
 	const size_t iName = i;
 	while(i < npb->strLen && isValidIPTablesNameChar(npb->str[i]))
@@ -2241,7 +2242,6 @@ parseIPTablesNameValue(npb_t *const npb,
 	if(valroot == NULL)
 		goto done;
 
-	char *name;
 	CHKN(name = malloc(lenName+1));
 	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
@@ -2252,8 +2252,8 @@ parseIPTablesNameValue(npb_t *const npb,
 		CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	}
 	json_object_object_add(valroot, name, json);
-	free(name);
 done:
+	free(name);
 	return r;
 }
 
@@ -2398,6 +2398,7 @@ parseNameValue(npb_t *const npb,
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
+	char *name = NULL;
 
 	const size_t iName = i;
 	while(i < npb->strLen && isValidNameChar(npb->str[i]))
@@ -2420,15 +2421,14 @@ parseNameValue(npb_t *const npb,
 	if(valroot == NULL)
 		goto done;
 
-	char *name;
 	CHKN(name = malloc(lenName+1));
 	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
 	json_object *json;
 	CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	json_object_object_add(valroot, name, json);
-	free(name);
 done:
+	free(name);
 	return r;
 }
 
@@ -3439,6 +3439,9 @@ PARSER_Construct(String)
 		data->flags.esc_md = ST_ESC_NONE;
 	*pdata = data;
 done:
+	if(r != 0) {
+		free(data);
+	}
 	return r;
 }
 PARSER_Destruct(String)

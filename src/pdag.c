@@ -206,6 +206,7 @@ ln_newParser(ln_ctx ctx,
 	struct ln_type_pdag *custType = NULL;
 	const char *name = NULL;
 	const char *textconf = json_object_to_json_string(prscnf);
+	int assignedPrio = DFLT_USR_PARSER_PRIO;
 	int parserPrio;
 
 	json_object_object_get_ex(prscnf, "type", &json);
@@ -240,8 +241,9 @@ ln_newParser(ln_ctx ctx,
 	}
 
 	json_object_object_get_ex(prscnf, "priority", &json);
-	const int assignedPrio = (json == NULL) ? DFLT_USR_PARSER_PRIO :
-						  json_object_get_int(json);
+	if(json != NULL) {
+		assignedPrio = json_object_get_int(json);
+	}
 	LN_DBGPRINTF(ctx, "assigned priority is %d", assignedPrio);
 
 	/* we need to remove already processed items from the config, so
@@ -838,6 +840,7 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	struct ln_pdag **nextnode)
 {
 	int r;
+	ln_parser_t *newtab;
 	LN_DBGPRINTF(ctx, "ln_pdagAddParserInstance: %s, nextnode %p",
 		json_object_to_json_string(prscnf), *nextnode);
 	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
@@ -870,8 +873,7 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 		(*nextnode)->refcnt++;
 	}
 	parser->node = *nextnode;
-	ln_parser_t *const newtab
-		= realloc(pdag->parsers, (pdag->nparsers+1) * sizeof(ln_parser_t));
+	newtab = realloc(pdag->parsers, (pdag->nparsers+1) * sizeof(ln_parser_t));
 	CHKN(newtab);
 	pdag->parsers = newtab;
 	memcpy(pdag->parsers+pdag->nparsers, parser, sizeof(ln_parser_t));
@@ -1620,6 +1622,7 @@ int
 ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p)
 {
 	int r;
+	struct ln_pdag *endNode = NULL;
 	/* old cruft */
 	if(ctx->version == 1) {
 		r = ln_v1_normalize(ctx, str, strLen, json_p);
@@ -1627,7 +1630,6 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 	}
 	/* end old cruft */
 
-	struct ln_pdag *endNode = NULL;
 	npb_t npb;
 	memset(&npb, 0, sizeof(npb));
 	npb.ctx = ctx;
