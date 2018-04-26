@@ -2,7 +2,7 @@
  * This code handles rulebase processing. Rulebases have been called
  * "sample bases" in the early days of liblognorm, thus the name.
  *
- * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -41,7 +41,6 @@
 #include "pdag.h"
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"
-
 
 void
 ln_sampFree(ln_ctx __attribute__((unused)) ctx, struct ln_samp *samp)
