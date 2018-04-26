@@ -1,4 +1,6 @@
 ----------------------------------------------------------------------
+Version 2.0.6, 2018-??-??
+----------------------------------------------------------------------
 Version 2.0.5, 2018-04-26
 - bugfix: es_str2cstr leak in string-to v1 parser
   Thanks to Harshvardhan Shrivastava for the patch.
