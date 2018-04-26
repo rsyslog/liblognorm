@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.0.5, 2017-??-??
+Version 2.0.5, 2018-04-26
 - bugfix: es_str2cstr leak in string-to v1 parser
   Thanks to Harshvardhan Shrivastava for the patch.
 - make "make check" "succeed" on solaris 10
@@ -13,6 +13,8 @@ Version 2.0.5, 2017-??-??
   problem. Note: the issues was orignally not seen, as the failing
   tests have been added later on. So the problem was always there,
   just not visible.
+- some mostly cosmetic fixes detected by Coverity Scan
+  e. g. memory leak if and only if system was completely out of memory
 ----------------------------------------------------------------------
 Version 2.0.4, 2017-10-04
 - added support for native JSON number formats
