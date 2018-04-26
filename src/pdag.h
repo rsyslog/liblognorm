@@ -82,7 +82,7 @@ struct ln_parser_s {
 	prsid_t prsid;		/**< parser ID (for lookup table) */
 	ln_pdag *node;		/**< node to branch to if parser succeeded */
 	void *parser_data;	/**< opaque data that the field-parser understands */
-	struct ln_type_pdag *custType;	/**< points to custom type, if such is used */
+	size_t custTypeIdx;	/**< index to custom type, if such is used */
 	int prio;		/**< priority (combination of user- and parser-specific parts) */
 	const char *name;	/**< field name */
 	const char *conf;	/**< configuration as printable json for comparison reasons */
