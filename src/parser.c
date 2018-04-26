@@ -1388,15 +1388,17 @@ PARSER_DataForDisplay(CharTo)
 	struct data_CharTo *data = (struct data_CharTo*) pdata;
 	if(data->data_for_display == NULL) {
 		data->data_for_display = malloc(8+data->n_term_chars+2);
-		memcpy(data->data_for_display, "char-to{", 8);
-		size_t i, j;
-		for(j = 0, i = 8 ; j < data->n_term_chars ; ++j, ++i) {
-			data->data_for_display[i] = data->term_chars[j];
+		if(data->data_for_display != NULL) {
+			memcpy(data->data_for_display, "char-to{", 8);
+			size_t i, j;
+			for(j = 0, i = 8 ; j < data->n_term_chars ; ++j, ++i) {
+				data->data_for_display[i] = data->term_chars[j];
+			}
+			data->data_for_display[i++] = '}';
+			data->data_for_display[i] = '\0';
 		}
-		data->data_for_display[i++] = '}';
-		data->data_for_display[i] = '\0';
 	}
-	return data->data_for_display;
+	return (data->data_for_display == NULL ) ? "malloc error" : data->data_for_display;
 }
 PARSER_Destruct(CharTo)
 {
@@ -3325,6 +3327,7 @@ PARSER_Parse(String)
 			len = *parsed;
 		}
 		char *const cstr = strndup(npb->str+strt, len);
+		CHKN(cstr);
 		if(bHadEscape) {
 			/* need to post-process string... */
 			for(size_t j = 0 ; cstr[j] != '\0' ; j++) {
