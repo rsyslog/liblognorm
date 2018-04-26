@@ -37,8 +37,8 @@ strndup(const char *s, size_t n)
 	return new_s;
 }
 #else /* #ifndef HAVE_STRNDUP */
-/* Solaris must have at least one symbol inside a file, so we provide
- * it here ;-)
+/* this just ensures that we have at least one symbol in our lib.
+ * Otherwise, we have a build failure under Solaris.
  */
 void dummy_dummy_required_for_solaris_do_not_use(void)
 {
