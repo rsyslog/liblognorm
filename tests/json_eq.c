@@ -30,9 +30,9 @@ static int arr_eq(obj* expected, obj* actual) {
 	int actual_len = json_object_array_length(actual);
 	if (expected_len != actual_len) return 0;
 		for (int i = 0; i < expected_len; i++) {
-			obj* exp = json_object_array_get_idx(expected, i);
+			obj* _exp = json_object_array_get_idx(expected, i);
 			obj* act = json_object_array_get_idx(actual, i);
-			eql &= eq(exp, act);
+			eql &= eq(_exp, act);
 		}
 	return eql;
 }
