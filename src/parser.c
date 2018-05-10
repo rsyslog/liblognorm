@@ -1794,7 +1794,6 @@ PARSER_Parse(CiscoInterfaceSpec)
 	size_t lenPort;
 	if(ln_v2_parseNumber(npb, &i, NULL, &lenPort, NULL) != 0) goto done;
 	i += lenPort;
-	if(i == npb->strLen) goto success;
 
 	/* check if optional second ip/port is present
 	 * We assume we must at least have 5 chars [" (::1)"]
