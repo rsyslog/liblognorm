@@ -65,6 +65,8 @@ TESTS_SHELLSCRIPTS = \
 	strict_prefix_matching_2.sh \
 	field_string.sh \
 	field_string_perm_chars.sh \
+	field_string_lazy_matching.sh \
+	field_string_doc_sample_lazy.sh \
 	field_number.sh \
 	field_number-fmt_number.sh \
 	field_number_maxval.sh \
