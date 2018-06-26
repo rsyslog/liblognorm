@@ -1,5 +1,7 @@
 ----------------------------------------------------------------------
 Version 2.0.6, 2018-??-??
+- made build on AIX
+  Thanks to Philippe Duveau for the patch.
 - string parser: add "lazy" matching mode
   This introduces paramter "matching.lazy". See doc for details.
 - bugfix: suppress invalid param error for field name "-"
