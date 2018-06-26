@@ -69,7 +69,9 @@
 /* we need to turn off this warning, as it also comes up in C99 mode, which
  * we use.
  */
+#ifndef _AIX
 #pragma GCC diagnostic ignored "-Wdeclaration-after-statement"
+#endif
 
 /* support for simple error checking */
 
