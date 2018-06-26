@@ -11,6 +11,7 @@ if [ $? -eq 0 ] ; then
 fi
 
 . $srcdir/exec.sh
+set -x
 
 test_def $0 "hexnumber field"
 add_rule 'rule=:here is a number %num:hexnumber% in hex form'
