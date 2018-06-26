@@ -2,8 +2,16 @@
 Version 2.0.6, 2018-??-??
 - string parser: add "lazy" matching mode
   This introduces paramter "matching.lazy". See doc for details.
-- fix that cisco-interface-spec did not succeed when at end of line
+- bugfix: suppress invalid param error for field name "-"
+  Suppress invalid param error for name for hexnumber, float, number,
+  date-rfc3164 and date-rfc5424. It will just check if name is "-" to
+  make sure that we only suppress the error message in case we do not
+  want to capture something.
   Thanks to Sol Huebner for the patch.
+  closes https://github.com/rsyslog/liblognorm/issues/270
+- bugfix: cisco-interface-spec did not succeed when at end of line
+  Thanks to Sol Huebner for the patch.
+  closes https://github.com/rsyslog/liblognorm/issues/229
 ----------------------------------------------------------------------
 Version 2.0.5, 2018-04-26
 - bugfix: es_str2cstr leak in string-to v1 parser
