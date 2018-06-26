@@ -568,10 +568,16 @@ Specifies how quote character escaping is handled. Possible modes:
 * **backslash** - a backslash is prepended to the quote character (e.g ``\"``)
 * **both** - both double and backslash escaping can happen and are supported
 
+Default is ``both``.
+
 Note that turning on ``backslash`` mode (or ``both``) has the side-effect that
 backslash escaping is enabled in general. This usually is what you want
 if this option is selected (e.g. otherwise you could no longer represent
 backslash).
+
+**NOTE**: this parameter also affects operation if quoting is **turned off**. That
+is somewhat counter-intuitive, but has traditionally been the case - which means
+we cannot change it.
 
 quoting.char.begin
 ~~~~~~~~~~~~~~~~~~
@@ -643,6 +649,39 @@ follows::
 		       {"class":"digit"},
 		       {"class":"alpha"}
                           ]}%
+
+matching.mode
+~~~~~~~~~~~~~
+
+This parameter permits the strict matching requirement of liblognorm, where each
+parser must be terminated by a space character. Possible values are:
+
+* **strict** - which requires that space
+* **lazy** - which does not
+
+Default is ``strict``, this parameter is available starting with version 2.0.6.
+
+In ``lazy`` mode, the parser always matches if at least one character can be matched.
+This can lead to unexpected results, so use it with care.
+
+Example: assume the following message (without quotes)::
+
+    "12:34 56"
+
+And the following parser definition::
+
+  rule=:%f:string{"matching.permitted":[ {"class":"digit"} ]}
+                   %%r:rest%
+
+This will be unresolvable, as ":" is not a digit. With this definition::
+
+  rule=:%f:string{"matching.permitted":[ {"class":"digit"} ], "matching.mode":"lazy"}
+                   %%r:rest%
+
+it becomes resolvable, and ``f`` will contain "12" and ``r`` will contain ":34 56".
+This also shows the risk associated, as the result obtained may not necessarily be
+what was intended.
+
 
 word
 ####

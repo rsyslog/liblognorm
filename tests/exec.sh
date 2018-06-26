@@ -8,7 +8,8 @@ if [ "x$debug" == "xon" ]; then #get core-dump on crash
     ulimit -c unlimited
 fi
 
-cmd=../src/ln_test
+#cmd="../src/ln_test -v" # case to get debug info (add -vvv for more verbosity)
+cmd=../src/ln_test # regular case
 
 . ./options.sh
 
