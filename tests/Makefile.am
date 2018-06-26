@@ -137,6 +137,7 @@ TESTS_SHELLSCRIPTS += \
 	field_suffixed.sh \
 	field_suffixed_with_invalid_ruledef.sh \
 	field_cisco-interface-spec.sh \
+	field_cisco-interface-spec-at-EOL.sh \
 	field_float_with_invalid_ruledef.sh \
 	very_long_logline.sh
 
