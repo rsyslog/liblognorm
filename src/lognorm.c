@@ -115,7 +115,7 @@ ln_errprintf(const ln_ctx ctx, const int eno, const char *fmt, ...)
 	}
 
 	if(eno != 0) {
-		rs_strerror_r(eno, errbuf, sizeof(errbuf));
+		rs_strerror_r(eno, errbuf, sizeof(errbuf)-1);
 		lenBuf = snprintf(finalbuf, sizeof(finalbuf), "%s: %s", buf, errbuf);
 		msg = finalbuf;
 	} else {
