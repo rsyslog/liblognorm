@@ -99,6 +99,7 @@ TESTS_SHELLSCRIPTS = \
 	field_cef_jsoncnf.sh \
 	field_checkpoint-lea.sh \
 	field_checkpoint-lea_jsoncnf.sh \
+	field_checkpoint-lea-terminator.sh \
 	field_duration.sh \
 	field_duration_jsoncnf.sh \
 	field_float.sh \
