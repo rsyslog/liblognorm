@@ -58,10 +58,7 @@ execute_with_string() {
 }
 
 assert_output_contains() {
-    if [ "x$GREP" == "x" ]; then
-       GREP=grep
-    fi
-    cat test.out | $GREP -F "$1"
+    ${GREP:-grep} -F "$1" < test.out
 }
 
 assert_output_json_eq() {
@@ -93,7 +90,7 @@ add_rule_no_LF() {
 
 
 cleanup_tmp_files() {
-    rm -f test.out *.rulebase 
+    rm -f -- test.out *.rulebase
 }
 
 reset_rules
