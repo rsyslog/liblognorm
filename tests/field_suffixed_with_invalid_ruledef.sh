@@ -1,3 +1,4 @@
+#!/bin/bash
 # added 2015-02-26 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
 . $srcdir/exec.sh

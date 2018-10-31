@@ -1,3 +1,4 @@
+#!/bin/bash
 
 uname -a | grep "SunOS.*5.10"
 if [ $? -eq 0 ] ; then

@@ -1,3 +1,4 @@
+#!/bin/bash
 # added 2018-04-07 by Vincent Tondellier
 # based on usrdef_twotypes.sh
 # This file is part of the liblognorm project, released under ASL 2.0
