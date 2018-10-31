@@ -1,3 +1,4 @@
+#!/bin/bash
 . $srcdir/exec.sh
 
 test_def $0 "string being last in a rule (see also: rule_last_str_long.sh)"

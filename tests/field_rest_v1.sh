@@ -1,3 +1,4 @@
+#!/bin/bash
 # some more tests for the "rest" motif, especially to ensure that
 # "rest" will not interfere with more specific rules.
 # added 2015-04-27

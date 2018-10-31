@@ -1,3 +1,4 @@
+#!/bin/bash
 # added 2016-11-08 by Rainer Gerhards
 . $srcdir/exec.sh
 

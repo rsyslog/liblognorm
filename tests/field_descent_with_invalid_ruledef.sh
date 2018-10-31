@@ -1,3 +1,4 @@
+#!/bin/bash
 # added 2014-12-15 by singh.janmejay
 # This file is part of the liblognorm project, released under ASL 2.0
 

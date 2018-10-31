@@ -1,3 +1,4 @@
+#!/bin/bash
 # added 2015-07-15 by Rainer Gerhards
 # This checks if whitespace inside parser definitions is properly treated
 # This file is part of the liblognorm project, released under ASL 2.0
