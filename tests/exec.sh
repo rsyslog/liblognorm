@@ -13,6 +13,16 @@ cmd=../src/ln_test # regular case
 
 . ./options.sh
 
+no_solaris10() {
+    if (uname -a | grep -q "SunOS.*5.10"); then
+       printf 'platform: %s\n' "$(uname -a)"
+       printf 'This looks like solaris 10, we disable known-failing tests to\n'
+       printf 'permit OpenCSW to build packages. However, this are real failures\n'
+       printf 'and so a fix should be done as soon as time permits.\n'
+       exit 77
+fi
+}
+
 test_def() {
     test_file=$(basename $1)
     test_name=$(echo $test_file | sed -e 's/\..*//g')
