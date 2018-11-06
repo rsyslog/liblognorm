@@ -2899,6 +2899,9 @@ done:
 	return r;
 }
 
+struct data_CheckpointLEA {
+	char terminator; /* '\0' - do not use */
+};
 /**
  * Parser for Checkpoint LEA on-disk format.
  * added 2015-06-18 by rgerhards, v1.1.2
@@ -2910,6 +2913,7 @@ PARSER_Parse(CheckpointLEA)
 	int foundFields = 0;
 	char *name = NULL;
 	char *val = NULL;
+	struct data_CheckpointLEA *const data = (struct data_CheckpointLEA*) pdata;
 
 	while(i < npb->strLen) {
 		while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
@@ -2923,11 +2927,15 @@ PARSER_Parse(CheckpointLEA)
 		}
 		iName = i;
 		/* TODO: do a stricter check? ... but we don't have a spec */
+		if(i < npb->strLen && npb->str[i] == data->terminator) {
+			break;
+		}
 		while(i < npb->strLen && npb->str[i] != ':') {
 			++i;
 		}
-		if(i+1 >= npb->strLen || npb->str[i] != ':')
+		if(i+1 >= npb->strLen || npb->str[i] != ':') {
 			FAIL(LN_WRONGPARSER);
+		}
 		lenName = i - iName;
 		++i; /* skip ':' */
 
@@ -2971,6 +2979,40 @@ done:
 		value = NULL;
 	}
 	return r;
+}
+PARSER_Construct(CheckpointLEA)
+{
+	int r = 0;
+	struct data_CheckpointLEA *data = (struct data_CheckpointLEA*) calloc(1, sizeof(struct data_CheckpointLEA));
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcmp(key, "terminator")) {
+			const char *const optval = json_object_get_string(val);
+			if(strlen(optval) != 1) {
+				ln_errprintf(ctx, 0, "terminator must be exactly one character "
+					"but is: '%s'", optval);
+				r = LN_BADCONFIG;
+				goto done;
+			}
+			data->terminator = *optval;
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	return r;
+}
+PARSER_Destruct(CheckpointLEA)
+{
+	free(pdata);
 }
 
 
