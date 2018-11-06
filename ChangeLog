@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.0.6, 2018-??-??
+Version 2.0.6, 2018-11-06
 - implement Checkpoint LEA transfer format
   ... at least if we guess right that this is the format name. This
   type of format seems to be seen in syslog message. Checkpoint does
