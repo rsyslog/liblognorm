@@ -1,7 +1,14 @@
 ----------------------------------------------------------------------
 Version 2.0.6, 2018-??-??
+- implement Checkpoint LEA transfer format
+  ... at least if we guess right that this is the format name. This
+  type of format seems to be seen in syslog message. Checkpoint does
+  not provide a spec, so everything is guesswork... :-(
+  closes https://github.com/rsyslog/liblognorm/issues/309
 - made build on AIX
   Thanks to Philippe Duveau for the patch.
+- fixes and improvements in bash scripting
+  mostly based on shellcheck recommandations (via CodeFactor.com)
 - string parser: add "lazy" matching mode
   This introduces paramter "matching.lazy". See doc for details.
 - bugfix: suppress invalid param error for field name "-"
