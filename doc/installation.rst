@@ -61,7 +61,7 @@ Testing
 
 For a first test we need two further things, a test log and the rulebase. 
 Both can be downloaded `here 
-<http://rainer.gerhards.net/2010/11/log-normalization-first-results.html>`_.
+<https://rainer.gerhards.net/2010/11/log-normalization-first-results.html>`_.
 
 After downloading these examples you can use liblognorm. Go to 
 liblognorm/src and use the command below::
