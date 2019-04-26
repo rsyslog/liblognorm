@@ -4,10 +4,10 @@ Contacts
 Mailing list
 ------------
 
-If you have any questions about the library, you may mail to the project
-mailing list lognorm@lists.adiscon.com.
+If you have any questions about the library, you may mail to the rsyslog
+mailing list rsyslog@lists.adiscon.com.
 
-To subscribe: http://lists.adiscon.net/mailman/listinfo/lognorm
+To subscribe: http://lists.adiscon.net/mailman/listinfo/rsyslog
 
 Web site
 --------
