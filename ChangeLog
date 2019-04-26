@@ -141,7 +141,7 @@ Version 1.1.2, 2015-07-20
   changing the load order would also have caused problems, so there
   really is no compatibility to preserve.
   see also:
-  http://blog.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
+  http://rainer.gerhards.net/2015/04/liblognorms-rest-parser-now-more-useful.html
 - new API to support error callbacks 
   This permits callers to forward messages in regard to e.g. wrong rule
   bases to their users, which is very useful and actually missing in the
@@ -230,7 +230,7 @@ Version 0.3.2 (rgerhards), 2011-11-21
   (currently experimental pending practical verification)
 - normalizer tool on its way to a full-blow stand-alone tool
 - support for annotations added, for the time being see
-  http://blog.gerhards.net/2011/11/log-annotation-with-liblognorm.html
+  http://rainer.gerhards.net/2011/11/log-annotation-with-liblognorm.html
 ----------------------------------------------------------------------
 Version 0.3.1 (rgerhards), 2011-04-18
 - added -t option to normalizer so that only messages with a 

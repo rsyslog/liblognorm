@@ -25,4 +25,4 @@ Authors
 
 Rainer Gerhards <rgerhards@adiscon.com>, Adiscon GmbH
 
-	His blog: http://blog.gerhards.net/
+	His blog: http://rainer.gerhards.net/
