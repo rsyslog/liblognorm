@@ -37,7 +37,7 @@ Open a terminal and switch to the folder where you want to build
 liblognorm. Below you will find the necessary commands. First, build
 and install prerequisite library called **libestr**::
 
-    $ git clone git://git.adiscon.com/git/libestr.git
+    $ git clone git@github.com:rsyslog/libestr.git
     $ cd libestr
     $ autoreconf -vfi
     $ ./configure
@@ -47,7 +47,7 @@ and install prerequisite library called **libestr**::
 leave that folder and repeat this step again for liblognorm::
 
     $ cd ..
-    $ git clone git://git.adiscon.com/git/liblognorm.git
+    $ git clone git@github.com:rsyslog/liblognorm.git
     $ cd liblognorm
     $ autoreconf -vfi
     $ ./configure
