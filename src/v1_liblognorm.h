@@ -17,7 +17,7 @@
  * tags describing the message.
  *
  * For further details, see it's initial announcement available at
- *    http://blog.gerhards.net/2010/10/introducing-liblognorm.html
+ *    https://rainer.gerhards.net/2010/10/introducing-liblognorm.html
  *
  * The public interface of this library is describe in liblognorm.h.
  *
