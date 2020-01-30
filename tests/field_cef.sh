@@ -35,8 +35,8 @@ assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature 
 execute 'CEF:0|V\endor|Product|Version|Signature ID|some name|Severity| name=value' #invalid escape in header
 assert_output_json_eq '{ "originalmsg": "CEF:0|V\\endor|Product|Version|Signature ID|some name|Severity| name=value", "unparsed-data": "CEF:0|V\\endor|Product|Version|Signature ID|some name|Severity| name=value" }'
 
-execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| ' # single trailing space - valid
-assert_output_json_eq '{ "f": { "DeviceVendor": "Vendor", "DeviceProduct": "Product", "DeviceVersion": "Version", "SignatureID": "Signature ID", "Name": "some name", "Severity": "Severity", "Extensions": { } } }'
+execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| ' # single trailing space - invalid
+assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| ", "unparsed-data": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| " }'
 
 execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   ' # multiple trailing spaces - invalid
 assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   ", "unparsed-data": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   " }'
