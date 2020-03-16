@@ -2405,7 +2405,8 @@ isValidNameChar(const char c)
 static int
 parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
-	struct json_object *const __restrict__ valroot)
+	struct json_object *const __restrict__ valroot,
+        const char sep)
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
@@ -2421,7 +2422,7 @@ parseNameValue(npb_t *const npb,
 	++i; /* skip '=' */
 
 	const size_t iVal = i;
-	while(i < npb->strLen && !isspace(npb->str[i]))
+	while(i < npb->strLen && (sep == 0 ? (!isspace(npb->str[i])) : (npb->str[i] != sep)))
 		++i;
 	const size_t lenVal = i - iVal;
 
@@ -2501,6 +2502,12 @@ done:
 	return r;
 }
 
+
+struct data_NameValue {
+	char sep;       /* separator between key/value couples */
+	char keyValSep; /* separator between key and value (TODO implement) */
+};
+
 /**
  * Parser for name/value pairs.
  * On entry must point to alnum char. All following chars must be
@@ -2515,11 +2522,15 @@ done:
  */
 PARSER_Parse(NameValue)
 	size_t i = *offs;
+        struct data_NameValue *const data = (struct data_NameValue*) pdata;
+        const char sep = data->sep;
+
+        LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'", sep);
 
 	/* stage one */
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, NULL));
-		while(i < npb->strLen && isspace(npb->str[i]))
+		CHKR(parseNameValue(npb, &i, NULL, sep));
+		while(i < npb->strLen && (sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
 			++i;
 	}
 
@@ -2534,8 +2545,8 @@ PARSER_Parse(NameValue)
 	i = *offs;
 	CHKN(*value = json_object_new_object());
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, *value));
-		while(i < npb->strLen && isspace(npb->str[i]))
+		CHKR(parseNameValue(npb, &i, *value, sep));
+		while(i < npb->strLen && ((sep == 0) ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
 			++i;
 	}
 
@@ -2543,6 +2554,30 @@ PARSER_Parse(NameValue)
 
 done:
 	return r;
+}
+
+PARSER_Construct(NameValue)
+{
+        int r = 0;
+        LN_DBGPRINTF(ctx, "in parser_construct NameValue");
+        struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
+        struct json_object *obj;
+        char *str;
+
+        if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
+                if(json_object_get_string_len(obj) != 0) {
+                        str = json_object_get_string(obj);
+                        data->sep = str[0];
+                }
+        }
+
+        *pdata = data;
+        return r;
+}
+PARSER_Destruct(NameValue)
+{
+        struct data_NameValue *const data = (struct data_NameValue*) pdata;
+        free(pdata);
 }
 
 /**
