@@ -2936,20 +2936,36 @@ PARSER_Parse(CheckpointLEA)
 		if(i+1 >= npb->strLen || npb->str[i] != ':') {
 			FAIL(LN_WRONGPARSER);
 		}
+		/* Sometimes there is multiple colons */
+		while( i < npb->strLen && npb->str[i+1] == ':' ) {
+			i++;
+		}
 		lenName = i - iName;
 		++i; /* skip ':' */
 
 		while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
 			++i;
-		iValue = i;
-		while(i < npb->strLen && npb->str[i] != ';') {
+		/* Improvement by KGuillemot & M4jr0 to support quoted values */
+		if( npb->str[i] == '"' ) {
+			iValue = i+1;
+			i++;
+			while( i < npb->strLen && ( npb->str[i] != '"' || npb->str[i-1] == '\\' ) ) {
+				++i;
+			}
+			// Do not take the " in value
+			lenValue = i - iValue;
+			// Skip "
 			++i;
+		} else {
+			iValue = i;
+			while (i < npb->strLen && npb->str[i] != ';') {
+				++i;
+			}
+			lenValue = i - iValue;
 		}
 		if(i+1 > npb->strLen || npb->str[i] != ';')
 			FAIL(LN_WRONGPARSER);
-		lenValue = i - iValue;
 		++i; /* skip ';' */
-
 		if(value != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, npb->str+iName, lenName);

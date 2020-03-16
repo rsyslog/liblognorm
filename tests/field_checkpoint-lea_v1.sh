@@ -9,6 +9,9 @@ add_rule 'rule=:%f:checkpoint-lea%'
 execute 'tcp_flags: RST-ACK; src: 192.168.0.1;'
 assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
 
+# Newest Checkpoint format
+execute 'tcp_flags:"RST-ACK"; src:"192.168.0.1";'
+assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
 
 cleanup_tmp_files
 
