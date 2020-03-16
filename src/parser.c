@@ -2405,25 +2405,61 @@ isValidNameChar(const char c)
 static int
 parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
-	struct json_object *const __restrict__ valroot)
+	struct json_object *const __restrict__ valroot,
+        const char sep, const char ass)
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
 	char *name = NULL;
 
 	const size_t iName = i;
-	while(i < npb->strLen && isValidNameChar(npb->str[i]))
+	/*
+	If the assignator character is specified, search for it
+	If it's not, check key name validity
+	*/
+	while(i < npb->strLen && ((ass != 0) ? (npb->str[i] != ass) : isValidNameChar(npb->str[i])))
 		++i;
-	if(i == iName || npb->str[i] != '=')
+	if(i == iName || ((ass != 0) ? (npb->str[i] != ass) : (npb->str[i] != '=')))
 		goto done; /* no name at all! */
 
 	const size_t lenName = i - iName;
-	++i; /* skip '=' */
+	++i; /* skip assignator */
+
+	char quoting = npb->str[i];
+	if(i < npb->strLen && (quoting == '"' || quoting == '\''))
+		i++;
+	else
+		quoting = 0;	//no quoting detected
 
 	const size_t iVal = i;
-	while(i < npb->strLen && !isspace(npb->str[i]))
+	if(quoting) {
+		// wait on an unescaped matching quoting
+		while(i < npb->strLen && (npb->str[i] != quoting || npb->str[i-1] == '\\')) {
+			++i;
+		}
+	}
+	else {
+		/* We seek characters as long as:
+		- we have characters remaining
+		- the character is NOT a whitespace (default separator)
+		- the character is NOT the separator set explicitely by the user (sep)
+		- the character IS the separator (sep), BUT is escaped
+		*/
+		while(i < npb->strLen
+			&& ((sep == 0 ? (!isspace(npb->str[i])) : (npb->str[i] != sep))
+				|| npb->str[i-1] == '\\')) {
+			++i;
+		}
+	}
+
+	// in case of quoting, ensure we skip it
+	if(i < npb->strLen && npb->str[i] == quoting)
 		++i;
-	const size_t lenVal = i - iVal;
+	else if(quoting)
+		goto done;
+
+
+	const size_t lenVal = i - iVal - (quoting ? 1 : 0);
 
 	/* parsing OK */
 	*offs = i;
@@ -2501,6 +2537,12 @@ done:
 	return r;
 }
 
+
+struct data_NameValue {
+	char sep;       /* separator (between key/value couples) */
+	char ass;	/* assignator (between key and value) */
+};
+
 /**
  * Parser for name/value pairs.
  * On entry must point to alnum char. All following chars must be
@@ -2515,11 +2557,17 @@ done:
  */
 PARSER_Parse(NameValue)
 	size_t i = *offs;
+        struct data_NameValue *const data = (struct data_NameValue*) pdata;
+        const char sep = data->sep;
+        const char ass = data->ass;
+
+        LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x)"
+			,sep, sep, ass, ass);
 
 	/* stage one */
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, NULL));
-		while(i < npb->strLen && isspace(npb->str[i]))
+		CHKR(parseNameValue(npb, &i, NULL, sep, ass));
+		while(i < npb->strLen && (sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
 			++i;
 	}
 
@@ -2534,8 +2582,8 @@ PARSER_Parse(NameValue)
 	i = *offs;
 	CHKN(*value = json_object_new_object());
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, *value));
-		while(i < npb->strLen && isspace(npb->str[i]))
+		CHKR(parseNameValue(npb, &i, *value, sep, ass));
+		while(i < npb->strLen && ((sep == 0) ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
 			++i;
 	}
 
@@ -2543,6 +2591,64 @@ PARSER_Parse(NameValue)
 
 done:
 	return r;
+}
+
+PARSER_Construct(NameValue)
+{
+        int r = 0;
+        LN_DBGPRINTF(ctx, "in parser_construct NameValue");
+        struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
+        struct json_object *obj;
+        const char *str;
+
+        if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
+		LN_DBGPRINTF(ctx, "found 'extradata' in fields, assigning to 'separator'");
+                if(json_object_get_string_len(obj) == 1) {
+                        str = json_object_get_string(obj);
+                        data->sep = str[0];
+                }
+		else {
+			ln_errprintf(ctx, 0, "name-value-list's extradata should only be 1 character");
+			r = LN_BADCONFIG;
+			goto done;
+		}
+        }
+
+        if(json_object_object_get_ex(json, "separator", &obj) != 0) {
+		LN_DBGPRINTF(ctx, "found 'separator' in fields");
+                if(json_object_get_string_len(obj) == 1) {
+                        str = json_object_get_string(obj);
+                        data->sep = str[0];
+                }
+		else {
+			ln_errprintf(ctx, 0, "name-value-list's 'separator' field should only be 1 character");
+			r = LN_BADCONFIG;
+			goto done;
+		}
+        }
+
+        if(json_object_object_get_ex(json, "assignator", &obj) != 0) {
+		LN_DBGPRINTF(ctx, "found 'assignator' in fields");
+                if(json_object_get_string_len(obj) == 1) {
+                        str = json_object_get_string(obj);
+                        data->ass = str[0];
+                }
+		else {
+			ln_errprintf(ctx, 0, "name-value-list's 'assignator' field should only be 1 character");
+			r = LN_BADCONFIG;
+			goto done;
+		}
+        }
+
+	*pdata = data;
+done:
+	if(r != 0)
+		free(data);
+        return r;
+}
+PARSER_Destruct(NameValue)
+{
+        free(pdata);
 }
 
 /**
