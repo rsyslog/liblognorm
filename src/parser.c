@@ -2562,7 +2562,7 @@ PARSER_Construct(NameValue)
         LN_DBGPRINTF(ctx, "in parser_construct NameValue");
         struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
         struct json_object *obj;
-        char *str;
+        const char *str;
 
         if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
                 if(json_object_get_string_len(obj) != 0) {
@@ -2576,7 +2576,6 @@ PARSER_Construct(NameValue)
 }
 PARSER_Destruct(NameValue)
 {
-        struct data_NameValue *const data = (struct data_NameValue*) pdata;
         free(pdata);
 }
 
