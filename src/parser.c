@@ -2425,18 +2425,41 @@ parseNameValue(npb_t *const npb,
 	const size_t lenName = i - iName;
 	++i; /* skip assignator */
 
+	char quoting = npb->str[i];
+	if(i < npb->strLen && (quoting == '"' || quoting == '\''))
+		i++;
+	else
+		quoting = 0;	//no quoting detected
+
 	const size_t iVal = i;
-	/* We seek characters as long as:
-	- we have characters remaining
-	- the character is NOT a whitespace (default separator)
-	- the character is NOT the separator set explicitely by the user (sep)
-	- the character IS the separator (sep), BUT is escaped
-	*/
-	while(i < npb->strLen
-		&& ((sep == 0 ? (!isspace(npb->str[i])) : (npb->str[i] != sep))
-			|| npb->str[i-1] == '\\'))
+	if(quoting) {
+		// wait on an unescaped matching quoting
+		while(i < npb->strLen && (npb->str[i] != quoting || npb->str[i-1] == '\\')) {
+			++i;
+		}
+	}
+	else {
+		/* We seek characters as long as:
+		- we have characters remaining
+		- the character is NOT a whitespace (default separator)
+		- the character is NOT the separator set explicitely by the user (sep)
+		- the character IS the separator (sep), BUT is escaped
+		*/
+		while(i < npb->strLen
+			&& ((sep == 0 ? (!isspace(npb->str[i])) : (npb->str[i] != sep))
+				|| npb->str[i-1] == '\\')) {
+			++i;
+		}
+	}
+
+	// in case of quoting, ensure we skip it
+	if(i < npb->strLen && npb->str[i] == quoting)
 		++i;
-	const size_t lenVal = i - iVal;
+	else if(quoting)
+		goto done;
+
+
+	const size_t lenVal = i - iVal - (quoting ? 1 : 0);
 
 	/* parsing OK */
 	*offs = i;
