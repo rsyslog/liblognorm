@@ -126,6 +126,148 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 
 
 static int
+ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
+{
+	int r;
+	unsigned char c;
+	es_size_t i;
+	char numbuf[4];
+	int j;
+    int contains_comma = 0;
+    
+    char *cstr = NULL;
+    es_str_t *tmp_str = NULL;
+
+	if((tmp_str = es_newStr(256)) == NULL)
+		goto done;
+
+	assert(str != NULL);
+	assert(*str != NULL);
+	assert(buf != NULL);
+
+	for(i = 0; i < strlen(buf); i++) {
+		c = buf[i];
+		if((c >= 0x23 && c <= 0x5b)
+		   || (c >= 0x5d /* && c <= 0x10FFFF*/)
+		   || c == 0x20 || c == 0x21) {
+			/* no need to escape */
+            if (c == 0x2c) {
+                contains_comma = 1;
+            }
+			es_addChar(&tmp_str, c);
+		} else {
+			/* we must escape, try RFC4627-defined special sequences first */
+			switch(c) {
+			case '\0':
+				es_addBuf(&tmp_str, "\\u0000", 6);
+				break;
+			case '\"':
+				es_addBuf(&tmp_str, "\\\"", 2);
+				break;
+			case '\\':
+				es_addBuf(&tmp_str, "\\\\", 2);
+				break;
+			case '\010':
+				es_addBuf(&tmp_str, "\\b", 2);
+				break;
+			case '\014':
+				es_addBuf(&tmp_str, "\\f", 2);
+				break;
+			case '\n':
+				es_addBuf(&tmp_str, "\\n", 2);
+				break;
+			case '\r':
+				es_addBuf(&tmp_str, "\\r", 2);
+				break;
+			case '\t':
+				es_addBuf(&tmp_str, "\\t", 2);
+				break;
+			default:
+				/* TODO : proper Unicode encoding (see header comment) */
+				for(j = 0 ; j < 4 ; ++j) {
+					numbuf[3-j] = hexdigit[c % 16];
+					c = c / 16;
+				}
+				es_addBuf(&tmp_str, "\\u", 2);
+				es_addBuf(&tmp_str, numbuf, 4);
+				break;
+			}
+		}
+	}
+
+    if (tmp_str != NULL) {
+        cstr = es_str2cstr(tmp_str, NULL);
+    }
+
+    if (contains_comma) {
+        CHKR(es_addChar(str, '"'));
+        es_addBuf(str, cstr, strlen(cstr));
+        CHKR(es_addChar(str, '"'));
+    } else {
+        es_addBuf(str, cstr, strlen(cstr));
+    }
+
+    if (tmp_str != NULL) {
+        free(cstr);
+    }
+
+	r = 0;
+
+done:
+    es_deleteStr(tmp_str);
+	return r;
+}
+
+
+static int
+ln_addField_CSV_NQ(struct json_object *field, es_str_t **str)
+{
+	int r, i;
+	struct json_object *obj;
+	int needComma = 0;
+	const char *value;
+	
+	assert(field != NULL);
+	assert(str != NULL);
+	assert(*str != NULL);
+
+	switch(json_object_get_type(field)) {
+	case json_type_array:
+		CHKR(es_addChar(str, '['));
+		for (i = json_object_array_length(field) - 1; i >= 0; i--) {
+			if(needComma)
+				es_addChar(str, ',');
+			else
+				needComma = 1;
+			CHKN(obj = json_object_array_get_idx(field, i));
+			CHKN(value = json_object_get_string(obj));
+			CHKR(ln_addValue_CSV_NQ(value, str));
+		}
+		CHKR(es_addChar(str, ']'));
+		break;
+	case json_type_string:
+	case json_type_int:
+		CHKN(value = json_object_get_string(field));
+		CHKR(ln_addValue_CSV_NQ(value, str));
+		break;
+	case json_type_null:
+	case json_type_boolean:
+	case json_type_double:
+	case json_type_object:
+		CHKR(es_addBuf(str, "***unsupported type***", sizeof("***unsupported type***")-1));
+		break;
+	default:
+		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
+	}
+
+	r = 0;
+
+done:
+	return r;
+}
+
+
+static int
 ln_addField_CSV(struct json_object *field, es_str_t **str)
 {
 	int r, i;
@@ -180,6 +322,7 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 	int needComma = 0;
 	struct json_object *field;
 	char *namelist = NULL, *name, *nn;
+    extern int outputCSVNoQuotes; /* command line flag */
 
 	assert(json != NULL);
 	assert(json_object_is_type(json, json_type_object));
@@ -207,9 +350,13 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 			needComma = 1;
 		}
 		if (field != NULL) {
-			CHKR(es_addChar(str, '"'));
-			ln_addField_CSV(field, str);
-			CHKR(es_addChar(str, '"'));
+            if (outputCSVNoQuotes) {
+                ln_addField_CSV_NQ(field, str);
+            } else {
+                CHKR(es_addChar(str, '"'));
+                ln_addField_CSV(field, str);
+                CHKR(es_addChar(str, '"'));
+            }
 		}
 	}
 	r = 0;
