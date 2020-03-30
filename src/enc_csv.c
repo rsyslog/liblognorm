@@ -125,6 +125,10 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 }
 
 
+/* Write to a tmp es_str_t while doing the buffer check,
+ * then only add quotes around the field if conditions
+ * are met.
+ * */
 static int
 ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
 {
@@ -133,7 +137,7 @@ ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
 	es_size_t i;
 	char numbuf[4];
 	int j;
-    int contains_comma = 0;
+    int requires_quotes = 0;
     
     char *cstr = NULL;
     es_str_t *tmp_str = NULL;
@@ -151,8 +155,8 @@ ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
 		   || (c >= 0x5d /* && c <= 0x10FFFF*/)
 		   || c == 0x20 || c == 0x21) {
 			/* no need to escape */
-            if (c == 0x2c) {
-                contains_comma = 1;
+            if (c == 0x2c) { /* comma */
+                requires_quotes = 1;
             }
 			es_addChar(&tmp_str, c);
 		} else {
@@ -162,6 +166,7 @@ ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
 				es_addBuf(&tmp_str, "\\u0000", 6);
 				break;
 			case '\"':
+                requires_quotes = 1;
 				es_addBuf(&tmp_str, "\\\"", 2);
 				break;
 			case '\\':
@@ -199,7 +204,7 @@ ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
         cstr = es_str2cstr(tmp_str, NULL);
     }
 
-    if (contains_comma) {
+    if (requires_quotes) {
         CHKR(es_addChar(str, '"'));
         es_addBuf(str, cstr, strlen(cstr));
         CHKR(es_addChar(str, '"'));
