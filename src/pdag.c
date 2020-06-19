@@ -1443,6 +1443,10 @@ tryParser(npb_t *const __restrict__ npb,
 		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, "
 			"offs %zd, *pParsed %zd", dag->ctx->type_pdags[prs->custTypeIdx].name, r, *offs, *pParsed);
 		*pParsed = npb->parsedTo - *offs;
+		if (r != 0) {
+			json_object_put(*value);
+			*value = NULL;
+		}
 		#ifdef	ADVANCED_STATS
 		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
 		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8);
