@@ -30,9 +30,8 @@ before_install:
   - travis_retry sudo apt-get update
 
 install:
-  - set -x
   - travis_retry sudo apt-get install -y libpcre3-dev libpcre3-dbg valgrind python-pip
-  - travis_retry sudo apt-get install -y libestr-dev libfastjson-dev
+  - travis_retry sudo apt-get install -y libestr-devel libfastjson-devel
 # the following is a work-around to solve the
 # "too old autoconf-archive" problem
   - mkdir tmp
