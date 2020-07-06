@@ -24,15 +24,15 @@ matrix:
          dist: trusty
 
 before_install:
-  - travis_retry sudo apt-get update -qq
-  - travis_retry sudo apt-get install -qq libpcre3-dev libpcre3-dbg valgrind python-pip
-  - travis_retry sudo add-apt-repository ppa:adiscon/v8-stable -y
-  - travis_retry sudo apt-get install -qq libestr-dev libfastjson-dev
-  - travis_retry sudo apt-get install -qq clang
+  - travis_retry sudo add-apt-repository -y ppa:adiscon/v8-stable
+  - travis_retry sudo apt-get install -y clang
   - travis_retry sudo pip install -U sphinx
-  - travis_retry sudo apt-get update -qq
+  - travis_retry sudo apt-get update
 
 install:
+  - set -x
+  - travis_retry sudo apt-get install -y libpcre3-dev libpcre3-dbg valgrind python-pip
+  - travis_retry sudo apt-get install -y libestr-dev libfastjson-dev
 # the following is a work-around to solve the
 # "too old autoconf-archive" problem
   - mkdir tmp
