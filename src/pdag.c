@@ -1595,6 +1595,10 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 					json_object_put(value);
 				}
 			}
+		} else {
+			if (value != NULL) { /* Free the value if it was created */
+				json_object_put(value);
+			}
 		}
 		/* did we have a longer parser --> then update */
 		if(parsedTo > npb->parsedTo)
