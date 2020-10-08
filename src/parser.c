@@ -1678,7 +1678,7 @@ PARSER_Parse(QuotedString)
 	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		*value = json_object_new_string_len(npb->str+(*offs) + 1, *parsed - 2);
 	}
 	r = 0; /* success */
 done:
