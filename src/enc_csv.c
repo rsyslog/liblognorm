@@ -53,6 +53,8 @@ static char hexdigit[16] =
 	{'0', '1', '2', '3', '4', '5', '6', '7', '8',
 	 '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
+extern int outputCSVNoQuotes; /* command line flag */
+
 /* TODO: CSV encoding for Unicode characters is as of RFC4627 not fully
  * supported. The algorithm is that we must build the wide character from
  * UTF-8 (if char > 127) and build the full 4-octet Unicode character out
@@ -63,7 +65,7 @@ static char hexdigit[16] =
 static int
 ln_addValue_CSV(const char *buf, es_str_t **str)
 {
-	int r;
+	int r = 0;
 	unsigned char c;
 	es_size_t i;
 	char numbuf[4];
@@ -119,7 +121,6 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 			}
 		}
 	}
-	r = 0;
 
 	return r;
 }
@@ -132,7 +133,7 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 static int
 ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
 {
-	int r;
+	int r = -1;
 	unsigned char c;
 	es_size_t i;
 	char numbuf[4];
@@ -216,7 +217,7 @@ ln_addValue_CSV_NQ(const char *buf, es_str_t **str)
         free(cstr);
     }
 
-	r = 0;
+    r = 0;
 
 done:
     es_deleteStr(tmp_str);
@@ -227,7 +228,8 @@ done:
 static int
 ln_addField_CSV_NQ(struct json_object *field, es_str_t **str)
 {
-	int r, i;
+    int r = 0; 
+	int i;
 	struct json_object *obj;
 	int needComma = 0;
 	const char *value;
@@ -265,8 +267,6 @@ ln_addField_CSV_NQ(struct json_object *field, es_str_t **str)
 		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
 	}
 
-	r = 0;
-
 done:
 	return r;
 }
@@ -275,7 +275,8 @@ done:
 static int
 ln_addField_CSV(struct json_object *field, es_str_t **str)
 {
-	int r, i;
+	int r = 0;
+    int i;
 	struct json_object *obj;
 	int needComma = 0;
 	const char *value;
@@ -313,8 +314,6 @@ ln_addField_CSV(struct json_object *field, es_str_t **str)
 		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
 	}
 
-	r = 0;
-
 done:
 	return r;
 }
@@ -327,7 +326,6 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 	int needComma = 0;
 	struct json_object *field;
 	char *namelist = NULL, *name, *nn;
-    extern int outputCSVNoQuotes; /* command line flag */
 
 	assert(json != NULL);
 	assert(json_object_is_type(json, json_type_object));
