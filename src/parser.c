@@ -78,6 +78,38 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	return i;
 }
 
+/* Credits to https://github.com/katie-snow/xml2json-c
+   This code is under GPL-3.0 License
+*/
+static inline void
+xml2jsonc_convert_elements(xmlNode *anode, json_object *jobj)
+{
+    xmlNode *cur_node = NULL;
+    json_object *cur_jobj = NULL;
+    json_object *cur_jstr = NULL;
+
+    for (cur_node = anode; cur_node; cur_node = cur_node->next)
+    {
+        if (cur_node->type == XML_ELEMENT_NODE)
+        {
+            if (xmlChildElementCount(cur_node) == 0)
+            {
+                /* JSON string object */
+                cur_jobj = json_object_new_object();
+                cur_jstr = json_object_new_string(xmlNodeGetContent(cur_node));
+                json_object_object_add(jobj, cur_node->name, cur_jstr);
+            }
+            else
+            {
+                /* JSON object */
+                cur_jobj = json_object_new_object();
+                json_object_object_add(jobj, cur_node->name, json_object_get(cur_jobj));
+            }
+        }
+        xml2jsonc_convert_elements(cur_node->children, cur_jobj);
+    }
+}
+
 /* parser _parse interface
  *
  * All parsers receive
