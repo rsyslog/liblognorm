@@ -99,7 +99,8 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY("string-to", StringTo, 32),
 	PARSER_ENTRY("char-to", CharTo, 32),
 	PARSER_ENTRY("char-sep", CharSeparated, 32),
-	PARSER_ENTRY("string", String, 32)
+	PARSER_ENTRY("string", String, 32),
+        PARSER_ENTRY_NO_DATA("xml", XML, 4)
 };
 #define NPARSERS (sizeof(parser_lookup_table)/sizeof(struct ln_parser_info))
 #define DFLT_USR_PARSER_PRIO 30000 /**< default priority if user has not specified it */

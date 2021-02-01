@@ -67,6 +67,7 @@ struct ln_type_pdag;
 #define PRS_STRING_TO			27
 #define PRS_CHAR_TO			28
 #define PRS_CHAR_SEP			29
+#define PRS_XML				30
 #endif
 
 #define PRS_CUSTOM_TYPE			254
