@@ -47,6 +47,9 @@
 #include <errno.h>
 #endif
 
+#include <libxml/xmlmemory.h>
+#include <libxml/parser.h>
+
 
 /* how should output values be formatted? */
 enum FMT_MODE {
