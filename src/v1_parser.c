@@ -43,6 +43,8 @@
 #include <errno.h>
 #endif
 
+#include <libxml/xmlmemory.h>
+#include <libxml/parser.h>
 
 /* some helpers */
 static inline int
@@ -61,6 +63,38 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	*buf = p;
 	*lenBuf = len;
 	return i;
+}
+
+/* Credits to https://github.com/katie-snow/xml2json-c
+   This code is under GPL-3.0 License
+*/
+static inline void
+xml2jsonc_convert_elements(xmlNode *anode, json_object *jobj)
+{
+    xmlNode *cur_node = NULL;
+    json_object *cur_jobj = NULL;
+    json_object *cur_jstr = NULL;
+
+    for (cur_node = anode; cur_node; cur_node = cur_node->next)
+    {
+        if (cur_node->type == XML_ELEMENT_NODE)
+        {
+            if (xmlChildElementCount(cur_node) == 0)
+            {
+                /* JSON string object */
+                cur_jobj = json_object_new_object();
+                cur_jstr = json_object_new_string(xmlNodeGetContent(cur_node));
+                json_object_object_add(jobj, cur_node->name, cur_jstr);
+            }
+            else
+            {
+                /* JSON object */
+                cur_jobj = json_object_new_object();
+                json_object_object_add(jobj, cur_node->name, json_object_get(cur_jobj));
+            }
+        }
+        xml2jsonc_convert_elements(cur_node->children, cur_jobj);
+    }
 }
 
 /* parsers for the primitive types
@@ -2540,6 +2574,9 @@ done:
 	return r;
 }
 
+
+
+
 /**
  * Parse JSON. This parser tries to find JSON data inside a message.
  * If it finds valid JSON, it will extract it. Extra data after the
@@ -2591,6 +2628,8 @@ done:
 		json_tokener_free(tokener);
 	return r;
 }
+
+
 
 
 /* check if a char is valid inside a name of a NameValue list
