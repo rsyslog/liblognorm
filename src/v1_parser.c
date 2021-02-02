@@ -83,14 +83,14 @@ xml2jsonc_convert_elements(xmlNode *anode, json_object *jobj)
             {
                 /* JSON string object */
                 cur_jobj = json_object_new_object();
-                cur_jstr = json_object_new_string(xmlNodeGetContent(cur_node));
-                json_object_object_add(jobj, cur_node->name, cur_jstr);
+                cur_jstr = json_object_new_string((const char *)xmlNodeGetContent(cur_node));
+                json_object_object_add(jobj, (const char *)cur_node->name, cur_jstr);
             }
             else
             {
                 /* JSON object */
                 cur_jobj = json_object_new_object();
-                json_object_object_add(jobj, cur_node->name, json_object_get(cur_jobj));
+                json_object_object_add(jobj, (const char *)cur_node->name, json_object_get(cur_jobj));
             }
         }
         xml2jsonc_convert_elements(cur_node->children, cur_jobj);
