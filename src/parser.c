@@ -96,14 +96,14 @@ xml2jsonc_convert_elements(xmlNode *anode, json_object *jobj)
             {
                 /* JSON string object */
                 cur_jobj = json_object_new_object();
-                cur_jstr = json_object_new_string(xmlNodeGetContent(cur_node));
-                json_object_object_add(jobj, cur_node->name, cur_jstr);
+                cur_jstr = json_object_new_string((const char *)xmlNodeGetContent(cur_node));
+                json_object_object_add(jobj, (const char *)cur_node->name, cur_jstr);
             }
             else
             {
                 /* JSON object */
                 cur_jobj = json_object_new_object();
-                json_object_object_add(jobj, cur_node->name, json_object_get(cur_jobj));
+                json_object_object_add(jobj, (const char *)cur_node->name, json_object_get(cur_jobj));
             }
         }
         xml2jsonc_convert_elements(cur_node->children, cur_jobj);
@@ -2375,17 +2375,16 @@ done:
  * added 2021-02-01 by jeremie.jourdin@advens.fr
  */
 PARSER_Parse(XML)
-        const size_t i = *offs;
         xmlDocPtr doc = NULL;
         xmlNodePtr root_element = NULL;
 
         /* Find the last occurence of '>' in the string */
         char * pch;
-        pch=strrchr((xmlChar*) npb->str + *offs, '>');
+        pch=strrchr((const char *) npb->str + *offs, '>');
 
         /* Truncate the string after the last occurence of '>' */
         int newLen = pch - (npb->str + *offs) + 1;
-        xmlChar *const cstr = strndup(npb->str + *offs, newLen);
+        char *cstr = strndup(npb->str + *offs, newLen);
         CHKN(cstr);
 
         doc=xmlParseDoc((xmlChar*) cstr);
