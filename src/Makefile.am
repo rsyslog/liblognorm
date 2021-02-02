@@ -43,7 +43,7 @@ liblognorm_la_SOURCES += \
 	v1_samp.c
 
 liblognorm_la_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) $(LIBESTR_CFLAGS) $(PCRE_CFLAGS)
-liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr -lxlm2
+liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -lestr -lxml2
 # info on version-info:
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # Note: v2 now starts at version 5, as v1 previously also had 4
