@@ -757,6 +757,9 @@ Zero or more characters, possibly surrounded by double quote marks.
 If the first character is a quote mark, operates like quoted-string. Otherwise, operates like "word"
 Quote marks are stripped from the match.
 
+Note: this is a "historical" type. The same can be achieved in 2.0.7 and above by using
+"quoted-string" with parameter "option.quotesOptional".
+
 date-iso
 ########    
 Date in ISO format ('YYYY-MM-DD').

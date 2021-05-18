@@ -3,7 +3,7 @@
  * @brief Implementation of the parse dag object.
  * @class ln_pdag pdag.h
  *//*
- * Copyright 2015 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2015-2021 by Rainer Gerhards and Adiscon GmbH.
  *
  * Released under ASL 2.0.
  */
@@ -83,7 +83,7 @@ static struct ln_parser_info parser_lookup_table[] = {
 	PARSER_ENTRY_NO_DATA("alpha", Alpha, 32),
 	PARSER_ENTRY_NO_DATA("rest", Rest, 255),
 	PARSER_ENTRY_NO_DATA("op-quoted-string", OpQuotedString, 64),
-	PARSER_ENTRY_NO_DATA("quoted-string", QuotedString, 64),
+	PARSER_ENTRY("quoted-string", QuotedString, 64),
 	PARSER_ENTRY_NO_DATA("date-iso", ISODate, 8),
 	PARSER_ENTRY_NO_DATA("time-24hr", Time24hr, 8),
 	PARSER_ENTRY_NO_DATA("time-12hr", Time12hr, 8),
