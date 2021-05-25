@@ -2566,9 +2566,15 @@ PARSER_Parse(NameValue)
 
 	/* stage one */
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, NULL, sep, ass));
-		while(i < npb->strLen && (sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
-			++i;
+		if (parseNameValue(npb, &i, NULL, sep, ass) == 0 ) {
+			// Check if there is at least one time the separator after value
+			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
+				break;
+			while(i < npb->strLen && (sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
+				++i;
+		} else {
+			break;
+		}
 	}
 
 	/* success, persist */
@@ -2582,9 +2588,15 @@ PARSER_Parse(NameValue)
 	i = *offs;
 	CHKN(*value = json_object_new_object());
 	while(i < npb->strLen) {
-		CHKR(parseNameValue(npb, &i, *value, sep, ass));
-		while(i < npb->strLen && ((sep == 0) ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
-			++i;
+		if (parseNameValue(npb, &i, *value, sep, ass) == 0 ) {
+			// Check if there is at least one time the separator after value
+			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
+				break;
+			while(i < npb->strLen && ((sep == 0) ? (isspace(npb->str[i])) : (npb->str[i] == sep)))
+				++i;
+		} else {
+			break;
+		}
 	}
 
 	/* TODO: fix mem leak if alloc json fails */
