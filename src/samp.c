@@ -1019,7 +1019,7 @@ ln_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, const char **inpbuf,
 				done = 1; /* last line missing LF, still process it! */
 		} else if(c == '\n') {
 			++ctx->conf_ln_nbr;
-			if(inParser) {
+			if(inParser && repo != NULL) {
 				if(ln_sampChkRunawayRule(ctx, repo, inpbuf)) {
 					/* ignore previous rule */
 					inParser = 0;

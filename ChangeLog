@@ -1,5 +1,9 @@
 ----------------------------------------------------------------------
 Version 2.0.7, 2018-??-??
+- string rulebase bugfix: segfault when using LF in json rule
+  If a json rule used a LF inside a string rule (one not loaded
+  rulebase file), liblognorm segfaults.
+  closes https://github.com/rsyslog/liblognorm/issues/333
 ----------------------------------------------------------------------
 Version 2.0.6, 2018-11-06
 - implement Checkpoint LEA transfer format
