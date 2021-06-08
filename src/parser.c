@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2021 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -3204,6 +3204,7 @@ struct data_String {
 		unsigned esc_md : 2;
 	} flags;
 	enum { ST_MATCH_EXACT = 0, ST_MATCH_LAZY = 1} matching;
+	int dashIsEmpty;
 	char qchar_begin;
 	char qchar_end;
 	char perm_chars[256]; // TODO: make this bit-wise, so we need  only 32 bytes
@@ -3373,6 +3374,14 @@ PARSER_Parse(String)
 	if(value != NULL) {
 		size_t strt;
 		size_t len;
+		if(data->dashIsEmpty) {
+			if(  (bHaveQuotes  && *parsed == 3 && !strncmp(npb->str+(*offs), "\"-\"", 3))
+			  || (!bHaveQuotes && *parsed == 1 && npb->str[*offs] == '-') ) {
+				*value = json_object_new_string_len("", 0);
+				r = 0;
+				goto done; /* shortcut exit */
+			}
+		}
 		if(bHaveQuotes && data->flags.strip_quotes) {
 			strt = *offs + 1;
 			len = *parsed - 2; /* del begin AND end quote! */
@@ -3498,6 +3507,8 @@ PARSER_Construct(String)
 				r = LN_BADCONFIG;
 				goto done;
 			}
+		} else if(!strcasecmp(key, "option.dashIsEmpty")) {
+			data->dashIsEmpty = json_object_get_boolean(val);
 		} else {
 			ln_errprintf(ctx, 0, "invalid param for hexnumber: %s",
 				 json_object_to_json_string(val));
