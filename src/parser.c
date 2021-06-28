@@ -2958,14 +2958,18 @@ PARSER_Parse(CheckpointLEA)
 			++i;
 		} else {
 			iValue = i;
-			while (i < npb->strLen && npb->str[i] != ';') {
+			while (i < npb->strLen && npb->str[i] != ';' && npb->str[i] != data->terminator) {
 				++i;
 			}
 			lenValue = i - iValue;
 		}
-		if(i+1 > npb->strLen || npb->str[i] != ';')
+
+		if(i+1 > npb->strLen || (npb->str[i] != ';' && npb->str[i] != data->terminator))
 			FAIL(LN_WRONGPARSER);
-		++i; /* skip ';' */
+
+		if(npb->str[i] == ';')
+			++i; /* skip ';' */
+
 		if(value != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, npb->str+iName, lenName);
