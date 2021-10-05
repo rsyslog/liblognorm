@@ -2842,7 +2842,8 @@ cefParseExtensionValue(npb_t *const npb,
 			if(npb->str[i] != '=' &&
 			   npb->str[i] != '\\' &&
 			   npb->str[i] != 'r' &&
-			   npb->str[i] != 'n')
+			   npb->str[i] != 'n' && 
+			   npb->str[i] != '/')
 			FAIL(LN_WRONGPARSER);
 			inEscape = 0;
 		} else {
@@ -2919,7 +2920,7 @@ cefParseExtensions(npb_t *const npb,
 			++i;
 		iName = i;
 		CHKR(cefParseName(npb, &i));
-		if(i+1 >= npb->strLen || npb->str[i] != '=')
+		if(npb->str[i] != '=')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
 		++i; /* skip '=' */
