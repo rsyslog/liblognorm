@@ -2920,16 +2920,22 @@ cefParseExtensions(npb_t *const npb,
 			++i;
 		iName = i;
 		CHKR(cefParseName(npb, &i));
+
 		if(npb->str[i] != '=')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
-		++i; /* skip '=' */
+		
+		/* Init if the last value is empty */
+		lenValue = 0;
+		if(i < npb->strLen){
+			++i; /* skip '=' */
 
-		iValue = i;
-		CHKR(cefParseExtensionValue(npb, &i));
-		lenValue = i - iValue;
+			iValue = i;
+			CHKR(cefParseExtensionValue(npb, &i));
+			lenValue = i - iValue;
 
-		++i; /* skip past value */
+			++i; /* skip past value */
+		}
 
 		if(jroot != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
