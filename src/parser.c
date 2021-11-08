@@ -2532,7 +2532,23 @@ parseNameValue(npb_t *const npb,
 	const size_t iVal = i;
 	if(quoting) {
 		// wait on an unescaped matching quoting
-		while(i < npb->strLen && (npb->str[i] != quoting || npb->str[i-1] == '\\')) {
+
+		/*
+		 * Fix by HSoszynski & KGuillemot to handle escaped quote & backslash infinitly
+		 * Continue while we don't encounter the ending quote, and while it's not escaped
+		 * a" => end
+		 * a\" => continue
+		 * a\\" => end
+		 * a\\\" => continue
+		 * ...
+		 */
+		int continuous_backslash = 0;
+		while(i < npb->strLen && (npb->str[i] != quoting || continuous_backslash%2 == 1 )) {
+			if ( npb->str[i] == '\\' ) {
+				continuous_backslash++;
+			} else {
+				continuous_backslash = 0;
+			}
 			++i;
 		}
 	}
@@ -2543,9 +2559,24 @@ parseNameValue(npb_t *const npb,
 		- the character is NOT the separator set explicitely by the user (sep)
 		- the character IS the separator (sep), BUT is escaped
 		*/
+		/*
+		 * Fix by HSoszynski & KGuillemot to handle escaped separator & backslash infinitly
+		 * Continue while we don't encounter the ending separator, and while it's not escaped
+		 * a, => end
+		 * a\, => continue
+		 * a\\, => end
+		 * a\\\, => continue
+		 * ...
+		 */
+		int continuous_backslash = 0;
 		while(i < npb->strLen
 			&& ((sep == 0 ? (!isspace(npb->str[i])) : (npb->str[i] != sep))
-				|| npb->str[i-1] == '\\')) {
+				|| continuous_backslash%2 == 1)) {
+			if ( npb->str[i] == '\\' ) {
+				continuous_backslash++;
+			} else {
+				continuous_backslash = 0;
+			}
 			++i;
 		}
 	}
