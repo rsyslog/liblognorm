@@ -2775,7 +2775,8 @@ cefParseExtensionValue(npb_t *const npb,
 			if(npb->str[i] != '=' &&
 			   npb->str[i] != '\\' &&
 			   npb->str[i] != 'r' &&
-			   npb->str[i] != 'n')
+			   npb->str[i] != 'n' && 
+			   npb->str[i] != '/')
 			FAIL(LN_WRONGPARSER);
 			inEscape = 0;
 		} else {
@@ -2852,16 +2853,22 @@ cefParseExtensions(npb_t *const npb,
 			++i;
 		iName = i;
 		CHKR(cefParseName(npb, &i));
-		if(i+1 >= npb->strLen || npb->str[i] != '=')
+
+		if(npb->str[i] != '=')
 			FAIL(LN_WRONGPARSER);
 		lenName = i - iName;
-		++i; /* skip '=' */
+		
+		/* Init if the last value is empty */
+		lenValue = 0;
+		if(i < npb->strLen){
+			++i; /* skip '=' */
 
-		iValue = i;
-		CHKR(cefParseExtensionValue(npb, &i));
-		lenValue = i - iValue;
+			iValue = i;
+			CHKR(cefParseExtensionValue(npb, &i));
+			lenValue = i - iValue;
 
-		++i; /* skip past value */
+			++i; /* skip past value */
+		}
 
 		if(jroot != NULL) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
@@ -2881,6 +2888,8 @@ cefParseExtensions(npb_t *const npb,
 					case 'r':	value[iDst] = '\r';
 							break;
 					case '\\':	value[iDst] = '\\';
+							break;
+					case '/':	value[iDst] = '/';
 							break;
 					default:	break;
 					}
@@ -2989,7 +2998,9 @@ PARSER_Parse(CEF)
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &sigID));
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &name));
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &severity));
-	++i; /* skip over terminal '|' */
+
+	while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
+		++i;
 
 	/* OK, we now know we have a good header. Now, we need
 	 * to process extensions.

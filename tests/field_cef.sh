@@ -39,7 +39,7 @@ execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| ' # singl
 assert_output_json_eq '{ "f": { "DeviceVendor": "Vendor", "DeviceProduct": "Product", "DeviceVersion": "Version", "SignatureID": "Signature ID", "Name": "some name", "Severity": "Severity", "Extensions": { } } }'
 
 execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   ' # multiple trailing spaces - invalid
-assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   ", "unparsed-data": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity|   " }'
+assert_output_json_eq '{ "f": { "DeviceVendor": "Vendor", "DeviceProduct": "Product", "DeviceVersion": "Version", "SignatureID": "Signature ID", "Name": "some name", "Severity": "Severity", "Extensions": { } } }'
 
 execute 'CEF:0|Vendor'
 assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor", "unparsed-data": "CEF:0|Vendor" }'
