@@ -165,9 +165,12 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 	ctx->conf_ln_nbr = 0;
 	++ctx->include_level;
 	r = ln_sampLoad(ctx, file);
-	--ctx->include_level;
+	if (r != -1) {
+		--ctx->include_level;
+		ctx->conf_file = NULL;
+	}
+
 	free((void*)tofree);
-	ctx->conf_file = NULL;
 done:
 	return r;
 }

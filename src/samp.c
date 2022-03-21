@@ -586,7 +586,7 @@ getTypeName(ln_ctx ctx,
 	int r = -1;
 	size_t iDst;
 	size_t i = *offs;
-	
+
 	if(buf[i] != '@') {
 		ln_errprintf(ctx, 0, "user-defined type name must "
 			"start with '@'");
@@ -1139,11 +1139,13 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	ln_dbgprintf(ctx, "rulebase version is %d\n", version);
 	if(version == -1) {
 		ln_errprintf(ctx, errno, "error determing version of %s", file);
+		fclose(repo);
 		goto done;
 	}
 	if(ctx->version != 0 && version != ctx->version) {
 		ln_errprintf(ctx, errno, "rulebase '%s' must be version %d, but is version %d "
 			" - can not be processed", file, ctx->version, version);
+		fclose(repo);
 		goto done;
 	}
 	ctx->version = version;
