@@ -25,6 +25,7 @@
 #include "config.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
@@ -2775,11 +2776,16 @@ static int
 parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot,
-        const char sep, const char ass)
+	const char sep, const char ass, const bool ignore_ws)
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
 	char *name = NULL;
+
+	if(ignore_ws) {
+		while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
+			i++;
+	}
 
 	const size_t iName = i;
 	/*
@@ -2791,8 +2797,22 @@ parseNameValue(npb_t *const npb,
 	if(i == iName || ((ass != 0) ? (npb->str[i] != ass) : (npb->str[i] != '=')))
 		goto done; /* no name at all! */
 
-	const size_t lenName = i - iName;
+	size_t lenName = i - iName;
+	if(ignore_ws) {
+		while(lenName > 0
+		&& isspace((unsigned char) npb->str[iName + lenName - 1])) {
+			lenName--;
+		}
+	}
+
 	++i; /* skip assignator */
+
+	if(ignore_ws) {
+		while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
+			i++;
+	}
+	if(i >= npb->strLen)
+		goto done;
 
 	char quoting = npb->str[i];
 	if(i < npb->strLen && (quoting == '"' || quoting == '\''))
@@ -2852,14 +2872,21 @@ parseNameValue(npb_t *const npb,
 		}
 	}
 
+	const size_t iValEnd = i;
+
 	// in case of quoting, ensure we skip it
 	if(i < npb->strLen && npb->str[i] == quoting)
 		++i;
 	else if(quoting)
 		goto done;
 
-
-	const size_t lenVal = i - iVal - (quoting ? 1 : 0);
+	size_t lenVal = quoting ? (iValEnd - iVal) : (i - iVal);
+	if(ignore_ws && !quoting) {
+		while(lenVal > 0
+		&& isspace((unsigned char) npb->str[iVal + lenVal - 1])) {
+			lenVal--;
+		}
+	}
 
 	/* parsing OK */
 	*offs = i;
@@ -2941,6 +2968,7 @@ done:
 struct data_NameValue {
 	char sep;       /* separator (between key/value couples) */
 	char ass;	/* assignator (between key and value) */
+	bool ignore_whitespaces; /* trim surrounding whitespace for key/value */
 };
 
 /**
@@ -2960,13 +2988,20 @@ PARSER_Parse(NameValue)
 	struct data_NameValue *const data = (struct data_NameValue*) pdata;
 	const char sep = (data != NULL) ? data->sep : 0;
 	const char ass = (data != NULL) ? data->ass : 0;
+	const bool ignore_ws = (data != NULL) ? data->ignore_whitespaces : false;
 
-	LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x)"
-		,sep, sep, ass, ass);
+	LN_DBGPRINTF(npb->ctx,
+		"in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x) "
+		"ignore_whitespaces is '%s'(%d)",
+		sep, sep, ass, ass, ignore_ws ? "true" : "false", ignore_ws);
 
 	/* stage one */
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, NULL, sep, ass) == 0 ) {
+		if (parseNameValue(npb, &i, NULL, sep, ass, ignore_ws) == 0 ) {
+			if(ignore_ws && sep != 0) {
+				while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
+					++i;
+			}
 			// Check if there is at least one time the separator after value
 			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
 				break;
@@ -2988,7 +3023,11 @@ PARSER_Parse(NameValue)
 	i = *offs;
 	CHKN(*value = json_object_new_object());
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, *value, sep, ass) == 0 ) {
+		if (parseNameValue(npb, &i, *value, sep, ass, ignore_ws) == 0 ) {
+			if(ignore_ws && sep != 0) {
+				while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
+					++i;
+			}
 			// Check if there is at least one time the separator after value
 			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
 				break;
@@ -3007,56 +3046,68 @@ done:
 
 PARSER_Construct(NameValue)
 {
-        int r = 0;
-        LN_DBGPRINTF(ctx, "in parser_construct NameValue");
-        struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
-        struct json_object *obj;
-        const char *str;
+	int r = 0;
+	LN_DBGPRINTF(ctx, "in parser_construct NameValue");
+	struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
+	struct json_object *obj;
+	const char *str;
 
-        if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
+	if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
 		LN_DBGPRINTF(ctx, "found 'extradata' in fields, assigning to 'separator'");
-                if(json_object_get_string_len(obj) == 1) {
-                        str = json_object_get_string(obj);
-                        data->sep = str[0];
-                }
+		if(json_object_get_string_len(obj) == 1) {
+			str = json_object_get_string(obj);
+			data->sep = str[0];
+		}
 		else {
 			ln_errprintf(ctx, 0, "name-value-list's extradata should only be 1 character");
 			r = LN_BADCONFIG;
 			goto done;
 		}
-        }
+	}
 
-        if(json_object_object_get_ex(json, "separator", &obj) != 0) {
+	if(json_object_object_get_ex(json, "separator", &obj) != 0) {
 		LN_DBGPRINTF(ctx, "found 'separator' in fields");
-                if(json_object_get_string_len(obj) == 1) {
-                        str = json_object_get_string(obj);
-                        data->sep = str[0];
-                }
+		if(json_object_get_string_len(obj) == 1) {
+			str = json_object_get_string(obj);
+			data->sep = str[0];
+		}
 		else {
 			ln_errprintf(ctx, 0, "name-value-list's 'separator' field should only be 1 character");
 			r = LN_BADCONFIG;
 			goto done;
 		}
-        }
+	}
 
-        if(json_object_object_get_ex(json, "assignator", &obj) != 0) {
+	if(json_object_object_get_ex(json, "assignator", &obj) != 0) {
 		LN_DBGPRINTF(ctx, "found 'assignator' in fields");
-                if(json_object_get_string_len(obj) == 1) {
-                        str = json_object_get_string(obj);
-                        data->ass = str[0];
-                }
+		if(json_object_get_string_len(obj) == 1) {
+			str = json_object_get_string(obj);
+			data->ass = str[0];
+		}
 		else {
 			ln_errprintf(ctx, 0, "name-value-list's 'assignator' field should only be 1 character");
 			r = LN_BADCONFIG;
 			goto done;
 		}
-        }
+	}
+
+	if(json_object_object_get_ex(json, "ignore_whitespaces", &obj) != 0) {
+		LN_DBGPRINTF(ctx, "found 'ignore_whitespaces' in fields");
+		if(json_object_is_type(obj, json_type_boolean) == 1) {
+			data->ignore_whitespaces = json_object_get_boolean(obj);
+		} else {
+			ln_errprintf(ctx, 0,
+				"name-value-list's 'ignore_whitespaces' field should be boolean");
+			r = LN_BADCONFIG;
+			goto done;
+		}
+	}
 
 	*pdata = data;
 done:
 	if(r != 0)
 		free(data);
-        return r;
+	return r;
 }
 PARSER_Destruct(NameValue)
 {
