@@ -25,6 +25,7 @@
 #include "config.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdarg.h>
 #include <assert.h>
 #include <ctype.h>
@@ -2504,11 +2505,16 @@ static int
 parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot,
-        const char sep, const char ass)
+        const char sep, const char ass, const bool ignore_ws)
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
 	char *name = NULL;
+
+	/* Ignore whitespaces if option enabled */
+	if( ignore_ws )
+		while( isspace(npb->str[i]) )
+			i++;
 
 	const size_t iName = i;
 	/*
@@ -2520,8 +2526,17 @@ parseNameValue(npb_t *const npb,
 	if(i == iName || ((ass != 0) ? (npb->str[i] != ass) : (npb->str[i] != '=')))
 		goto done; /* no name at all! */
 
-	const size_t lenName = i - iName;
+	size_t lenName = i - iName;
+	/* Sub-routine to trim whitespaces if option is enabled */
+	if( ignore_ws )
+		while( isspace(npb->str[(iName+lenName)-1]) )
+			lenName--;
+
 	++i; /* skip assignator */
+
+	if( ignore_ws )
+		while( isspace(npb->str[i]) )
+			i++;
 
 	char quoting = npb->str[i];
 	if(i < npb->strLen && (quoting == '"' || quoting == '\''))
@@ -2587,8 +2602,10 @@ parseNameValue(npb_t *const npb,
 	else if(quoting)
 		goto done;
 
-
-	const size_t lenVal = i - iVal - (quoting ? 1 : 0);
+	size_t lenVal = i - iVal - (quoting ? 1 : 0);
+	if( ignore_ws && !quoting )
+		while( isspace(npb->str[(iVal+lenVal)-1]) )
+			lenVal--;
 
 	/* parsing OK */
 	*offs = i;
@@ -2670,6 +2687,7 @@ done:
 struct data_NameValue {
 	char sep;       /* separator (between key/value couples) */
 	char ass;	/* assignator (between key and value) */
+	bool ignore_whitespaces;	/* ignore whitespace(s) at beginning and end of key and value */
 };
 
 /**
@@ -2689,13 +2707,15 @@ PARSER_Parse(NameValue)
         struct data_NameValue *const data = (struct data_NameValue*) pdata;
         const char sep = data->sep;
         const char ass = data->ass;
+        const char ignore_ws = data->ignore_whitespaces;
 
         LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x)"
-			,sep, sep, ass, ass);
+                     "ignore_whitespaces is '%s'(%d)"
+			         ,sep, sep, ass, ass, (ignore_ws?"true":"false"), ignore_ws);
 
 	/* stage one */
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, NULL, sep, ass) == 0 ) {
+		if (parseNameValue(npb, &i, NULL, sep, ass, ignore_ws) == 0 ) {
 			// Check if there is at least one time the separator after value
 			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
 				break;
@@ -2717,7 +2737,7 @@ PARSER_Parse(NameValue)
 	i = *offs;
 	CHKN(*value = json_object_new_object());
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, *value, sep, ass) == 0 ) {
+		if (parseNameValue(npb, &i, *value, sep, ass, ignore_ws) == 0 ) {
 			// Check if there is at least one time the separator after value
 			if( i < npb->strLen && !(sep == 0 ? (isspace(npb->str[i])) : (npb->str[i] == sep)) )
 				break;
@@ -2740,6 +2760,7 @@ PARSER_Construct(NameValue)
         LN_DBGPRINTF(ctx, "in parser_construct NameValue");
         struct data_NameValue *data = (struct data_NameValue*) calloc(1, sizeof(struct data_NameValue));
         struct json_object *obj;
+        json_bool bool_obj;
         const char *str;
 
         if(json_object_object_get_ex(json, "extradata", &obj) != 0) {
@@ -2779,6 +2800,19 @@ PARSER_Construct(NameValue)
 			r = LN_BADCONFIG;
 			goto done;
 		}
+        }
+
+        if(json_object_object_get_ex(json, "ignore_whitespaces", &obj) != 0) {
+            LN_DBGPRINTF(ctx, "found 'ignore_whitespaces' in fields");
+            if(json_object_is_type(obj, json_type_boolean) == 1) {
+                bool_obj = json_object_get_boolean(obj);
+                data->ignore_whitespaces = (bool)bool_obj;
+            }
+            else {
+                ln_errprintf(ctx, 0, "name-value-list's 'ignore_whitespaces' field should be boolean");
+                r = LN_BADCONFIG;
+                goto done;
+            }
         }
 
 	*pdata = data;
