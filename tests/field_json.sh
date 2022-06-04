@@ -18,7 +18,7 @@ add_rule 'rule=:%field:json%end'
 
 execute '{"f1": "1", "f2": 2}'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
-#check if trailinge whitspace is ignored
+#check if trailing whitespace is ignored
 execute '{"f1": "1", "f2": 2}      '
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 
@@ -47,7 +47,7 @@ add_rule 'rule=:%field1:json%-%field2:json%'
 execute '{"f1": "1"}-{"f2": 2}'
 assert_output_json_eq '{ "field2": { "f2": 2 }, "field1": { "f1": "1" } }'
 
-# re-check previsous def still works
+# re-check previous def still works
 execute '{"f1": "1", "f2": 2}'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 

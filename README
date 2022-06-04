@@ -3,7 +3,7 @@ Liblognorm is a fast-samples based normalization library.
 More information on liblognorm can be found at
     http://www.liblognorm.com
 
-Liblognorm evolves since several years and was intially meant to be used primarily with
+Liblognorm evolves since several years and was initially meant to be used primarily with
 the Mitre CEE effort. Consequently, the initial version of liblognorm (0.x)
 uses the libee CEE support library in its API.
 

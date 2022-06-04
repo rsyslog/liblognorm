@@ -23,13 +23,13 @@ assert_output_contains '"unparsed-data": "123 abc 456 def"'
 assert_output_contains '"originalmsg": "123 abc 456 def"'
 
 reset_rules
-add_rule 'rule=:%arr:tokenized:quux:some_non_existant_type%'
+add_rule 'rule=:%arr:tokenized:quux:some_non_existent_type%'
 execute '123 abc 456 def'
 assert_output_contains '"unparsed-data": "123 abc 456 def"'
 assert_output_contains '"originalmsg": "123 abc 456 def"'
 
 reset_rules
-add_rule 'rule=:%arr:tokenized:quux:some_non_existant_type:%'
+add_rule 'rule=:%arr:tokenized:quux:some_non_existent_type:%'
 execute '123 abc 456 def'
 assert_output_contains '"unparsed-data": "123 abc 456 def"'
 assert_output_contains '"originalmsg": "123 abc 456 def"'

@@ -19,7 +19,7 @@ add_rule 'rule=:%word:word%'
 execute '123 abc 456 def'
 assert_output_json_eq '{"word": "123", "next": {"word": "abc", "next": {"word": "456", "next" : {"word": "def"}}}}'
 
-#tail recursion with tail field having arbirary name
+#tail recursion with tail field having arbitrary name
 reset_rules
 add_rule 'rule=:%word:word% %next:recursive:foo%'
 add_rule 'rule=:%word:word%'
@@ -46,7 +46,7 @@ assert_output_json_eq '{"device": "gw-1", "net": {"ip_addr": "10.20.30.40"}, "tm
 execute 'blocked on gw-1 10.20.30.40/16 at 2014-12-08T08:53:33.05+05:30'
 assert_output_json_eq '{"device": "gw-1", "net": {"subnet_addr": "10.20.30.40", "mask": "16"}, "tm": "2014-12-08T08:53:33.05+05:30"}'
 
-#non tail recursion with tail field having arbirary name
+#non tail recursion with tail field having arbitrary name
 reset_rules
 add_rule 'rule=:blocked on %device:word% %net:recursive:remaining%at %tm:date-rfc5424%'
 add_rule 'rule=:%ip_addr:ipv4% %remaining:rest%'

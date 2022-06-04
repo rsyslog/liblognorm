@@ -5,7 +5,7 @@
 no_solaris10
 
 test_def $0 "whitespace parser"
-# the "word" parser unfortunatly treats everything except
+# the "word" parser unfortunately treats everything except
 # a SP as being in the word. So a HT inside a word is
 # permitted, which does not work well with what we
 # want to test here. to solve this problem, we use op-quoted-string.

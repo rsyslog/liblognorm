@@ -582,7 +582,7 @@ done:
 /**
  * Parse a hex Number.
  * A hex number begins with 0x and contains only hex digits until the terminating
- * whitespace. Note that if a non-hex character is deteced inside the number string,
+ * whitespace. Note that if a non-hex character is detected inside the number string,
  * this is NOT considered to be a number.
  */
 PARSER(HexNumber)
@@ -670,8 +670,8 @@ done:
  * Parse whitespace.
  * This parses all whitespace until the first non-whitespace character
  * is found. This is primarily a tool to skip to the next "word" if
- * the exact number of whitspace characters (and type of whitespace)
- * is not known. The current parsing position MUST be on a whitspace,
+ * the exact number of whitespace characters (and type of whitespace)
+ * is not known. The current parsing position MUST be on a whitespace,
  * else the parser does not match.
  * This parser is also a forward-compatibility tool for the upcoming
  * slsa (simple log structure analyser) tool.
@@ -1718,7 +1718,7 @@ done:
 		else if (suffixes_str == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list for field: '%s'", name);
 		else if (pData->nsuffix == 0)
-			ln_dbgprintf(ctx, "could't read suffix-value(s) for field: '%s'", name);
+			ln_dbgprintf(ctx, "couldn't read suffix-value(s) for field: '%s'", name);
 		else if (pData->suffix_offsets == NULL)
 			ln_dbgprintf(ctx, "couldn't allocate memory for suffix-list element references for field: "
 				"'%s'", name);
@@ -2878,7 +2878,7 @@ done:
  * of end of name.
  * Note: ArcSight violates the CEF spec ifself: they generate
  * leading underscores in their extension names, which are
- * definetly not alphanumeric. We still accept them...
+ * definitely not alphanumeric. We still accept them...
  * They also seem to use dots.
  */
 static int
@@ -3040,7 +3040,7 @@ PARSER(CEF)
 	char *name = NULL;
 	char *severity = NULL;
 
-	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
+	/* minimum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
 	if(strLen < i + 17 ||
 	   str[i]   != 'C' ||
 	   str[i+1] != 'E' ||
@@ -3065,7 +3065,7 @@ PARSER(CEF)
 	 * This time, we do NOT pre-process the extension, but rather
 	 * persist them directly to JSON. This is contrary to other
 	 * parsers, but as the CEF header is pretty unique, this time
-	 * it is exteremely unlike we will get a no-match during
+	 * it is extremely unlikely we will get a no-match during
 	 * extension processing. Even if so, nothing bad happens, as
 	 * the extracted data is discarded. But the regular case saves
 	 * us processing time and complexity. The only time when we

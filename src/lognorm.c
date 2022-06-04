@@ -67,7 +67,7 @@ ln_dbgprintf(ln_ctx ctx, const char *fmt, ...)
 	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if(lenBuf >= sizeof(buf)) {
-		/* prevent buffer overruns and garbagge display */
+		/* prevent buffer overruns and garbage display */
 		buf[sizeof(buf) - 5] = '.';
 		buf[sizeof(buf) - 4] = '.';
 		buf[sizeof(buf) - 3] = '.';
@@ -105,7 +105,7 @@ ln_errprintf(const ln_ctx ctx, const int eno, const char *fmt, ...)
 	lenBuf = vsnprintf(buf, sizeof(buf), fmt, ap);
 	va_end(ap);
 	if(lenBuf >= sizeof(buf)) {
-		/* prevent buffer overrruns and garbagge display */
+		/* prevent buffer overruns and garbage display */
 		buf[sizeof(buf) - 5] = '.';
 		buf[sizeof(buf) - 4] = '.';
 		buf[sizeof(buf) - 3] = '.';

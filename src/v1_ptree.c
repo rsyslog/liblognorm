@@ -185,7 +185,7 @@ ln_addPTree(struct ln_ptree *tree, es_str_t *str, size_t offs)
 
 LN_DBGPRINTF(tree->ctx, "addPTree: offs %zu", offs);
 	parentptr = &(tree->subtree[es_getBufAddr(str)[offs]]);
-	/* First check if tree node is totaly empty. If so, we can simply add
+	/* First check if tree node is totally empty. If so, we can simply add
 	 * the prefix to this node. This case is important, because it happens
 	 * every time with a new field.
 	 */
@@ -807,7 +807,7 @@ LN_DBGPRINTF(tree->ctx, "%zu got return %d", offs, r);
 		goto done;
 
 	/* and finally give "rest" a try if it was present. Note that we MUST do this after
-	 * literal evaluation, otherwise "rest" can never be overriden by other rules.
+	 * literal evaluation, otherwise "rest" can never be overridden by other rules.
 	 */
 	if(restMotifNode != NULL) {
 		LN_DBGPRINTF(tree->ctx, "rule has rest motif, forcing match via it");

@@ -996,7 +996,7 @@ done:
  * @param[in/out] ptr to ptr of input buffer; this is used if a string is
  *                provided instead of a file. If so, this pointer is advanced
  *                as data is consumed.
- * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occured.
+ * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occurred.
  * @return standard error code
  */
 static int
@@ -1123,7 +1123,7 @@ done:
 	return repo;
 }
 
-/* @return 0 if all is ok, 1 if an error occured */
+/* @return 0 if all is ok, 1 if an error occurred */
 int
 ln_sampLoad(ln_ctx ctx, const char *file)
 {
@@ -1138,7 +1138,7 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	const int version = checkVersion(repo);
 	ln_dbgprintf(ctx, "rulebase version is %d\n", version);
 	if(version == -1) {
-		ln_errprintf(ctx, errno, "error determing version of %s", file);
+		ln_errprintf(ctx, errno, "error determining version of %s", file);
 		goto done;
 	}
 	if(ctx->version != 0 && version != ctx->version) {
@@ -1167,7 +1167,7 @@ done:
 	return r;
 }
 
-/* @return 0 if all is ok, 1 if an error occured */
+/* @return 0 if all is ok, 1 if an error occurred */
 int
 ln_sampLoadFromString(ln_ctx ctx, const char *string)
 {

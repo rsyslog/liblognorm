@@ -21,7 +21,7 @@ assert_output_json_eq '{ "originalmsg": "Aug 18 13:18:45 192.168.99.2 %ASA-6-106
 # accept this as valid. This is needed for some use cases. See github
 # issue mentioned above for more details.
 # Note: there is something odd with the testbench driver: I cannot use two
-# consequtiuve spaces 
+# consecutive spaces
 reset_rules
 add_rule 'version=2'
 add_rule 'prefix=%timestamp:date-rfc3164% %hostname:word%'

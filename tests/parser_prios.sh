@@ -20,7 +20,7 @@ execute 'f0-f6:1c:5f:cc-a2'
 assert_output_json_eq '{ "rest": "f0-f6:1c:5f:cc-a2" }'
 
 
-# now the same with inverted priorites. We should now always have
+# now the same with inverted priorities. We should now always have
 # rest matches.
 reset_rules
 add_rule 'version=2'

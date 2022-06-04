@@ -25,7 +25,7 @@ should match exactly. Field selector has this format:
 Percent sign is used to enclose field selector. If you need to match literal
 '%', it can be written as '%%' or '\x25'.
 
-Behaviour of field selector depends on its type, which is decribed below.
+Behaviour of field selector depends on its type, which is described below.
 
 If field name is set to '-', this field is matched but not saved.
 

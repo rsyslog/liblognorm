@@ -52,7 +52,7 @@ struct ln_v1_samp {
  * @param[ctx] ctx current library context
  * @param[buf] cstr buffer containing the string contents of the sample
  * @param[lenBuf] length of the sample contained within buf
- * @return Newly create object or NULL if an error occured.
+ * @return Newly create object or NULL if an error occurred.
  */
 struct ln_v1_samp *
 ln_v1_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf);
@@ -70,8 +70,8 @@ ln_v1_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf);
  *
  * @param[in] ctx current library context
  * @param[in] repo repository descriptor
- * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occured.
- * @return Newly create object or NULL if an error or EOF occured.
+ * @param[out] isEof must be set to 0 on entry and is switched to 1 if EOF occurred.
+ * @return Newly create object or NULL if an error or EOF occurred.
  */
 struct ln_v1_samp *
 ln_v1_sampRead(ln_ctx ctx, FILE *repo, int *isEof);

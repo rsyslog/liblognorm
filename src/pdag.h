@@ -32,7 +32,7 @@ struct ln_type_pdag;
  * parser IDs.
  *
  * These identfy a parser. VERY IMPORTANT: they must start at zero
- * and continously increment. They must exactly match the index
+ * and continuously increment. They must exactly match the index
  * of the respective parser inside the parser lookup table.
  */
 #define PRS_LITERAL			0
@@ -107,7 +107,7 @@ struct ln_parser_info {
 struct ln_pdag {
 	ln_ctx ctx;			/**< our context */ // TODO: why do we need it?
 	ln_parser_t *parsers;		/* array of parsers to try */
-	prsid_t nparsers;		/**< current table size (prsid_t slighly abused) */
+	prsid_t nparsers;		/**< current table size (prsid_t slightly abused) */
 	struct {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence */
 		unsigned visited:1;	/**< work var for recursive procedures */
@@ -142,7 +142,7 @@ extern int advstats_max_backtracked;
 extern int advstats_backtracks[ADVSTATS_MAX_ENTITIES];
 #endif
 
-/** the "normalization paramater block" (npb)
+/** the "normalization parameter block" (npb)
  * This structure is passed to all normalization routines including
  * parsers. It contains data that commonly needs to be passed,
  * like the to be parsed string and its length, as well as read/write
@@ -195,7 +195,7 @@ void ln_pdagDelete(struct ln_pdag *DAG);
 
 /**
  * Add parser to dag node.
- * Works on unoptimzed dag.
+ * Works on unoptimized dag.
  *
  * @param[in] pdag pointer to pdag to modify
  * @param[in] parser parser definition
