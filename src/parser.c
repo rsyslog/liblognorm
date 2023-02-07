@@ -3029,12 +3029,12 @@ chkNoDupeDotInParserDefs(ln_ctx ctx, struct json_object *parsers)
 	if(json_object_get_type(parsers) == json_type_array) {
 		const int maxparsers = json_object_array_length(parsers);
 		for(int i = 0 ; i < maxparsers ; ++i) {
-			++nParsers;
 			struct json_object *const parser
 				= json_object_array_get_idx(parsers, i);
 			struct json_object *fname;
 			json_object_object_get_ex(parser, "name", &fname);
 			if(fname != NULL) {
+				++nParsers;
 				if(!strcmp(json_object_get_string(fname), "."))
 					++nDots;
 			}
