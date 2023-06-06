@@ -39,7 +39,8 @@
 #include "v1_samp.h"
 
 #ifdef FEATURE_REGEXP
-#include <pcre.h>
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
 #include <errno.h>
 #endif
 
@@ -1266,7 +1267,7 @@ done:
  * significantly slower than other field-types.
  */
 struct regex_parser_data_s {
-	pcre *re;
+	pcre2_code *re;
 	int consume_group;
 	int return_group;
 	int max_groups;
@@ -1276,17 +1277,33 @@ PARSER(Regex)
 	assert(str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
-	unsigned int* ovector = NULL;
+	PCRE2_SIZE *ovector;
+	pcre2_match_data *match_data = NULL;
 
 	struct regex_parser_data_s *pData = (struct regex_parser_data_s*) node->parser_data;
 	if (pData != NULL) {
-		ovector = calloc(pData->max_groups, sizeof(unsigned int) * 3);
-		if (ovector == NULL) FAIL(LN_NOMEM);
+		match_data = pcre2_match_data_create_from_pattern(pData->re, NULL);
+		if (match_data == NULL) FAIL(LN_NOMEM);
 
-		int result = pcre_exec(pData->re, NULL,	str, strLen, *offs, 0, (int*) ovector, pData->max_groups * 3);
+		int result = pcre2_match(
+			pData->re,            /* the compiled pattern */
+			(PCRE2_SPTR)str,      /* the subject string */
+			(PCRE2_SIZE)strLen,   /* the length of the subject */
+			(PCRE2_SIZE)*offs,    /* start at offset 0 in the subject */
+			0,                    /* default options */
+			match_data,           /* block for storing the result */
+			NULL);                /* use default match context */
+
 		if (result == 0) result = pData->max_groups;
 		if (result > pData->consume_group) {
-			/*please check 'man 3 pcreapi' for cryptic '2 * n' and '2 * n + 1' magic*/
+			ovector = pcre2_get_ovector_pointer(match_data);
+			printf("Match succeeded at offset %d\n", (int)ovector[0]);
+
+			/* please check 'man 3 pcre2api' for cryptic '2 * n' and '2 * n + 1' magic
+			 * in a nutshell, within the ovector, the first in each pair of values is set to the
+			 * offset of the first code unit of a substring, and the second is set to the 
+			 * offset of the first code unit after the end of a substring.
+			 */
 			if (ovector[2 * pData->consume_group] == *offs) {
 				*parsed = ovector[2 * pData->consume_group + 1] - ovector[2 * pData->consume_group];
 				if (pData->consume_group != pData->return_group) {
@@ -1294,22 +1311,20 @@ PARSER(Regex)
 					if((val = strndup(str + ovector[2 * pData->return_group],
 						ovector[2 * pData->return_group + 1] -
 						ovector[2 * pData->return_group])) == NULL) {
-						free(ovector);
 						FAIL(LN_NOMEM);
 					}
 					*value = json_object_new_string(val);
 					free(val);
 					if (*value == NULL) {
-						free(ovector);
 						FAIL(LN_NOMEM);
 					}
 				}
 			}
 		}
-		free(ovector);
 	}
 	r = 0; /* success */
 done:
+	pcre2_match_data_free(match_data);
 	return r;
 }
 
@@ -1346,8 +1361,8 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	char* name = NULL;
 	struct regex_parser_data_s *pData = NULL;
 	const char *unescaped_exp = NULL;
-	const char *error = NULL;
-	int erroffset = 0;
+	PCRE2_SIZE erroffset = 0;
+	int errcode = 0;
 
 
 	CHKN(name = es_str2cstr(node->name, NULL));
@@ -1365,7 +1380,7 @@ void* regex_parser_data_constructor(ln_fieldList_t *node, ln_ctx ctx) {
 	if ((grp_parse_err = regex_parser_configure_consume_and_return_group(args, pData)) != NULL)
 		FAIL(LN_BADCONFIG);
 
-	CHKN(pData->re = pcre_compile(exp, 0, &error, &erroffset, NULL));
+	CHKN(pData->re = pcre2_compile((PCRE2_SPTR)exp, PCRE2_ZERO_TERMINATED, 0, &errcode, &erroffset, NULL));
 
 	pData->max_groups = ((pData->consume_group > pData->return_group) ? pData->consume_group :
 					pData->return_group) + 1;
@@ -1387,9 +1402,12 @@ done:
 			ln_dbgprintf(ctx, "couldn't allocate memory for regex-string for field: '%s'", name);
 		else if (grp_parse_err != NULL)
 			ln_dbgprintf(ctx, "%s for: '%s'", grp_parse_err, name);
-		else if (pData->re == NULL)
+		else if (pData->re == NULL) {
+			PCRE2_UCHAR errbuffer[256];
+			pcre2_get_error_message(errcode, errbuffer, sizeof(errbuffer));
 			ln_dbgprintf(ctx, "couldn't compile regex(encountered error '%s' at char '%d' in pattern) "
-				 "for regex-matched field: '%s'", error, erroffset, name);
+				 "for regex-matched field: '%s'", errbuffer, (int)erroffset, name);
+		}
 		regex_parser_data_destructor((void**)&pData);
 	}
 	if (exp != NULL) free(exp);
@@ -1401,7 +1419,7 @@ done:
 void regex_parser_data_destructor(void** dataPtr) {
 	if ((*dataPtr) != NULL) {
 		struct regex_parser_data_s *pData = (struct regex_parser_data_s*) *dataPtr;
-		if (pData->re != NULL) pcre_free(pData->re);
+		if (pData->re != NULL) pcre2_code_free(pData->re);
 		free(pData);
 		*dataPtr = NULL;
 	}
