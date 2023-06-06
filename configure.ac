@@ -80,7 +80,7 @@ AC_ARG_ENABLE(regexp,
 )
 AM_CONDITIONAL(ENABLE_REGEXP, test x$enable_regexp = xyes)
 if test "$enable_regexp" = "yes"; then
-        PKG_CHECK_MODULES(PCRE, libpcre)
+        PKG_CHECK_MODULES(PCRE, [libpcre2-8 >= 10.00])
         AC_DEFINE(FEATURE_REGEXP, 1, [Regular expressions support enabled.])
 	FEATURE_REGEXP=1
 else
@@ -195,4 +195,3 @@ echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
 echo "Tools enabled:               $enable_tools"
 echo "Docs enabled:                $enable_docs"
-
