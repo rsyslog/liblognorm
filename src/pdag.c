@@ -1318,6 +1318,34 @@ done:
 }
 
 
+/**
+ * Add key:value pair to json tree
+ * If the key contains !, it will be added as nested
+ * Ex : a!b=abcd  will be  "a":{"b":"abcd"}
+ */
+static void
+add_json_nested_key_value_pair(struct json_object *json,
+        char *name,
+        struct json_object *value)
+{
+	char *first = NULL;
+	// If the key contains an exclamation char
+	if( (first=strchr(name, '!')) != NULL ) {
+		// Prevent allocation + copy str
+		*first = '\0';
+		struct json_object *subtree;
+		subtree = json_object_new_object();
+		add_json_nested_key_value_pair(subtree, first+1, value);
+		json_object_object_add(json, name, subtree);
+		// Re-set the modified char above
+		*first = '!';
+	} else {
+		json_object_object_add_ex(json, name, value,
+								  JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+	}
+}
+
+
 /* Do some fixup to the json that we cannot do on a lower layer */
 static int
 fixJSON(struct ln_pdag *dag,
@@ -1382,8 +1410,7 @@ fixJSON(struct ln_pdag *dag,
 			json_object_object_add_ex(json, prs->name, valDotDot,
 				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		} else {
-			json_object_object_add_ex(json, prs->name, *value,
-				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+			add_json_nested_key_value_pair(json, (char *)prs->name, *value);
 		}
 	}
 	r = 0;
