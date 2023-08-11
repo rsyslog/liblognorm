@@ -27,7 +27,7 @@ https://www.researchgate.net/publication/310545144_Efficient_Normalization_of_IT
 
 The current library is the result of that effort. Application developers
 are encouraged to switch to this version, as it provides the benefit of
-a simpler API. This version is now being tracked by the git master branch.
+a simpler API. This version is now being tracked by the git default branch.
 
 However, if you need to stick to the old API, there is a git branch
 liblognorm0, which contains the previous version of the library. This
