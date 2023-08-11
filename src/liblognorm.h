@@ -108,7 +108,7 @@ int ln_hasAdvancedStats(void);
  * To prevent memory leaks, ln_exitCtx() must be called on a library
  * context that is no longer needed.
  *
- * @return new library context or NULL if an error occured
+ * @return new library context or NULL if an error occurred
  */
 ln_ctx ln_initCtx(void);
 
@@ -116,19 +116,19 @@ ln_ctx ln_initCtx(void);
  * Inherit control attributes from a library context.
  *
  * This does not copy the parse-tree, but does copy
- * behaviour-controling attributes such as enableRegex.
+ * behaviour-controlling attributes such as enableRegex.
  *
  * Just as with ln_initCtx, ln_exitCtx() must be called on a library
  * context that is no longer needed.
  *
- * @return new library context or NULL if an error occured
+ * @return new library context or NULL if an error occurred
  */
 ln_ctx ln_inherittedCtx(ln_ctx parent);
 
 /**
  * Discard a library context.
  *
- * Free's the ressources associated with the given library context. It
+ * Free's the resources associated with the given library context. It
  * MUST NOT be accessed after calling this function.
  *
  * @param ctx The context to be discarded.
@@ -162,7 +162,7 @@ ln_setCtxOpts(ln_ctx ctx, unsigned opts);
  * - it's internal processing
  * - the way a log message is being normalized
  *
- * It does so by emiting "interesting" information about its processing
+ * It does so by emitting "interesting" information about its processing
  * at various stages. A caller can obtain this information by registering
  * an entry point. When done so, liblognorm will call the entry point
  * whenever it has something to emit. Note that debugging can be rather
@@ -183,7 +183,7 @@ ln_setCtxOpts(ln_ctx ctx, unsigned opts);
  * @param[in] cookie Opaque cookie to be passed down to debug handler. Can be
  *                   used for some state tracking by the caller. This is defined as
  *                   void* to support pointers. To play it safe, a pointer should be
- *                   passed (but advantorous folks may also use an unsigned).
+ *                   passed (but adventurous folks may also use an unsigned).
  *
  * @return Returns zero on success, something else otherwise.
  */
@@ -257,7 +257,7 @@ int ln_loadSamplesFromString(ln_ctx ctx, const char *string);
  * @param[in] ctx The library context to use.
  * @param[in] str The message string (see note above).
  * @param[in] strLen The length of the message in bytes.
- * @param[out] json_p A new event record or NULL if an error occured. <b>Must be
+ * @param[out] json_p A new event record or NULL if an error occurred. <b>Must be
  *                   destructed if no longer needed.</b>
  *
  * @return Returns zero on success, something else otherwise.

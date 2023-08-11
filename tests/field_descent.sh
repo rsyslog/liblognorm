@@ -27,7 +27,7 @@ assert_output_json_eq '{"device": "gw-1", "net": {"ip_addr": "10.20.30.40"}, "tm
 execute 'blocked on gw-1 10.20.30.40/16 at 2014-12-08T08:53:33.05+05:30'
 assert_output_json_eq '{"device": "gw-1", "net": {"subnet_addr": "10.20.30.40", "mask": "16"}, "tm": "2014-12-08T08:53:33.05+05:30"}'
 
-#descent with tail field having arbirary name
+#descent with tail field having arbitrary name
 reset_rules
 add_rule 'rule=:blocked on %device:word% %net:descent:./subset.rulebase:remaining%at %tm:date-rfc5424%'
 reset_rules 'subset'

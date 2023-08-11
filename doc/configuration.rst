@@ -32,11 +32,11 @@ Rulebase Versions
 This documentation is for liblognorm version 2 and above. Version 2 is a
 complete rewrite of liblognorm which offers many enhanced features but
 is incompatible to some pre-v2 rulebase commands. For details, see
-compatiblity document.
+compatibility document.
 
 Note that liblognorm v2 contains a full copy of the v1 engine. As such
 it is fully compatible to old rulebases. In order to use the new v2
-engine, you need to explicitely opt in. To do so, you need to add
+engine, you need to explicitly opt in. To do so, you need to add
 the line::
 
     version=2
@@ -46,7 +46,7 @@ to the top of your rulebase file. Currently, it is very important that
  * the line is given exactly as above
  * no whitespace within the sequence is permitted (e.g. "version = 2"
    is invalid)
- * no whitepace or comment after the "2" is permitted
+ * no whitespace or comment after the "2" is permitted
    (e.g. "version=2 # comment") is invalid
  * this line **must** be the **very** first line of the file; this
    also means there **must** not be any comment or empty lines in
@@ -247,7 +247,7 @@ Some special field names exist:
   it does so by creating a json subtree. If the field is named ".", then
   no subtree is created but instead the subfields are moved into the main
   hierarchy.
-* **two dots** (".."): similiar to ".", but can be used at the lower level to denote
+* **two dots** (".."): similar to ".", but can be used at the lower level to denote
   that a field is to be included with the name given by the upper-level
   object. Note that ".." is only acted on if a subelement contains a single
   field. The reason is that if there were more, we could not assign all of
@@ -275,7 +275,7 @@ stems back to the legacy v1 system)::
 	%tag:char-to{"extradata":":"}%
 
 Whitespace, including LF, is permitted inside a field definition after
-the opening precent sign and before the closing one. This can be used to
+the opening percent sign and before the closing one. This can be used to
 make complex rules more readable. So the example rule from the overview
 section above could be rewritten as::
 
@@ -335,7 +335,7 @@ A couple of things to note:
 
  * we express everything in this example in a *single* parser definition
  * this is done by using a **JSON array**; whenever an array is used,
-   multiple parsers can be specified. They are exectued one after the
+   multiple parsers can be specified. They are executed one after the
    other in given order.
  * literal text is matched here via explicit parser call; as specified
    below, this is recommended only for specific use cases with the
@@ -344,7 +344,7 @@ A couple of things to note:
    on the main JSON level
  * the literal text shall not be stored inside an output variable; for
    this reason no name attribute is given (we could also have used
-   ``"name":"-"`` which achives the same effect but is more verbose).
+   ``"name":"-"`` which achieves the same effect but is more verbose).
 
 With the literal parser calls replaced by actual literals, the sample
 looks like this::
@@ -373,7 +373,7 @@ Some guidelines:
  * if a field needs to be matched but the result of that match is not
    needed, omit the "name" attribute; specifically avoid using
    the more verbose ``"name":"-"``.
- * it is a good idea to start each defintion with ``"type":"..."``
+ * it is a good idea to start each definition with ``"type":"..."``
    as this provides a good quick overview over what is being defined.
  
 Mandatory Parameters
@@ -404,7 +404,7 @@ and always matches the rest of the message).
 
 Note that liblognorm internally
 has a parser-specific priority, which is selected by the program developer based
-on the specificallity of a type. If the user assigns equal priorities, parsers are
+on the specificality of a type. If the user assigns equal priorities, parsers are
 executed based on the parser-specific priority.
 
 The default priority value is 30,000.
@@ -420,11 +420,11 @@ generic parsers, which are then tailored via parameters.
 There is nothing bad about using legacy parsers and there is no
 plan to outphase them at any time in the future. We just wanted to
 let you know, especially if you wonder about some "wereid" parsers.
-In v1, parsers could have only a single paramter, which was called
+In v1, parsers could have only a single parameter, which was called
 "extradata" at that time. This is why some of the legacy parsers
 require or support a parameter named "extradata" and do not use a
 better name for it (internally, the legacy format creates a
-v2 parser defintion with "extradata" being populated from the
+v2 parser definition with "extradata" being populated from the
 legacy "extradata" part of the configuration).
 
 number
@@ -522,11 +522,11 @@ function to check for space, horizontal tab, newline, vertical tab,
 feed and carriage return characters.
 
 This parser is primarily a tool to skip to the next "word" if
-the exact number of whitspace characters (and type of whitespace)
-is not known. The current parsing position MUST be on a whitspace,
+the exact number of whitespace characters (and type of whitespace)
+is not known. The current parsing position MUST be on a whitespace,
 else the parser does not match.
 
-Remeber that to just parse but not preserve the field contents, the
+Remember that to just parse but not preserve the field contents, the
 dash ("-") is used as field name in compact format or the "name" 
 parameter is simply omitted in JSON format. This is almost always
 expected with the *whitespace* type.
@@ -698,7 +698,7 @@ One or more characters, up to the next string given in
 alpha
 #####   
 
-One or more alphabetic characters, up to the next whitspace, punctuation,
+One or more alphabetic characters, up to the next whitespace, punctuation,
 decimal digit or control character.
 
 char-to
@@ -734,14 +734,14 @@ which terminates the match.
 rest
 ####
 
-Zero or more characters untill end of line. Must always be at end of the 
+Zero or more characters until end of line. Must always be at end of the
 rule, even though this condition is currently **not** checked. In any case,
 any definitions after *rest* are ignored.
 
 Note that the *rest* syntax should be avoided because it generates
 a very broad match. If it needs to be used, the user shall assign it
 the lowest priority among his parser definitions. Note that the
-parser-sepcific priority is also lowest, so by default it will only
+parser-specific priority is also lowest, so by default it will only
 match if nothing else matches.
 
 quoted-string
@@ -804,7 +804,7 @@ Specifies the format of the json object. Possible values are
 - **timestamp-unix-ms** - a kind of unix-timestamp, but with millisecond resolution.
   This format is understood for example by ElasticSearch. Note that RFC3164 does **not**
   contain subsecond resolution, so this option makes no sense for RFC3164-data only.
-  It is usefull, howerver, if processing mixed sources, some of which contain higher
+  It is useful, however, if processing mixed sources, some of which contain higher
   precision.
 
 
@@ -973,7 +973,7 @@ Samples for such a spec are:
  * inside:192.168.1.25/53 (192.168.1.25/53) (some.user)
  * 192.168.1.15/0(LOCAL\RG-867G8-DEL88D879BBFFC8)
 
-Note that the current verision of liblognorm does not permit sole
+Note that the current version of liblognorm does not permit sole
 IP addresses to be detected as a Cisco interface spec. However, we
 are reviewing more Cisco message and need to decide if this is
 to be supported. The problem here is that this would create a much
@@ -983,7 +983,7 @@ broader parser which would potentially match many things that are
 As this object extracts multiple subelements, it create a JSON
 structure. 
 
-Let's for example look at this definiton (compact format)::
+Let's for example look at this definition (compact format)::
 
     %ifaddr:cisco-interface-spec%
 
@@ -1077,7 +1077,7 @@ This rule matches messages like these::
 
 Note that the "parser" parameter here needs to be provided with an array
 of *alternatives*. In this case, the JSON array is **not** interpreted as
-a sequence. Note, though that you can nest defintions by using custom types.
+a sequence. Note, though that you can nest definitions by using custom types.
  
 repeat
 ######
@@ -1141,7 +1141,7 @@ the "parser" parameter **must** match at least once, otherwise "repeat"
 fails.
 
 In the above sample, "while" mismatches after "4", because no ", " follows.
-Then, the parser termiantes, and according to definition the literal " b"
+Then, the parser terminates, and according to definition the literal " b"
 is matched, which will result in a successful rule match (note: the "a ",
 " b" literals are just here for explanatory purposes and could be any
 other rule element).
@@ -1169,7 +1169,7 @@ Note the missing space after "4,". To handle such cases, we can nest the
                          }
              }% b
 
-This definition handles numbers being delemited by either ", " or ",".
+This definition handles numbers being delimited by either ", " or ",".
 
 For people with programming skills, the "repeat" parser is described
 by this pseudocode::

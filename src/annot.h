@@ -155,7 +155,7 @@ void ln_deleteAnnot(ln_annot *annot);
  * 		    must NOT be re-used by caller
  * @returns 0 on success, something else otherwise
  */
-int ln_addAnnotOp(ln_annot *anot, ln_annot_opcode opc, es_str_t *name, es_str_t *value);
+int ln_addAnnotOp(ln_annot *annot, ln_annot_opcode opc, es_str_t *name, es_str_t *value);
 
 
 /**
@@ -164,7 +164,7 @@ int ln_addAnnotOp(ln_annot *anot, ln_annot_opcode opc, es_str_t *name, es_str_t 
  * @memberof ln_annot
  *
  * @param[in] ctx current context
- * @param[in] event event to annotate (updated with anotations on exit)
+ * @param[in] event event to annotate (updated with annotations on exit)
  * @returns 0 on success, something else otherwise
  */
 int ln_annotate(ln_ctx ctx, struct json_object *json, struct json_object *tags);

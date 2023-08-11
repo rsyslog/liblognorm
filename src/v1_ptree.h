@@ -42,7 +42,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 /**
  * List of supported fields inside parse tree.
  * This list holds all fields and their description. While normalizing,
- * fields are tried in the order of this list. So the enqeue order
+ * fields are tried in the order of this list. So the enqueue order
  * dictates precedence during parsing.
  *
  * value list. This is a single-linked list. In a later stage, we should
@@ -54,7 +54,7 @@ typedef struct ln_fieldList_s ln_fieldList_t;
 struct ln_fieldList_s {
 	es_str_t *name;		/**< field name */
 	es_str_t *data;		/**< extra data to be passed to parser */
-	es_str_t *raw_data;	/**< extra untouched (unescaping is not done) data availble to be used by parser */
+	es_str_t *raw_data;	/**< extra untouched (unescaping is not done) data available to be used by parser */
 	void *parser_data; /** opaque data that the field-parser understands */
 	void (*parser_data_destructor)(void **); /** destroy opaque data that field-parser understands */
 	int (*parser)(const char*, size_t, size_t*, const ln_fieldList_t *,
@@ -77,7 +77,7 @@ struct ln_ptree {
 		unsigned isTerminal:1;	/**< designates this node a terminal sequence? */
 	} flags;
 	struct json_object *tags;	/* tags to assign to events of this type */
-	/* the respresentation below requires a lof of memory but is
+	/* the representation below requires a lof of memory but is
 	 * very fast. As an alternate approach, we can use a hash table
 	 * where we ignore control characters. That should work quite well.
 	 * But we do not do this in the initial step.

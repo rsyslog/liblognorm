@@ -66,12 +66,12 @@
  * Inherit control attributes from a library context.
  *
  * This does not copy the parse-tree, but does copy
- * behaviour-controling attributes such as enableRegex.
+ * behaviour-controlling attributes such as enableRegex.
  *
  * Just as with ln_initCtx, ln_exitCtx() must be called on a library
  * context that is no longer needed.
  *
- * @return new library context or NULL if an error occured
+ * @return new library context or NULL if an error occurred
  */
 ln_ctx ln_v1_inherittedCtx(ln_ctx parent);
 
@@ -127,7 +127,7 @@ int ln_v1_loadSamples(ln_ctx ctx, const char *file);
  * @param[in] ctx The library context to use.
  * @param[in] str The message string (see note above).
  * @param[in] strLen The length of the message in bytes.
- * @param[out] json_p A new event record or NULL if an error occured. <b>Must be
+ * @param[out] json_p A new event record or NULL if an error occurred. <b>Must be
  *                   destructed if no longer needed.</b>
  *
  * @return Returns zero on success, something else otherwise.

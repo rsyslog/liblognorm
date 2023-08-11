@@ -121,7 +121,7 @@ Special options. The following ones can be set:
    * **addRule** Add a mockup of the rule that was processed. Note that
      it is *not* an exact copy of the rule, but a rule that correctly
      describes the parsed message. Most importantly, prefixes are 
-     appended and custom data types are expanded (and no longer visiable
+     appended and custom data types are expanded (and no longer visible
      as such). This option is primarily meant for postprocessing, e.g.
      as input to an anonymizer.
 
@@ -233,7 +233,7 @@ systems it is yum command::
     $ sudo yum install graphviz
 
 The next step would be creating the control file for graphviz. Therefore we 
-use the normalizer command with the options -d "prefered filename for the 
+use the normalizer command with the options -d "preferred filename for the
 control file" and -r "rulebase"::
 
     $ lognormalize -d control.dot -r messages.rb

@@ -48,7 +48,7 @@ int advstats_lit_parser_calls[ADVSTATS_MAX_ENTITIES];
  * VERY IMPORTANT: the initialization must be done EXACTLY in the
  * order of parser IDs (also see comment in pdag.h).
  *
- * Rough guideline for assigning priorites:
+ * Rough guideline for assigning priorities:
  * 0 is highest, 255 lowest. 255 should be reserved for things that
  * *really* should only be run as last resort --> rest. Also keep in
  * mind that the user-assigned priority is put in the upper 24 bits, so
@@ -191,7 +191,7 @@ ln_pdagClearVisited(ln_ctx ctx)
 }
 
 /**
- * Process a parser defintion. Note that a single defintion can potentially
+ * Process a parser definition. Note that a single definition can potentially
  * contain many parser instances.
  * @return parser node ptr or NULL (on error)
  */
@@ -337,7 +337,7 @@ done:	return;
 /**
  * pdag optimizer step: literal path compaction
  *
- * We compress as much as possible and evalute the path down to
+ * We compress as much as possible and evaluate the path down to
  * the first non-compressable element. Note that we must NOT
  * compact those literals that are either terminal nodes OR
  * contain names so that the literal is to be parsed out.
@@ -431,12 +431,12 @@ deleteComponentID(struct ln_pdag *const __restrict__ dag)
  * This is required if the ALTERNATIVE parser type is used,
  * which will create component IDs for each of it's invocations.
  * As such, we do not only fix the string, but know that all
- * children also need fixning. We do this be simply deleting
+ * children also need fixing. We do this be simply deleting
  * all of their rb_ids, as we know they will be visited again.
  * Note: if we introduce the same situation by new functionality,
  * we may need to review this code here as well. Also note
  * that the component ID will not be 100% correct after our fix,
- * because that ID could acutally be created by two sets of rules.
+ * because that ID could actually be created by two sets of rules.
  * But this is the best we can do.
  */
 static void
@@ -460,7 +460,7 @@ done:	return;
 }
 /**
  * Assign human-readable identifiers (names) to each node. These are
- * later used in stats, debug output and whereever else this may make
+ * later used in stats, debug output and wherever else this may make
  * sense.
  */
 static void
@@ -735,7 +735,7 @@ ln_fullPdagStats(ln_ctx ctx, FILE *const fp, const int extendedStats)
 		    "parser call statistic is the number of parsers called along\n"
 		    "the path. That number is higher, as multiple parsers may be\n"
 		    "called at each node. The number of literal parser calls is\n"
-		    "given explicitely, as they use almost no time to process.\n"
+		    "given explicitly, as they use almost no time to process.\n"
 		    "\n"
 		);
 	total_len = 0;
@@ -1086,7 +1086,7 @@ static inline void dotAddPtr(es_str_t **str, void *p)
 	i = snprintf(buf, sizeof(buf), "l%p", p);
 	es_addBuf(str, buf, i);
 }
-struct data_Literal { const char *lit; }; // TODO remove when this hack is no longe needed
+struct data_Literal { const char *lit; }; // TODO remove when this hack is no longer needed
 /**
  * recursive handler for DOT graph generator.
  */
@@ -1354,7 +1354,7 @@ fixJSON(struct ln_pdag *dag,
 		int isDotDot = 0;
 		struct json_object *valDotDot = NULL;
 		if(json_object_get_type(*value) == json_type_object) {
-			/* TODO: this needs to be speeded up by just checking the first
+			/* TODO: this needs to be sped up by just checking the first
 			 * member and ensuring there is only one member. This requires
 			 * extensions to libfastjson.
 			 */
@@ -1523,7 +1523,7 @@ add_rule_to_mockup(npb_t *const __restrict__ npb,
  * @param[in] string string to be matched against (the to-be-normalized data)
  * @param[in] strLen length of the to-be-matched string
  * @param[in] offs start position in input data
- * @param[out] pPrasedTo ptr to position up to which the the parsing succed in max
+ * @param[out] pPrasedTo ptr to position up to which the parsing succeed in max
  * @param[in/out] json ... that is being created during normalization
  * @param[out] endNode if a match was found, this is the matching node (undefined otherwise)
  *
