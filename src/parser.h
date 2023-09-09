@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2015 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2021 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -63,7 +63,7 @@ PARSERDEF(Repeat);
 PARSERDEF(String);
 PARSERDEF_NO_DATA(Rest);
 PARSERDEF_NO_DATA(OpQuotedString);
-PARSERDEF_NO_DATA(QuotedString);
+PARSERDEF(QuotedString);
 PARSERDEF_NO_DATA(ISODate);
 PARSERDEF_NO_DATA(Time12hr);
 PARSERDEF_NO_DATA(Time24hr);

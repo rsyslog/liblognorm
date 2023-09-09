@@ -1,6 +1,6 @@
 /*
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2021 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -1644,6 +1644,12 @@ done:
 }
 
 
+
+struct data_QuotedString {
+	int dashIsEmpty;
+	int quotesOptional;
+	int supportEscape;
+};
 /**
  * Parse a quoted string. In this initial implementation, escaping of the quote
  * char is not supported. A quoted string is one start starts with a double quote,
@@ -1653,37 +1659,93 @@ done:
  */
 PARSER_Parse(QuotedString)
 	const char *c;
+	struct data_QuotedString *const data = (struct data_QuotedString*) pdata;
 	size_t i;
+	int hadQuote = 0;
 
 	assert(npb->str != NULL);
 	assert(offs != NULL);
 	assert(parsed != NULL);
 	c = npb->str;
 	i = *offs;
-	if(i + 2 > npb->strLen)
-		goto done;	/* needs at least 2 characters */
+	if(i + 1 > npb->strLen)
+		goto done;	/* needs at least 1 characters (with quotesQptional...) */
 
-	if(c[i] != '"')
-		goto done;
-	++i;
+	if(c[i] == '"') {
+		hadQuote = 1;
+		++i;
+	} else {
+		if(!data->quotesOptional) {
+			goto done;
+		}
+	}
 
 	/* search end of string */
-	while(i < npb->strLen && c[i] != '"')
+	while(i < npb->strLen &&
+	        ( (hadQuote && c[i] != '"') || (!hadQuote && c[i] != ' ') )
+	     ) {
+		if(data->supportEscape && c[i] == '\\' && (i < npb->strLen)) {
+			i++; /* next char is escaped */
+		}
 		i++;
+	}
 
-	if(i == npb->strLen || c[i] != '"')
+	if(hadQuote && (i == npb->strLen || c[i] != '"'))
 		goto done;
 
 	/* success, persist */
-	*parsed = i + 1 - *offs; /* "eat" terminal double quote */
+	const size_t charsFound = i - *offs + (hadQuote ? 1 : 0);
+	*parsed = charsFound; /* "eat" terminal double quote */
 	/* create JSON value to save quoted string contents */
 	if(value != NULL) {
-		*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		if(charsFound == 3 && data->dashIsEmpty && !strncmp(npb->str+(*offs), "\"-\"", 3)) {
+			*value = json_object_new_string_len("", 0);
+		} else {
+			*value = json_object_new_string_len(npb->str+(*offs), *parsed);
+		}
 	}
 	r = 0; /* success */
 done:
 	return r;
 }
+
+PARSER_Construct(QuotedString)
+{
+	int r = 0;
+	struct data_QuotedString *data = (struct data_QuotedString*) calloc(1, sizeof(struct data_QuotedString));
+
+	if(json == NULL)
+		goto done;
+
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		const char *key = json_object_iter_peek_name(&it);
+		struct json_object *const val = json_object_iter_peek_value(&it);
+		if(!strcasecmp(key, "option.quotesOptional")) {
+			data->quotesOptional = json_object_get_boolean(val);
+		} else if(!strcasecmp(key, "option.dashIsEmpty")) {
+			data->dashIsEmpty = json_object_get_boolean(val);
+		} else if(!strcasecmp(key, "option.supportEscape")) {
+			data->supportEscape = json_object_get_boolean(val);
+		} else {
+			ln_errprintf(ctx, 0, "invalid param for QuotedString: %s",
+				 json_object_to_json_string(val));
+		}
+		json_object_iter_next(&it);
+	}
+
+done:
+	*pdata = data;
+	if(r != 0)
+		free(data);
+	return r;
+}
+PARSER_Destruct(QuotedString)
+{
+	free(pdata);
+}
+
 
 
 /**
