@@ -42,12 +42,6 @@
 #include "samp.h"
 #include "helpers.h"
 
-#ifdef FEATURE_REGEXP
-#include <pcre.h>
-#include <errno.h>
-#endif
-
-
 /* how should output values be formatted? */
 enum FMT_MODE {
 	FMT_AS_STRING = 0,
