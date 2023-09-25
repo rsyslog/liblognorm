@@ -1062,6 +1062,8 @@ checkVersion(FILE *const fp)
 		return -1;
 	if(!strcmp(buf, "version=2\n")) {
 		return 2;
+	} else if(!strcmp(buf, "version=3\n")) {
+		return 3;
 	} else {
 		return 1;
 	}
@@ -1154,7 +1156,7 @@ ln_sampLoad(ln_ctx ctx, const char *file)
 	}
 
 	/* now we are in our native code */
-	++ctx->conf_ln_nbr; /* "version=2" is line 1! */
+	++ctx->conf_ln_nbr; /* "version=2" or "version=3" is line 1! */
 	while(!isEof) {
 		CHKR(ln_sampRead(ctx, repo, NULL, &isEof));
 	}
@@ -1178,7 +1180,7 @@ ln_sampLoadFromString(ln_ctx ctx, const char *string)
 		goto done;
 
 	ln_dbgprintf(ctx, "loading v2 rulebase from string '%s'", string);
-	ctx->version = 2;
+	ctx->version = 3;
 	while(!isEof) {
 		CHKR(ln_sampRead(ctx, NULL, &string, &isEof));
 	}

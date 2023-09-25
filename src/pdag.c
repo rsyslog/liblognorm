@@ -1409,8 +1409,11 @@ fixJSON(struct ln_pdag *dag,
 			json_object_put(*value);
 			json_object_object_add_ex(json, prs->name, valDotDot,
 				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
-		} else {
+		} else if(dag->ctx->version == 3) {
 			add_json_nested_key_value_pair(json, (char *)prs->name, *value);
+		} else {
+			json_object_object_add_ex(json, prs->name, *value,
+                                      JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
 		}
 	}
 	r = 0;
