@@ -682,6 +682,16 @@ it becomes resolvable, and ``f`` will contain "12" and ``r`` will contain ":34 5
 This also shows the risk associated, as the result obtained may not necessarily be
 what was intended.
 
+option.dashIsEmpty
+~~~~~~~~~~~~~~~~~~
+
+This parameter, if True, permits to treat string consisting only of dash characters ('-') as
+being empty. The default value is False.
+
+This parameter is meant for e.g. processing web log data where a dash indicates a missing
+value but the user does not populate an analysis backend with dashes where "empty value" is
+meant.
+
 
 word
 ####
