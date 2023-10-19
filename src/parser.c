@@ -404,7 +404,9 @@ PARSER_Parse(RFC5424Date)
 	}
 
 	if(len > 0) {
-		if(*pszTS != ' ') /* if it is not a space, it can not be a "good" time */
+		/* if it is alpha or number, it can not be a "good" time
+		 * a successful match terminates on space, tab, comma, ... */
+		if(isalnum(*pszTS))
 			goto done;
 	}
 
