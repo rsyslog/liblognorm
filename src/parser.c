@@ -3380,7 +3380,7 @@ stringSetPermittedChar(struct data_String *const data, char c, int val)
 	data->perm_chars[(unsigned)c] = val;
 }
 static inline int
-stringIsPermittedChar(struct data_String *const data, char c)
+stringIsPermittedChar(struct data_String *const data, unsigned char c)
 {
 	return data->perm_chars[(unsigned)c];
 }
@@ -3509,7 +3509,8 @@ PARSER_Parse(String)
 		/* terminating conditions */
 		if(!bHaveQuotes && npb->str[i] == ' ')
 			break;
-		if(!stringIsPermittedChar(data, npb->str[i]))
+
+		if(!stringIsPermittedChar(data, (unsigned char)npb->str[i]))
 			break;
 		i++;
 	}
