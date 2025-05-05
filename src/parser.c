@@ -3518,7 +3518,7 @@ struct data_String {
 	char perm_chars[256]; // TODO: make this bit-wise, so we need  only 32 bytes
 };
 static inline void
-stringSetPermittedChar(struct data_String *const data, char c, int val)
+stringSetPermittedChar(struct data_String *const data, unsigned char c, int val)
 {
 #if 0
 	const int i = (unsigned) c / 8;
@@ -3526,12 +3526,12 @@ stringSetPermittedChar(struct data_String *const data, char c, int val)
 	const unsigned mask = ~(1 << shft);
 	perm_arr[i] = (perm_arr[i] & (0xff
 #endif
-	data->perm_chars[(unsigned)c] = val;
+	data->perm_chars[c] = val;
 }
 static inline int
-stringIsPermittedChar(struct data_String *const data, char c)
+stringIsPermittedChar(struct data_String *const data, unsigned char c)
 {
-	return data->perm_chars[(unsigned)c];
+	return data->perm_chars[c];
 }
 static void
 stringAddPermittedCharArr(struct data_String *const data,
@@ -3539,7 +3539,7 @@ stringAddPermittedCharArr(struct data_String *const data,
 {
 	const size_t nchars = strlen(optval);
 	for(size_t i = 0 ; i < nchars ; ++i) {
-		stringSetPermittedChar(data, optval[i], 1);
+		stringSetPermittedChar(data, (unsigned char)optval[i], 1);
 	}
 }
 static void
@@ -3548,8 +3548,8 @@ stringAddPermittedFromTo(struct data_String *const data,
 	const unsigned char to)
 {
 	assert(from <= to);
-	for(size_t i = from ; i <= to ; ++i) {
-		stringSetPermittedChar(data, (char) i, 1);
+	for(unsigned char i = from ; i <= to ; ++i) {
+		stringSetPermittedChar(data, i, 1);
 	}
 }
 static inline void
@@ -3658,7 +3658,7 @@ PARSER_Parse(String)
 		/* terminating conditions */
 		if(!bHaveQuotes && npb->str[i] == ' ')
 			break;
-		if(!stringIsPermittedChar(data, npb->str[i]))
+		if(!stringIsPermittedChar(data, (unsigned char)npb->str[i]))
 			break;
 		i++;
 	}
