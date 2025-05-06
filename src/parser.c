@@ -1592,6 +1592,10 @@ PARSER_Parse(Rest)
 	return r;
 }
 
+struct data_OpQuotedString {
+	bool escape;
+};
+
 /**
  * Parse a possibly quoted string. In this initial implementation, escaping of the quote
  * char is not supported. A quoted string is one start starts with a double quote,
@@ -1603,6 +1607,12 @@ PARSER_Parse(OpQuotedString)
 	const char *c;
 	size_t i;
 	char *cstr = NULL;
+	struct data_OpQuotedString *const data = (struct data_OpQuotedString*) pdata;
+
+	bool escape = false;
+	if(data != NULL) {
+		escape = data->escape;
+	}
 
 	assert(npb->str != NULL);
 	assert(offs != NULL);
@@ -1622,18 +1632,59 @@ PARSER_Parse(OpQuotedString)
 		/* create JSON value to save quoted string contents */
 		CHKN(cstr = strndup((char*)c + *offs, *parsed));
 	} else {
-	    ++i;
+		++i;
 
-	    /* search end of string */
-	    while(i < npb->strLen && c[i] != '"')
-		    i++;
+		/* search end of string */
+		if (escape) {
+			/*
+			 * Fix by HSoszynski & KGuillemot to handle escaped quote & backslash infinitely
+			 * Continue while we don't encounter the ending quote, and while it's not escaped
+			 * a" => end
+			 * a\" => continue
+			 * a\\" => end
+			 * a\\\" => continue
+			 * ...
+			 */
+			int continuous_backslash = 0;
+			// Use bitmask is more efficient that modulus (%2 == &0b0001)
+			while(i < npb->strLen && (npb->str[i] != '"' || (continuous_backslash & 0b0001) == 1 )) {
+				if ( npb->str[i] == '\\' ) {
+					continuous_backslash++;
+				} else {
+					continuous_backslash = 0;
+				}
+				++i;
+			}
+			if(i == npb->strLen || c[i] != '"')
+				goto done;
 
-	    if(i == npb->strLen || c[i] != '"')
-		    goto done;
-	    /* success, persist */
-	    *parsed = i + 1 - *offs; /* "eat" terminal double quote */
-	    /* create JSON value to save quoted string contents */
-	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+			size_t end = i;
+			i = *offs + 1; // Eat starting quote
+			/* Once we have identified the correct end, unescape escaped characters */
+			CHKN(cstr = malloc(end - i + 1));
+			int cpt_dst = 0;
+			while(i < end) {
+				if( (npb->str[i] == '\\') && ((npb->str[i+1] == '\\') || (npb->str[i+1] == '"')) ) {
+					i++;
+				}
+				*(cstr+(cpt_dst++)) = *(npb->str+(i++));
+			}
+			cstr[cpt_dst] = '\0';
+			/* success, persist */
+			*parsed = i + 1 - *offs; /* "eat" terminal double quote */
+		} else {
+			// old behaviour
+			/* search end of string */
+			while(i < npb->strLen && c[i] != '"')
+				i++;
+
+			if(i == npb->strLen || c[i] != '"')
+				goto done;
+			/* success, persist */
+			*parsed = i + 1 - *offs; /* "eat" terminal double quote */
+			/* create JSON value to save quoted string contents */
+			CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
+		}
 	}
 	CHKN(*value = json_object_new_string(cstr));
 
@@ -1641,6 +1692,38 @@ PARSER_Parse(OpQuotedString)
 done:
 	free(cstr);
 	return r;
+}
+
+PARSER_Construct(OpQuotedString)
+{
+		int r = 0;
+		LN_DBGPRINTF(ctx, "in parser_construct OpQuotedString");
+		struct data_OpQuotedString *data = (struct data_OpQuotedString*) calloc(1, sizeof(struct data_OpQuotedString));
+		struct json_object *obj;
+		json_bool bool_obj;
+
+		if(json_object_object_get_ex(json, "escape", &obj) != 0) {
+			LN_DBGPRINTF(ctx, "found 'escape' in fields");
+			if(json_object_is_type(obj, json_type_boolean) == 1) {
+				bool_obj = json_object_get_boolean(obj);
+				data->escape = (bool)bool_obj;
+			}
+			else {
+				ln_errprintf(ctx, 0, "op-quoted-string's 'escape' field should be boolean");
+				r = LN_BADCONFIG;
+				goto done;
+			}
+		}
+
+	*pdata = data;
+done:
+	if(r != 0)
+		free(data);
+		return r;
+}
+PARSER_Destruct(OpQuotedString)
+{
+		free(pdata);
 }
 
 
