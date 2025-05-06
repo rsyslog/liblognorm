@@ -1660,18 +1660,46 @@ PARSER_Parse(OpQuotedString)
 	} else {
 	    ++i;
 
-	    /* search end of string */
-	    while(i < npb->strLen && c[i] != '"')
-		    i++;
+        /* search end of string */
+        /*
+         * Fix by HSoszynski & KGuillemot to handle escaped quote & backslash infinitely
+         * Continue while we don't encounter the ending quote, and while it's not escaped
+         * a" => end
+         * a\" => continue
+         * a\\" => end
+         * a\\\" => continue
+         * ...
+         */
+        int continuous_backslash = 0;
+        // Use bitmask is more efficient that modulus (%2 == &0b0001)
+        while(i < npb->strLen && (npb->str[i] != '"' || (continuous_backslash & 0b0001) == 1 )) {
+            if ( npb->str[i] == '\\' ) {
+                continuous_backslash++;
+            } else {
+                continuous_backslash = 0;
+            }
+            ++i;
+        }
+        if(i == npb->strLen || c[i] != '"')
+            goto done;
 
-	    if(i == npb->strLen || c[i] != '"')
-		    goto done;
-	    /* success, persist */
-	    *parsed = i + 1 - *offs; /* "eat" terminal double quote */
-	    /* create JSON value to save quoted string contents */
-	    CHKN(cstr = strndup((char*)c + *offs + 1, *parsed - 2));
-	}
-	CHKN(*value = json_object_new_string(cstr));
+        size_t end = i;
+        i = *offs + 1; // Eat starting quote
+        /* Once we have identified the correct end, unescape escaped characters */
+        CHKN(cstr = malloc(end - i + 1));
+        int cpt_dst = 0;
+        while(i < end) {
+            if( (npb->str[i] == '\\') && ((npb->str[i+1] == '\\') || (npb->str[i+1] == '"')) ) {
+                i++;
+            }
+            *(cstr+(cpt_dst++)) = *(npb->str+(i++));
+        }
+        cstr[cpt_dst] = '\0';
+
+        /* success, persist */
+        *parsed = i + 1 - *offs; /* "eat" terminal double quote */
+    }
+    CHKN(*value = json_object_new_string(cstr));
 
 	r = 0; /* success */
 done:
