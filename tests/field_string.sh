@@ -25,6 +25,9 @@ assert_output_json_eq '{ "f": "test with \" double escape" }'
 execute 'a "test with \" backslash escape" b'
 assert_output_json_eq '{ "f": "test with \" backslash escape" }'
 
+execute 'a "test with bœuf unicode" b'
+assert_output_json_eq '{ "f": "test with bœuf unicode" }'
+
 echo test quoting.mode
 reset_rules
 add_rule 'version=2'
