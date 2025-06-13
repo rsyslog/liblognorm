@@ -162,6 +162,8 @@ struct npb {
 	size_t parsedTo;		/**< up to which byte could this be parsed? */
 	es_str_t *rule;			/**< a mock-up of the rule used to parse */
 	es_str_t *exec_path;
+    struct json_object *fieldposition; /**< field logspan data */
+	struct json_object *field_path; /**< field logspan path stack */
 #ifdef ADVANCED_STATS
 	int pathlen;
 	int backtracked;
@@ -255,6 +257,7 @@ ln_parser_t * ln_newLiteralParser(ln_ctx ctx, char lit);
 ln_parser_t* ln_newParser(ln_ctx ctx, json_object *const prscnf);
 struct ln_type_pdag * ln_pdagFindType(ln_ctx ctx, const char *const __restrict__ name, const int bAdd);
 void ln_fullPDagStatsDOT(ln_ctx ctx, FILE *const fp);
+void ln_recordlogspan(npb_t *npb, const char *fieldName, size_t startOffset, size_t endOffset);
 
 /* friends */
 int

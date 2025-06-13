@@ -145,6 +145,7 @@ int ln_exitCtx(ln_ctx ctx);
 					          (not just in error case) */
 #define LN_CTXOPT_ADD_RULE		0x08 /**< add mockup rule */
 #define LN_CTXOPT_ADD_RULE_LOCATION	0x10 /**< add rule location (file, lineno) to metadata */
+#define LN_CTXOPT_ADD_FIELDS_POSITION 0x0020 /**< add fields_position metadata */
 /**
  * Set options on ctx.
  *

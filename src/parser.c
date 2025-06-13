@@ -1895,23 +1895,29 @@ PARSER_Parse(CiscoInterfaceSpec)
 		CHKN(json = json_object_new_string_len(c+idxInterface, lenInterface));
 		json_object_object_add_ex(*value, "interface", json,
 			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		ln_recordfieldposition(npb, "interface", idxInterface, idxInterface + lenInterface);
 	}
 	CHKN(json = json_object_new_string_len(c+idxIP, lenIP));
 	json_object_object_add_ex(*value, "ip", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+	ln_recordfieldposition(npb, "ip", idxIP, idxIP + lenIP);
 	CHKN(json = json_object_new_string_len(c+idxPort, lenPort));
 	json_object_object_add_ex(*value, "port", json, JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+	ln_recordfieldposition(npb, "port", idxPort, idxPort + lenPort);
 	if(bHaveIP2) {
 		CHKN(json = json_object_new_string_len(c+idxIP2, lenIP2));
 		json_object_object_add_ex(*value, "ip2", json,
 			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		ln_recordfieldposition(npb, "ip2", idxIP2, idxIP2 + lenIP2);
 		CHKN(json = json_object_new_string_len(c+idxPort2, lenPort2));
 		json_object_object_add_ex(*value, "port2", json,
 			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		ln_recordfieldposition(npb, "port2", idxPort2, idxPort2 + lenPort2);
 	}
 	if(bHaveUser) {
 		CHKN(json = json_object_new_string_len(c+idxUser, lenUser));
 		json_object_object_add_ex(*value, "user", json,
 			JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+		ln_recordfieldposition(npb, "user", idxUser, idxUser + lenUser);
 	}
 
 success: /* success, persist */
@@ -2299,6 +2305,7 @@ parseIPTablesNameValue(npb_t *const npb,
 		CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	}
 	json_object_object_add(valroot, name, json);
+	ln_recordfieldposition(npb, name, iVal, iVal + lenVal);
 done:
 	free(name);
 	return r;
@@ -2620,6 +2627,7 @@ parseNameValue(npb_t *const npb,
 	json_object *json;
 	CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
 	json_object_object_add(valroot, name, json);
+	ln_recordfieldposition(npb, name, iVal, iVal + lenVal);
 done:
 	free(name);
 	return r;
@@ -3034,6 +3042,7 @@ cefParseExtensions(npb_t *const npb,
 			json_object *json;
 			CHKN(json = json_object_new_string(value));
 			json_object_object_add(jroot, name, json);
+			ln_recordfieldposition(npb, name, iValue, iValue + lenValue);
 			free(name); name = NULL;
 			free(value); value = NULL;
 		}
@@ -3111,7 +3120,8 @@ PARSER_Parse(CEF)
 	char *sigID = NULL;
 	char *name = NULL;
 	char *severity = NULL;
-
+	size_t iHdrStart;
+	
 	/* minumum header: "CEF:0|x|x|x|x|x|x|" -->  17 chars */
 	if(npb->strLen < i + 17 ||
 	   npb->str[i]   != 'C' ||
@@ -3124,12 +3134,24 @@ PARSER_Parse(CEF)
 	
 	i += 6; /* position on '|' */
 
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &vendor));
+	ln_recordfieldposition(npb, "DeviceVendor", iHdrStart, i-1);
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &product));
+	ln_recordfieldposition(npb, "DeviceProduct", iHdrStart, i-1);
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &version));
+	ln_recordfieldposition(npb, "DeviceVersion", iHdrStart, i-1);
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &sigID));
+	ln_recordfieldposition(npb, "SignatureID", iHdrStart, i-1);
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &name));
+	ln_recordfieldposition(npb, "Name", iHdrStart, i-1);
+	iHdrStart = i;
 	CHKR(cefGetHdrField(npb, &i, (value == NULL) ? NULL : &severity));
+	ln_recordfieldposition(npb, "Severity", iHdrStart, i-1);
 
 	/* OK, we now know we have a good header. Now, we need
 	 * to process extensions.
@@ -3271,6 +3293,7 @@ PARSER_Parse(CheckpointLEA)
 			json_object *json;
 			CHKN(json = json_object_new_string(val));
 			json_object_object_add(*value, name, json);
+			ln_recordfieldposition(npb, name, iValue, iValue + lenValue);
 			free(name); name = NULL;
 			free(val); val = NULL;
 		}
@@ -3368,11 +3391,30 @@ PARSER_Parse(Repeat)
 	size_t lastKnownGood = strtoffs;
 	struct json_object *json_arr = NULL;
 	const size_t parsedTo_save = npb->parsedTo;
+	int iteration = 0;
 
 	do {
 		struct json_object *parsed_value = json_object_new_object();
+
+		/* Push the current array index to the fieldposition path stack. */
+		int index_pushed = 0;
+		if (npb->field_path != NULL) {
+			char idx_str[21]; /* Sufficient for a 64-bit integer. */
+			snprintf(idx_str, sizeof(idx_str), "%d", iteration);
+			json_object_array_add(npb->field_path, json_object_new_string(idx_str));
+			index_pushed = 1;
+		}
+
 		r = ln_normalizeRec(npb, data->parser, strtoffs, 1,
 				    parsed_value, &endNode);
+		
+		/* Pop the index from the stack. */
+		if (index_pushed) {
+			const int current_len = json_object_array_length(npb->field_path);
+			json_object_put(json_object_array_get_idx(npb->field_path, current_len - 1));
+			json_object_array_del_idx(npb->field_path, current_len - 1);
+		}
+
 		strtoffs = npb->parsedTo;
 		LN_DBGPRINTF(npb->ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, npb->parsedTo, json_object_to_json_string(parsed_value));
@@ -3416,6 +3458,8 @@ PARSER_Parse(Repeat)
 			json_object_put(parsed_value);
 		LN_DBGPRINTF(npb->ctx, "arr: %s", json_object_to_json_string(json_arr));
 
+		iteration++;
+		
 		/* now check if we shall continue */
 		npb->parsedTo = 0;
 		lastKnownGood = strtoffs; /* record pos in case of fail in while */

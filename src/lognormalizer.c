@@ -301,6 +301,8 @@ handle_generic_option(const char* opt) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE);
 	} else if (strcmp("addRuleLocation", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE_LOCATION);
+	} else if (strcmp("addFieldsPosition", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_FIELDS_POSITION);
 	} else {
 		fprintf(stderr, "invalid -o option '%s'\n", opt);
 		exit(1);
@@ -323,6 +325,7 @@ fprintf(stderr,
 	"    -oallowRegex Allow regexp matching (read docs about performance penalty)\n"
 	"    -oaddRule    Add a mockup of the matching rule.\n"
 	"    -oaddRuleLocation Add location of matching rule to metadata\n"
+	"    -oaddFieldsPosition Add 'fields_position' metadata with start/end positions of each fields\n"
 	"    -oaddExecPath Add exec_path attribute to output\n"
 	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 	"    -p           Print back only if the message has been parsed succesfully\n"
