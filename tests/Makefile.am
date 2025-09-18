@@ -1,10 +1,15 @@
-check_PROGRAMS = json_eq
+check_PROGRAMS = json_eq err_callback_cookie
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
 json_eq_SOURCES = $(json_eq_self_sources)
 json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
 json_eq_LDADD = $(JSON_C_LIBS) -lm -lestr
 json_eq_LDFLAGS = -no-install
+
+err_callback_cookie_SOURCES = err_callback_cookie.c
+err_callback_cookie_CPPFLAGS = $(WARN_CFLAGS) -I$(top_srcdir)/src
+err_callback_cookie_LDADD = $(LIBLOGNORM_LIBS)
+err_callback_cookie_LDFLAGS = -no-install
 
 #user_test_SOURCES = user_test.c
 #user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
@@ -147,7 +152,8 @@ TESTS_SHELLSCRIPTS += \
 
 #re-add to TESTS if needed: user_test
 TESTS = \
-	$(TESTS_SHELLSCRIPTS)
+        $(TESTS_SHELLSCRIPTS) \
+        err_callback_cookie
 
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
