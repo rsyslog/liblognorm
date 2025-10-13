@@ -1,6 +1,30 @@
 ----------------------------------------------------------------------
-Version 2.0.7, 2018-??-??
-- string rulebase bugfix: segfault when using LF in json rule
+Version 2.0.7, 2025-10-14
+- parser(name-value-list): add separator character option
+  adds new option "separator" for custom key/value pair separation
+  (replaces whitespace when defined)
+- parser(name-value-list): add assignator option
+  adds new option "assignator" for custom key/value assignment character
+  (replaces '=' when defined, disables key name validation)
+- parser(name-value-list): add support for quoting and escaped characters
+  values can now be quoted and include escaped characters such as backslash,
+  separator, or double-quote
+- parser(name-value-list): fix parsing of escaped characters
+  fixes incorrect handling of backslash, double-quote, and separator
+  characters in quoted values
+- parser(name-value-list): add test for quoted values
+- parser(name-value-list): improve handling of invalid pairs
+  stops parsing and sets offset if name/value is not valid, so remaining
+  text can still be parsed
+- parser(CEF): fix empty last value handling
+  if the last field is empty, it is now set to an empty string instead of
+  failing
+- parser(CEF): fix header and escape sequence handling
+  improved handling of slashes and trailing spaces in header parsing
+- CI: add GitHub Actions workflow for CI runs
+- code cleanup: removed problematic language from code base
+- maintenance: fixed various misspellings in code and comments
+-  string rulebase bugfix: segfault when using LF in json rule
   If a json rule used a LF inside a string rule (one not loaded
   rulebase file), liblognorm segfaults.
   closes https://github.com/rsyslog/liblognorm/issues/333
