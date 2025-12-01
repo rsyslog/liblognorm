@@ -3382,7 +3382,7 @@ stringSetPermittedChar(struct data_String *const data, char c, int val)
 static inline int
 stringIsPermittedChar(struct data_String *const data, char c)
 {
-	return data->perm_chars[(unsigned)c];
+	return data->perm_chars[(unsigned char)c];
 }
 static void
 stringAddPermittedCharArr(struct data_String *const data,
