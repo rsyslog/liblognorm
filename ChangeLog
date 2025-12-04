@@ -1,4 +1,11 @@
 ----------------------------------------------------------------------
+Version 2.0.8, 2025-12-04
+- fix potential segfault on some platforms
+  Thanks to Julian Thomas for a fix
+- fix memory leak when a custom type in rules does not match
+  Thanks to Meric Sentunali for the fix and Julian Thomas for alerting
+  me of the missing merge.
+----------------------------------------------------------------------
 Version 2.0.7, 2025-10-14
 - parser(name-value-list): add separator character option
   adds new option "separator" for custom key/value pair separation
