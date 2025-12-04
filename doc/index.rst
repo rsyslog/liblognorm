@@ -24,6 +24,7 @@ Contents:
     lognormalizer
     libraryapi
     internals
+    pdag_engine_notes
     license
     contacts
     changes
