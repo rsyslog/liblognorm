@@ -60,7 +60,9 @@
  * exit of a function to get proper finalization. So let's disable it.
  * rgerhards, 2018-04-25
  */
+#if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic ignored "-Wjump-misses-init"
+#endif
 
 #include "liblognorm.h"
 
