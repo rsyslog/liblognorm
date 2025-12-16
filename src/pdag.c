@@ -626,11 +626,9 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, const int ex
 			fprintf(fp, "\t%20s: %d\n", parserName(i), stats->prs_cnt[i]);
 	}
 
-	int pp = 0;
 	fprintf(fp, "Parsers per Node:\n");
 	fprintf(fp, "\tmax:\t%4d\n", stats->max_nparsers);
 	for(int i = 0 ; i < 100 ; ++i) {
-		pp += stats->nparsers_cnt[i];
 		if(stats->nparsers_cnt[i] != 0)
 			fprintf(fp, "\t%d:\t%4d\n", i, stats->nparsers_cnt[i]);
 	}
