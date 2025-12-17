@@ -1,12 +1,20 @@
 ----------------------------------------------------------------------
-Version 2.0.9, 2026-??-??
+Version 2.1.0, 2026-??-??
+- introduced doc for AI agents, e.g. AGENTS.md
+----------------------------------------------------------------------
+Version 2.0.9, 2025-12-16
+- fix build issue on some platforms
+  - guard compile pragma use
+  - remove unneeded variable
+- fix memory leak when a custom type in rules does not match
+  Thanks to Meric Sentunali for the fix and Julian Thomas for alerting
+  me of the missing merge.
+  NOTE: Release of 2.0.8, accidentally did not include this fix.
+  Thanks for Julien Thomas for alerting us!
 ----------------------------------------------------------------------
 Version 2.0.8, 2025-12-04
 - fix potential segfault on some platforms
   Thanks to Julian Thomas for a fix
-- fix memory leak when a custom type in rules does not match
-  Thanks to Meric Sentunali for the fix and Julian Thomas for alerting
-  me of the missing merge.
 ----------------------------------------------------------------------
 Version 2.0.7, 2025-10-14
 - parser(name-value-list): add separator character option

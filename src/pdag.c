@@ -626,11 +626,9 @@ ln_pdagStats(ln_ctx ctx, struct ln_pdag *const dag, FILE *const fp, const int ex
 			fprintf(fp, "\t%20s: %d\n", parserName(i), stats->prs_cnt[i]);
 	}
 
-	int pp = 0;
 	fprintf(fp, "Parsers per Node:\n");
 	fprintf(fp, "\tmax:\t%4d\n", stats->max_nparsers);
 	for(int i = 0 ; i < 100 ; ++i) {
-		pp += stats->nparsers_cnt[i];
 		if(stats->nparsers_cnt[i] != 0)
 			fprintf(fp, "\t%d:\t%4d\n", i, stats->nparsers_cnt[i]);
 	}
@@ -1442,6 +1440,10 @@ tryParser(npb_t *const __restrict__ npb,
 		LN_DBGPRINTF(dag->ctx, "called CUSTOM PARSER '%s', result %d, "
 			"offs %zd, *pParsed %zd", dag->ctx->type_pdags[prs->custTypeIdx].name, r, *offs, *pParsed);
 		*pParsed = npb->parsedTo - *offs;
+		if (r != 0) {
+			json_object_put(*value);
+			*value = NULL;
+		}
 		#ifdef	ADVANCED_STATS
 		es_addBuf(&npb->astats.exec_path, hdr, lenhdr);
 		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8);
