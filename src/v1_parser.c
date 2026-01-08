@@ -63,6 +63,7 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	return i;
 }
 
+
 /* parsers for the primitive types
  *
  * All parsers receive

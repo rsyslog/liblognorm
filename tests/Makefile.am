@@ -158,6 +158,10 @@ REGEXP_TESTS = \
 	field_tokenized_with_regex.sh \
 	field_regex_while_regex_support_is_disabled.sh
 
+XML_TESTS = \
+	field_xml.sh \
+	field_xml_jsoncnf.sh
+
 EXTRA_DIST = exec.sh \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
@@ -166,4 +170,8 @@ EXTRA_DIST = exec.sh \
 
 if ENABLE_REGEXP
 TESTS += $(REGEXP_TESTS)
+endif
+
+if ENABLE_XML
+TESTS += $(XML_TESTS)
 endif
