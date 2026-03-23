@@ -19,9 +19,9 @@ export CC="${SCAN_BUILD_CC:-clang}"
 
 set +e
 if [ -n "$REPORT_DIR" ]; then
-	"${SCAN_BUILD:-scan-build}" -o "$REPORT_DIR" --use-cc "$CC" --status-bugs make -j2
+	"${SCAN_BUILD:-scan-build}" -o "$REPORT_DIR" --use-cc "$CC" --status-bugs make
 else
-	"${SCAN_BUILD:-scan-build}" --use-cc "$CC" --status-bugs make -j2
+	"${SCAN_BUILD:-scan-build}" --use-cc "$CC" --status-bugs make
 fi
 RESULT=$?
 set -e
