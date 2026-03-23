@@ -63,10 +63,12 @@ ln_v1_inherittedCtx(ln_ctx parent)
 int
 ln_v1_loadSample(ln_ctx ctx, const char *buf)
 {
+	struct ln_v1_samp *samp;
 	// Something bad happened - no new sample
-	if (ln_v1_processSamp(ctx, buf, strlen(buf)) == NULL) {
+	if ((samp = ln_v1_processSamp(ctx, buf, strlen(buf))) == NULL) {
 		return 1;
 	}
+	ln_v1_sampFree(ctx, samp);
 	return 0;
 }
 
@@ -93,6 +95,8 @@ ln_v1_loadSamples(ln_ctx ctx, const char *file)
 	while(!isEof) {
 		if((samp = ln_v1_sampRead(ctx, repo, &isEof)) == NULL) {
 			/* TODO: what exactly to do? */
+		} else {
+			ln_v1_sampFree(ctx, samp);
 		}
 	}
 	fclose(repo);
@@ -103,4 +107,3 @@ done:
 	free((void*)fn_to_free);
 	return r;
 }
-
