@@ -9,7 +9,11 @@ if [ "x$debug" == "xon" ]; then #get core-dump on crash
 fi
 
 #cmd="../src/ln_test -v" # case to get debug info (add -vvv for more verbosity)
-cmd=../src/ln_test # regular case
+cmd="$(cd .. && pwd)/src/ln_test" # regular case
+json_eq="$(pwd)/json_eq"
+test_tmpdir="$(mktemp -d "$(pwd)/tmp.test.XXXXXX")"
+test_out="$test_tmpdir/test.out"
+trap 'rm -rf -- "$test_tmpdir"' EXIT
 
 . ./options.sh
 
@@ -34,17 +38,28 @@ test_def() {
 execute() {
     if [ "x$debug" == "xon" ]; then
 	echo "======rulebase======="
-	cat tmp.rulebase
+	cat "$(rulebase_file_name)"
 	echo "====================="
 	set -x
     fi
     if [ "$1" == "file" ]; then
-        $cmd $ln_opts -r tmp.rulebase -e json > test.out < $2
+        input_file="$2"
+        case "$input_file" in
+            /*) ;;
+            *) input_file="$(pwd)/$input_file" ;;
+        esac
+        (
+            cd "$test_tmpdir"
+            $cmd $ln_opts -r "$(rulebase_file_name)" -e json > "$test_out" < "$input_file"
+        )
     else
-        echo "$1" | $cmd $ln_opts -r tmp.rulebase -e json > test.out
+        (
+            cd "$test_tmpdir"
+            echo "$1" | $cmd $ln_opts -r "$(rulebase_file_name)" -e json > "$test_out"
+        )
     fi
     echo "Out:"
-    cat test.out
+    cat "$test_out"
     if [ "x$debug" == "xon" ]; then
 	set +x
     fi
@@ -55,31 +70,34 @@ execute_with_string() {
     # $2 must be sample string
     if [ "x$debug" == "xon" ]; then
 	echo "======rulebase======="
-	cat tmp.rulebase
+	cat "$(rulebase_file_name)"
 	echo "====================="
 	set -x
     fi
-    echo "$2" | $cmd $ln_opts -R "$1" -e json > test.out
+    (
+        cd "$test_tmpdir"
+        echo "$2" | $cmd $ln_opts -R "$1" -e json > "$test_out"
+    )
     echo "Out:"
-    cat test.out
+    cat "$test_out"
     if [ "x$debug" == "xon" ]; then
 	set +x
     fi
 }
 
 assert_output_contains() {
-    ${GREP:-grep} -F "$1" < test.out
+    ${GREP:-grep} -F "$1" < "$test_out"
 }
 
 assert_output_json_eq() {
-    ./json_eq "$1" "$(cat test.out)"
+    "$json_eq" "$1" "$(cat "$test_out")"
 }
 
 rulebase_file_name() {
     if [ "x$1" == "x" ]; then
-	echo tmp.rulebase
+	echo "$test_tmpdir/tmp.rulebase"
     else
-	echo $1.rulebase
+	echo "$test_tmpdir/$1.rulebase"
     fi
 }
 
@@ -100,7 +118,7 @@ add_rule_no_LF() {
 
 
 cleanup_tmp_files() {
-    rm -f -- test.out *.rulebase
+    :
 }
 
 reset_rules
