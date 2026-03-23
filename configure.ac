@@ -55,7 +55,7 @@ AC_TYPE_SIZE_T
 AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
 AC_FUNC_STRERROR_R
-AC_CHECK_FUNCS([strdup strndup strtok_r])
+AC_CHECK_FUNCS([asprintf strdup strndup strtok_r])
 
 LIBLOGNORM_CFLAGS="-I\$(top_srcdir)/src"
 LIBLOGNORM_LIBS="\$(top_builddir)/src/liblognorm.la"
@@ -195,4 +195,3 @@ echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
 echo "Tools enabled:               $enable_tools"
 echo "Docs enabled:                $enable_docs"
-
