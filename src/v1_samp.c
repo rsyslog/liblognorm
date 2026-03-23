@@ -761,8 +761,11 @@ ln_v1_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 	struct ln_v1_samp *samp = NULL;
 	es_str_t *typeStr = NULL;
 	es_size_t offs;
+	int bSuccess = 0;
 
 	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
+		goto done;
+	if((samp = ln_v1_sampCreate(ctx)) == NULL)
 		goto done;
 
 	if(!es_strconstcmp(typeStr, "prefix")) {
@@ -781,10 +784,15 @@ ln_v1_processSamp(ln_ctx ctx, const char *buf, es_size_t lenBuf)
 		free(str);
 		goto done;
 	}
+	bSuccess = 1;
 
 done:
 	if(typeStr != NULL)
 		es_deleteStr(typeStr);
+	if(!bSuccess && samp != NULL) {
+		ln_v1_sampFree(ctx, samp);
+		samp = NULL;
+	}
 
 	return samp;
 }
@@ -834,11 +842,11 @@ ln_v1_sampRead(ln_ctx ctx, FILE *const __restrict__ repo, int *const __restrict_
 	buf[i] = '\0';
 
 	ln_dbgprintf(ctx, "read rulebase line[~%d]: '%s'", ctx->conf_ln_nbr, buf);
-	ln_v1_processSamp(ctx, buf, i);
+	samp = ln_v1_processSamp(ctx, buf, i);
 
 ln_dbgprintf(ctx, "---------------------------------------");
-ln_displayPTree(ctx->ptree, 0);
-ln_dbgprintf(ctx, "=======================================");
+	ln_displayPTree(ctx->ptree, 0);
+	ln_dbgprintf(ctx, "=======================================");
 done:
 	return samp;
 }
