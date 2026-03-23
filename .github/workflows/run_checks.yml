@@ -225,6 +225,13 @@ jobs:
           LIBLOGNORM_CONTAINER_UID: ""
           LIBLOGNORM_DEV_CONTAINER: rsyslog/rsyslog_dev_base_ubuntu:24.04
         run: |
+          # This is a downstream-consumer check, not another liblognorm unit test.
+          # We only run it after the core compile, static-analyzer, and liblognorm
+          # check jobs have all succeeded so failures here are much more likely to be
+          # real integration regressions than basic build/test breakage.
+          #
+          # The helper script intentionally keeps rsyslog narrow: build against the
+          # candidate liblognorm and run only the mmnormalize/pmnormalize tests.
           chmod -R go+rw .
           chmod +x devtools/run-rsyslog-integration.sh
           devtools/devcontainer.sh --rm devtools/run-rsyslog-integration.sh

@@ -1,27 +1,32 @@
 #!/bin/bash
 set -e
 
+# Build liblognorm from the current checkout, install it into a temporary
+# prefix, then build rsyslog against that exact library and run only the
+# normalize-related downstream tests. This keeps the job focused on the
+# liblognorm integration surface instead of the full rsyslog matrix.
 LIBLOGNORM_SRC=/rsyslog
-WORKDIR=/tmp/liblognorm-rsyslog-integration
+WORKDIR=$(mktemp -d)
 LIBLOGNORM_PREFIX="$WORKDIR/liblognorm-install"
 RSYSLOG_SRC="$WORKDIR/rsyslog"
 RSYSLOG_REF="${RSYSLOG_INTEGRATION_REF:-main}"
+trap 'rm -rf "$WORKDIR"' EXIT
 
 # Keep this focused on liblognorm-backed normalize modules. We skip the
 # valgrind wrappers, regex-only tests, faketime tests, and mmdblookup.
-RSYSLOG_TESTS='
-mmnormalize_rule_from_string.sh
-mmnormalize_rule_from_array.sh
-mmnormalize_parsesuccess.sh
-mmnormalize_variable.sh
-mmnormalize_tokenized.sh
-pmnormalize-basic.sh
-pmnormalize-invld-rulebase.sh
-pmnormalize-rule.sh
-pmnormalize-rule_and_rulebase.sh
-pmnormalize-neither_rule_rulebase.sh
-pmnormalize-rule_invld-data.sh
-'
+RSYSLOG_TESTS=(
+	'mmnormalize_rule_from_string.sh'
+	'mmnormalize_rule_from_array.sh'
+	'mmnormalize_parsesuccess.sh'
+	'mmnormalize_variable.sh'
+	'mmnormalize_tokenized.sh'
+	'pmnormalize-basic.sh'
+	'pmnormalize-invld-rulebase.sh'
+	'pmnormalize-rule.sh'
+	'pmnormalize-rule_and_rulebase.sh'
+	'pmnormalize-neither_rule_rulebase.sh'
+	'pmnormalize-rule_invld-data.sh'
+)
 
 dump_rsyslog_logs() {
 	if [ ! -d "$RSYSLOG_SRC/tests" ]; then
@@ -41,9 +46,7 @@ dump_rsyslog_logs() {
 
 printf 'building liblognorm from %s\n' "$LIBLOGNORM_SRC"
 printf 'using rsyslog ref %s\n' "$RSYSLOG_REF"
-
-rm -rf "$WORKDIR"
-mkdir -p "$WORKDIR"
+printf 'working directory %s\n' "$WORKDIR"
 
 cd "$LIBLOGNORM_SRC"
 autoreconf -fvi
@@ -70,7 +73,7 @@ RSYSLOG_CONFIGURE_ARGS=(
 ./autogen.sh "${RSYSLOG_CONFIGURE_ARGS[@]}"
 
 set +e
-make -j1 check TESTSUITEFLAGS=--stop TESTS="$RSYSLOG_TESTS"
+make -j1 check TESTSUITEFLAGS=--stop TESTS="${RSYSLOG_TESTS[*]}"
 rc=$?
 set -e
 
