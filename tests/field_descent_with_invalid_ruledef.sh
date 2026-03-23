@@ -60,7 +60,6 @@ assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "10.
 
 #empty tail-field given
 echo empty tail-field given
-rm tmp.rulebase
 reset_rules
 add_rule 'rule=:A%net:descent:./child.rulebase:%'
 reset_rules 'child'
@@ -79,4 +78,3 @@ assert_output_json_eq '{ "originalmsg": "10.20.30.40 foo", "unparsed-data": "10.
 
 
 cleanup_tmp_files
-

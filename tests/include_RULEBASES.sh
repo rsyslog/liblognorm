@@ -12,15 +12,15 @@ reset_rules inc
 add_rule 'version=2' inc
 add_rule 'rule=:%field:mac48%' inc
 
-mv inc.rulebase /tmp
+RULEBASE_DIR="$(mktemp -d "$test_tmpdir/liblognorm-rulebases.XXXXXX")"
+mv "$(rulebase_file_name inc)" "$RULEBASE_DIR/inc.rulebase"
 
-export LIBLOGNORM_RULEBASES=/tmp
+export LIBLOGNORM_RULEBASES="$RULEBASE_DIR"
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
 
-export LIBLOGNORM_RULEBASES=/tmp/
+export LIBLOGNORM_RULEBASES="$RULEBASE_DIR/"
 execute 'f0:f6:1c:5f:cc:a2'
 assert_output_json_eq '{"field": "f0:f6:1c:5f:cc:a2"}'
 
-rm /tmp/inc.rulebase
 cleanup_tmp_files
