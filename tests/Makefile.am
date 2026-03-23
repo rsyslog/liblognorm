@@ -7,7 +7,7 @@ json_eq_LDADD = $(JSON_C_LIBS) -lm -lestr
 json_eq_LDFLAGS = -no-install
 
 err_callback_cookie_SOURCES = err_callback_cookie.c
-err_callback_cookie_CPPFLAGS = $(WARN_CFLAGS) -I$(top_srcdir)/src
+err_callback_cookie_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
 err_callback_cookie_LDADD = $(LIBLOGNORM_LIBS)
 err_callback_cookie_LDFLAGS = -no-install
 
