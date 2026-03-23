@@ -88,6 +88,7 @@ jobs:
           export LDFLAGS=''
           export CC='gcc'
           export USE_AUTO_DEBUG='off'
+          export CI_MAKE_CHECK_EXTRA='TESTSUITEFLAGS=--stop'
           export CI_CHECK_CMD='check'
           case "${{ matrix.config }}" in
           centos_8)
@@ -201,3 +202,29 @@ jobs:
           echo >&2
           echo "Clang static analyzer HTML report (download): $artifact" >&2
           exit 1
+
+  rsyslog_integration_CI:
+    needs: [compile, CI, clang_analyzer_CI]
+    if: >-
+      ${{
+        needs.compile.result == 'success' &&
+        needs.CI.result == 'success' &&
+        needs.clang_analyzer_CI.result == 'success'
+      }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: rsyslog integration
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run rsyslog integration tests
+        env:
+          LIBLOGNORM_CONTAINER_UID: ""
+          LIBLOGNORM_DEV_CONTAINER: rsyslog/rsyslog_dev_base_ubuntu:24.04
+        run: |
+          chmod -R go+rw .
+          chmod +x devtools/run-rsyslog-integration.sh
+          devtools/devcontainer.sh --rm devtools/run-rsyslog-integration.sh

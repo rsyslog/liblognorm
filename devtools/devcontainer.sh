@@ -58,6 +58,7 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
 	-e UBSAN_OPTIONS \
 	-e CI_MAKE_OPT \
 	-e CI_MAKE_CHECK_OPT \
+	-e CI_MAKE_CHECK_EXTRA \
 	-e CI_CHECK_CMD \
 	-e CI_BUILD_URL \
 	-e CI_CODECOV_TOKEN \

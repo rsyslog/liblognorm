@@ -5,6 +5,7 @@ printf 'container: %s\n' "$LIBLOGNORM_DEV_CONTAINER"
 printf 'CC:\t%s\n' "$CC"
 printf 'CFLAGS:\t%s\n' "$CFLAGS"
 printf 'LDFLAGS:\t%s\n' "$LDFLAGS"
+printf 'CI_MAKE_CHECK_EXTRA:\t%s\n' "$CI_MAKE_CHECK_EXTRA"
 printf 'working directory: %s\n' "$(pwd)"
 printf 'user ids: %s:%s\n' "$(id -u)" "$(id -g)"
 if [ "$SUDO" != "" ]; then
@@ -41,7 +42,8 @@ printf 'STEP: make %s ==========================================================
 	"$CI_CHECK_CMD"
 set +e
 echo CI_CHECK_CMD: $CI_CHECK_CMD
-make $CI_MAKE_CHECK_OPT ${CI_CHECK_CMD:-check}
+# shellcheck disable=SC2086
+make $CI_MAKE_CHECK_OPT ${CI_MAKE_CHECK_EXTRA:-} ${CI_CHECK_CMD:-check}
 rc=$?
 
 printf 'STEP: find failing tests ====================================================\n'
