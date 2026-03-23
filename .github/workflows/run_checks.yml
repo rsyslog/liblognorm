@@ -88,6 +88,7 @@ jobs:
           export LDFLAGS=''
           export CC='gcc'
           export USE_AUTO_DEBUG='off'
+          export CI_MAKE_CHECK_EXTRA='TESTSUITEFLAGS=--stop'
           export CI_CHECK_CMD='check'
           case "${{ matrix.config }}" in
           centos_8)
@@ -201,3 +202,36 @@ jobs:
           echo >&2
           echo "Clang static analyzer HTML report (download): $artifact" >&2
           exit 1
+
+  rsyslog_integration_CI:
+    needs: [compile, CI, clang_analyzer_CI]
+    if: >-
+      ${{
+        needs.compile.result == 'success' &&
+        needs.CI.result == 'success' &&
+        needs.clang_analyzer_CI.result == 'success'
+      }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    name: rsyslog integration
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run rsyslog integration tests
+        env:
+          LIBLOGNORM_CONTAINER_UID: ""
+          LIBLOGNORM_DEV_CONTAINER: rsyslog/rsyslog_dev_base_ubuntu:24.04
+        run: |
+          # This is a downstream-consumer check, not another liblognorm unit test.
+          # We only run it after the core compile, static-analyzer, and liblognorm
+          # check jobs have all succeeded so failures here are much more likely to be
+          # real integration regressions than basic build/test breakage.
+          #
+          # The helper script intentionally keeps rsyslog narrow: build against the
+          # candidate liblognorm and run only the mmnormalize/pmnormalize tests.
+          chmod -R go+rw .
+          chmod +x devtools/run-rsyslog-integration.sh
+          devtools/devcontainer.sh --rm devtools/run-rsyslog-integration.sh
