@@ -1,0 +1,197 @@
+# Copyright 2026 Rainer Gerhards and Others
+#
+# https://github.com/rsyslog/rsyslog-pkg-ubuntu
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+---
+name: check
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile:
+    name: compile (${{ matrix.config }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        config: [gcc, clang]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run compile check
+        run: |
+          chmod -R go+rw .
+          export LIBLOGNORM_CONTAINER_UID=""
+          export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+          export CFLAGS='-g'
+          case "${{ matrix.config }}" in
+          gcc)
+              export CC='gcc'
+              ;;
+          clang)
+              export CC='clang'
+              ;;
+          *)
+              echo "unknown configuration"
+              exit 1
+              ;;
+          esac
+          chmod +x devtools/run-build.sh
+          devtools/devcontainer.sh --rm devtools/run-build.sh
+
+  CI:
+    needs: compile
+    if: ${{ needs.compile.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [centos_8, debian_13, fedora_43, ubuntu_24, ubuntu_24_asan, ubuntu_24_ubsan, ubuntu_24_distcheck]
+    name: ${{ matrix.config }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run container CI pipeline
+        run: |
+          chmod -R go+rw .
+          export LIBLOGNORM_CONTAINER_UID=""
+          export CFLAGS='-g'
+          export LDFLAGS=''
+          export CC='gcc'
+          export USE_AUTO_DEBUG='off'
+          export CI_CHECK_CMD='check'
+          case "${{ matrix.config }}" in
+          centos_8)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_centos:8'
+              ;;
+          debian_13)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_debian:13'
+              ;;
+          fedora_43)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_fedora:43'
+              ;;
+          ubuntu_24)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              ;;
+          ubuntu_24_asan)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CC='clang'
+              export CFLAGS="-fstack-protector -D_FORTIFY_SOURCE=2 \
+                     -fsanitize=address -fsanitize-address-use-after-scope \
+                     -g -O1 -fno-omit-frame-pointer -fno-color-diagnostics"
+              export LDFLAGS='-fsanitize=address'
+              export ASAN_OPTIONS='abort_on_error=1:symbolize=1:detect_leaks=0'
+              ;;
+          ubuntu_24_ubsan)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CC='clang'
+              export CFLAGS="-fstack-protector -D_FORTIFY_SOURCE=2 \
+                     -fsanitize=undefined,nullability,unsigned-integer-overflow \
+                     -fno-sanitize-recover=undefined,nullability,unsigned-integer-overflow \
+                     -g -O1 -fno-omit-frame-pointer -fno-color-diagnostics"
+              export LDFLAGS='-fsanitize=undefined,nullability,unsigned-integer-overflow'
+              export UBSAN_OPTIONS='print_stacktrace=1'
+              ;;
+          ubuntu_24_distcheck)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CI_CHECK_CMD='distcheck'
+              ;;
+          *)
+              echo "unknown configuration"
+              exit 1
+              ;;
+          esac
+          devtools/devcontainer.sh --rm devtools/run-ci.sh
+
+      - name: Show error logs
+        if: ${{ failure() || cancelled() }}
+        run: |
+          devtools/gather-check-logs.sh
+          cat failed-tests.log
+
+  clang_analyzer_CI:
+    needs: compile
+    if: ${{ needs.compile.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: clang static analyzer
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run clang static analyzer
+        id: run-clang
+        env:
+          LIBLOGNORM_CONTAINER_UID: ""
+          LIBLOGNORM_DEV_CONTAINER: rsyslog/rsyslog_dev_base_ubuntu:24.04
+          SCAN_BUILD: scan-build
+          SCAN_BUILD_CC: clang
+          SCAN_BUILD_REPORT_DIR: scan-build-report
+          DOCKER_RUN_EXTRA_OPTS: >-
+            -e SCAN_BUILD -e SCAN_BUILD_CC -e SCAN_BUILD_REPORT_DIR
+        run: |
+          chmod -R go+rw .
+          chmod +x devtools/run-static-analyzer.sh
+          set +e
+          devtools/devcontainer.sh --rm devtools/run-static-analyzer.sh 2>&1 | tee clang-analyzer.log
+          echo "exitcode=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload clang static analyzer report
+        if: ${{ always() }}
+        id: upload-report
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-static-analyzer-report
+          path: scan-build-report
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Show clang static analyzer report link
+        if: ${{ always() }}
+        run: |
+          artifact="${{ steps.upload-report.outputs.artifact-url }}"
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          Clang static analyzer HTML report (download):
+          $artifact
+          EOF
+          echo "Clang static analyzer HTML report (download):"
+          echo "$artifact"
+
+      - name: Fail if analysis failed
+        if: ${{ steps.run-clang.outputs.exitcode != '0' }}
+        run: |
+          artifact="${{ steps.upload-report.outputs.artifact-url }}"
+          echo "clang static analyzer detected issues:" >&2
+          tail -n 200 clang-analyzer.log >&2 || true
+          echo >&2
+          echo "Clang static analyzer HTML report (download): $artifact" >&2
+          exit 1

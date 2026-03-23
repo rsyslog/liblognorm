@@ -1,12 +1,12 @@
 #!/bin/bash
 # script for generic CI runs via container
 printf 'running CI with\n'
-printf 'container: %s\n' $RSYSLOG_DEV_CONTAINER
+printf 'container: %s\n' "$LIBLOGNORM_DEV_CONTAINER"
 printf 'CC:\t%s\n' "$CC"
-printf 'CFLAGS:\t%s:\n' "$CFLAGS"
-printf 'RSYSLOG_CONFIGURE_OPTIONS:\t%s\n' "$RSYSLOG_CONFIGURE_OPTIONS"
+printf 'CFLAGS:\t%s\n' "$CFLAGS"
+printf 'LDFLAGS:\t%s\n' "$LDFLAGS"
 printf 'working directory: %s\n' "$(pwd)"
-printf 'user ids: %s:%s\n' $(id -u) $(id -g)
+printf 'user ids: %s:%s\n' "$(id -u)" "$(id -g)"
 if [ "$SUDO" != "" ]; then
 	printf 'check sudo'
 	$SUDO echo sudo works!
@@ -18,11 +18,19 @@ if [ "$CI_SANITIZE_BLACKLIST" != "" ]; then
 	export CFLAGS="$CFLAGS -fsanitize-blacklist=$(pwd)/$CI_SANITIZE_BLACKLIST"
 	printf 'CFLAGS changed to: %s\n', "$CFLAGS"
 fi
+
+if [ -n "$LIBLOGNORM_CONFIGURE_OPTIONS_OVERRIDE" ]; then
+	CONFIGURE_OPTS="$LIBLOGNORM_CONFIGURE_OPTIONS_OVERRIDE"
+else
+	CONFIGURE_OPTS="$LIBLOGNORM_CONFIGURE_OPTIONS_EXTRA"
+fi
+printf 'CONFIGURE_OPTS:\t%s\n' "$CONFIGURE_OPTS"
 set -e
 
 printf 'STEP: autoreconf / configure ===============================================\n'
 autoreconf -fvi
-./configure
+# shellcheck disable=SC2086
+./configure $CONFIGURE_OPTS
 
 if [ "$CI_CHECK_CMD" != "distcheck" ]; then
 	printf 'STEP: make =================================================================\n'

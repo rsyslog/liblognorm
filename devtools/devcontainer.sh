@@ -52,6 +52,7 @@ docker run $ti $optrm $DOCKER_RUN_EXTRA_OPTS \
 	-e CC \
 	-e CFLAGS \
 	-e LDFLAGS \
+	-e ASAN_OPTIONS \
 	-e LSAN_OPTIONS \
 	-e TSAN_OPTIONS \
 	-e UBSAN_OPTIONS \
