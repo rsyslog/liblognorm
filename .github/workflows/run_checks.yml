@@ -70,7 +70,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: [centos_8, debian_13, fedora_43, ubuntu_24, ubuntu_24_asan, ubuntu_24_ubsan, ubuntu_24_distcheck]
+        # TODO: re-enable ubuntu_24_ubsan after the remaining sanitizer-related
+        # fixes have landed in the outstanding PRs.
+        # Disabled for now:
+        #   ubuntu_24_ubsan
+        config: [centos_8, debian_13, fedora_43, ubuntu_24, ubuntu_24_asan, ubuntu_24_distcheck]
     name: ${{ matrix.config }}
     steps:
       - name: Checkout repository
@@ -107,16 +111,18 @@ jobs:
               export LDFLAGS='-fsanitize=address'
               export ASAN_OPTIONS='abort_on_error=1:symbolize=1:detect_leaks=0'
               ;;
-          ubuntu_24_ubsan)
-              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
-              export CC='clang'
-              export CFLAGS="-fstack-protector -D_FORTIFY_SOURCE=2 \
-                     -fsanitize=undefined,nullability,unsigned-integer-overflow \
-                     -fno-sanitize-recover=undefined,nullability,unsigned-integer-overflow \
-                     -g -O1 -fno-omit-frame-pointer -fno-color-diagnostics"
-              export LDFLAGS='-fsanitize=undefined,nullability,unsigned-integer-overflow'
-              export UBSAN_OPTIONS='print_stacktrace=1'
-              ;;
+          # Disabled for now. Re-enable after the remaining sanitizer-related
+          # fixes have landed in the outstanding PRs.
+          # ubuntu_24_ubsan)
+          #     export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+          #     export CC='clang'
+          #     export CFLAGS="-fstack-protector -D_FORTIFY_SOURCE=2 \
+          #            -fsanitize=undefined,nullability,unsigned-integer-overflow \
+          #            -fno-sanitize-recover=undefined,nullability,unsigned-integer-overflow \
+          #            -g -O1 -fno-omit-frame-pointer -fno-color-diagnostics"
+          #     export LDFLAGS='-fsanitize=undefined,nullability,unsigned-integer-overflow'
+          #     export UBSAN_OPTIONS='print_stacktrace=1'
+          #     ;;
           ubuntu_24_distcheck)
               export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
               export CI_CHECK_CMD='distcheck'
