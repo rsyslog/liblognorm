@@ -553,7 +553,7 @@ static int
 processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 {
 	int r = -1;
-	es_str_t *str;
+	es_str_t *str = NULL;
 	struct json_object *tagBucket = NULL;
 
 	ln_dbgprintf(ctx, "rule line to add: '%s'", buf+offs);
@@ -569,10 +569,14 @@ processRule(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t offs)
 		CHKN(str = es_strdup(ctx->rulePrefix));
 	}
 	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
-	addSampToTree(ctx, str, ctx->pdag, tagBucket);
-	es_deleteStr(str);
+	CHKR(addSampToTree(ctx, str, ctx->pdag, tagBucket));
 	r = 0;
-done:	return r;
+done:
+	if(r != 0 && tagBucket != NULL)
+		json_object_put(tagBucket);
+	if(str != NULL)
+		es_deleteStr(str);
+	return r;
 }
 
 
@@ -629,7 +633,7 @@ processType(ln_ctx ctx,
 	size_t offs)
 {
 	int r = -1;
-	es_str_t *str;
+	es_str_t *str = NULL;
 	char typename[MAX_TYPENAME_LEN];
 
 	ln_dbgprintf(ctx, "type line to add: '%s'", buf+offs);
@@ -646,10 +650,12 @@ processType(ln_ctx ctx,
 	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
 	struct ln_type_pdag *const td = ln_pdagFindType(ctx, typename, 1);
 	CHKN(td);
-	addSampToTree(ctx, str, td->pdag, NULL);
-	es_deleteStr(str);
+	CHKR(addSampToTree(ctx, str, td->pdag, NULL));
 	r = 0;
-done:	return r;
+done:
+	if(str != NULL)
+		es_deleteStr(str);
+	return r;
 }
 
 

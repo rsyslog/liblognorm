@@ -757,6 +757,11 @@ Zero or more characters, possibly surrounded by double quote marks.
 If the first character is a quote mark, operates like quoted-string. Otherwise, operates like "word"
 Quote marks are stripped from the match.
 
+The parser also accepts an optional boolean configuration parameter
+``escape``. If set to ``true``, quoted values treat ``\"`` as an escaped
+quote and ``\\`` as an escaped backslash, and the extracted value is
+unescaped accordingly.
+
 date-iso
 ########    
 Date in ISO format ('YYYY-MM-DD').

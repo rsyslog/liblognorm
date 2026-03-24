@@ -69,6 +69,8 @@ TESTS_SHELLSCRIPTS = \
 	strict_prefix_matching_1.sh \
 	strict_prefix_matching_2.sh \
 	field_string.sh \
+	field_op_quoted_string_escape.sh \
+	field_op_quoted_string_escape_invalid.sh \
 	field_string_perm_chars.sh \
 	field_string_lazy_matching.sh \
 	field_string_doc_sample_lazy.sh \

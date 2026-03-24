@@ -29,6 +29,7 @@
 
 void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level);
 void ln_displayPDAGComponent(struct ln_pdag *dag, int level);
+static void pdagDeletePrs(ln_ctx ctx, ln_parser_t *const __restrict__ prs);
 
 #ifdef	ADVANCED_STATS
 uint64_t advstats_parsers_called = 0;
@@ -270,7 +271,14 @@ ln_newParser(ln_ctx ctx,
 		node->custTypeIdx = custType - ctx->type_pdags;
 	} else {
 		if(parser_lookup_table[prsid].construct != NULL) {
-			parser_lookup_table[prsid].construct(ctx, prscnf, &node->parser_data);
+			const int r = parser_lookup_table[prsid].construct(ctx, prscnf,
+				&node->parser_data);
+			if(r != 0) {
+				pdagDeletePrs(ctx, node);
+				free(node);
+				node = NULL;
+				goto done;
+			}
 		}
 	}
 done:
@@ -842,7 +850,10 @@ ln_pdagAddParserInstance(ln_ctx ctx,
 	LN_DBGPRINTF(ctx, "ln_pdagAddParserInstance: %s, nextnode %p",
 		json_object_to_json_string(prscnf), *nextnode);
 	ln_parser_t *const parser = ln_newParser(ctx, prscnf);
-	CHKN(parser);
+	if(parser == NULL) {
+		r = LN_BADCONFIG;
+		goto done;
+	}
 	LN_DBGPRINTF(ctx, "pdag: %p, parser %p", pdag, parser);
 	/* check if we already have this parser, if so, merge
 	 */

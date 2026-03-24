@@ -33,6 +33,7 @@
 #include <strings.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <stdbool.h>
 #include <time.h>
 
 #include "liblognorm.h"
@@ -1646,8 +1647,7 @@ PARSER_Parse(OpQuotedString)
 			 * ...
 			 */
 			int continuous_backslash = 0;
-			// Use bitmask is more efficient that modulus (%2 == &0b0001)
-			while(i < npb->strLen && (npb->str[i] != '"' || (continuous_backslash & 0b0001) == 1 )) {
+			while(i < npb->strLen && (npb->str[i] != '"' || (continuous_backslash & 1) == 1 )) {
 				if ( npb->str[i] == '\\' ) {
 					continuous_backslash++;
 				} else {
@@ -1696,34 +1696,36 @@ done:
 
 PARSER_Construct(OpQuotedString)
 {
-		int r = 0;
-		LN_DBGPRINTF(ctx, "in parser_construct OpQuotedString");
-		struct data_OpQuotedString *data = (struct data_OpQuotedString*) calloc(1, sizeof(struct data_OpQuotedString));
-		struct json_object *obj;
-		json_bool bool_obj;
+	int r = 0;
+	LN_DBGPRINTF(ctx, "in parser_construct OpQuotedString");
+	struct data_OpQuotedString *data =
+		(struct data_OpQuotedString*) calloc(1, sizeof(struct data_OpQuotedString));
+	struct json_object *obj;
+	json_bool bool_obj;
 
-		if(json_object_object_get_ex(json, "escape", &obj) != 0) {
-			LN_DBGPRINTF(ctx, "found 'escape' in fields");
-			if(json_object_is_type(obj, json_type_boolean) == 1) {
-				bool_obj = json_object_get_boolean(obj);
-				data->escape = (bool)bool_obj;
-			}
-			else {
-				ln_errprintf(ctx, 0, "op-quoted-string's 'escape' field should be boolean");
-				r = LN_BADCONFIG;
-				goto done;
-			}
+	CHKN(data);
+
+	if(json_object_object_get_ex(json, "escape", &obj) != 0) {
+		LN_DBGPRINTF(ctx, "found 'escape' in fields");
+		if(json_object_is_type(obj, json_type_boolean) == 1) {
+			bool_obj = json_object_get_boolean(obj);
+			data->escape = (bool)bool_obj;
+		} else {
+			ln_errprintf(ctx, 0, "op-quoted-string's 'escape' field should be boolean");
+			r = LN_BADCONFIG;
+			goto done;
 		}
+	}
 
 	*pdata = data;
 done:
 	if(r != 0)
 		free(data);
-		return r;
+	return r;
 }
 PARSER_Destruct(OpQuotedString)
 {
-		free(pdata);
+	free(pdata);
 }
 
 
