@@ -1,5 +1,8 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- Op-quoted-string : Add support for escaped characters
+  Thanks to Kevin Guillemot for the patch. Some follow up work
+  was done by Adiscon.
 - fixed error callback cookie - the wrong one was provided
 - improved CI with additional checks, including sanitizers and
   an rsyslog integration test
