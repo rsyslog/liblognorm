@@ -15,6 +15,13 @@ test_tmpdir="$(mktemp -d "$(pwd)/tmp.test.XXXXXX")"
 test_out="$test_tmpdir/test.out"
 trap 'rm -rf -- "$test_tmpdir"' EXIT
 
+build_libdir="$(cd .. && pwd)/src/.libs"
+if [ -n "${LD_LIBRARY_PATH}" ]; then
+    export LD_LIBRARY_PATH="${build_libdir}:${LD_LIBRARY_PATH}"
+else
+    export LD_LIBRARY_PATH="${build_libdir}"
+fi
+
 . ./options.sh
 
 no_solaris10() {
@@ -55,7 +62,7 @@ execute() {
     else
         (
             cd "$test_tmpdir"
-            echo "$1" | $cmd $ln_opts -r "$(rulebase_file_name)" -e json > "$test_out"
+            printf '%s\n' "$1" | $cmd $ln_opts -r "$(rulebase_file_name)" -e json > "$test_out"
         )
     fi
     echo "Out:"
@@ -76,7 +83,7 @@ execute_with_string() {
     fi
     (
         cd "$test_tmpdir"
-        echo "$2" | $cmd $ln_opts -R "$1" -e json > "$test_out"
+        printf '%s\n' "$2" | $cmd $ln_opts -R "$1" -e json > "$test_out"
     )
     echo "Out:"
     cat "$test_out"

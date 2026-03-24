@@ -874,23 +874,22 @@ done:
 static int
 ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 {
-	int r = 0;
+	int r = -1;
 	es_str_t *typeStr = NULL;
 	size_t offs;
 
-	if(getLineType(buf, lenBuf, &offs, &typeStr) != 0)
-		goto done;
+	CHKR(getLineType(buf, lenBuf, &offs, &typeStr));
 
 	if(!es_strconstcmp(typeStr, "prefix")) {
-		if(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix) != 0) goto done;
+		CHKR(getPrefix(buf, lenBuf, offs, &ctx->rulePrefix));
 	} else if(!es_strconstcmp(typeStr, "extendprefix")) {
-		if(extendPrefix(ctx, buf, lenBuf, offs) != 0) goto done;
+		CHKR(extendPrefix(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "rule")) {
-		if(processRule(ctx, buf, lenBuf, offs) != 0) goto done;
+		CHKR(processRule(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "type")) {
-		if(processType(ctx, buf, lenBuf, offs) != 0) goto done;
+		CHKR(processType(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
-		if(processAnnotate(ctx, buf, lenBuf, offs) != 0) goto done;
+		CHKR(processAnnotate(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "include")) {
 		CHKR(processInclude(ctx, buf, offs));
 	} else {
@@ -900,6 +899,7 @@ ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 		free(str);
 		goto done;
 	}
+	r = 0;
 
 done:
 	if(typeStr != NULL)
