@@ -9,6 +9,7 @@ RUN apt-get update \
        build-essential \
        ca-certificates \
        clang \
+       curl \
        gdb \
        libestr-dev \
        libfastjson-dev \
