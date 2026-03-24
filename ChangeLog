@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- fixed error callback cookie - the wrong one was provided
 - improved CI with additional checks, including sanitizers and
   an rsyslog integration test
 - introduced doc for AI agents, e.g. AGENTS.md
