@@ -153,7 +153,7 @@ TESTS_SHELLSCRIPTS += \
 #re-add to TESTS if needed: user_test
 TESTS = \
         $(TESTS_SHELLSCRIPTS) \
-        err_callback_cookie
+        err_callback_cookie.sh
 
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
@@ -167,6 +167,7 @@ REGEXP_TESTS = \
 EXTRA_DIST = exec.sh \
 	$(TESTS_SHELLSCRIPTS) \
 	$(REGEXP_TESTS) \
+	err_callback_cookie.sh \
 	$(json_eq_self_sources) \
 	$(user_test_SOURCES)
 
