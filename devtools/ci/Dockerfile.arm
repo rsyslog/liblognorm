@@ -1,0 +1,19 @@
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       autoconf \
+       automake \
+       build-essential \
+       ca-certificates \
+       clang \
+       curl \
+       gdb \
+       libestr-dev \
+       libfastjson-dev \
+       libtool \
+       libtool-bin \
+       pkg-config \
+    && rm -rf /var/lib/apt/lists/*

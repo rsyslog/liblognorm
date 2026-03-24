@@ -141,6 +141,84 @@ jobs:
           devtools/gather-check-logs.sh
           cat failed-tests.log
 
+  arm_CI:
+    needs: compile
+    if: ${{ needs.compile.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: armhf
+            runs_on: ubuntu-24.04
+            platform: linux/arm/v7
+            qemu_platform: arm
+            use_qemu: true
+          - arch: arm64
+            runs_on: ubuntu-24.04-arm
+            platform: linux/arm64
+            qemu_platform: aarch64
+            use_qemu: false
+    name: ${{ matrix.arch }} CI (${{ matrix.use_qemu && 'QEMU' || 'native, asan' }})
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up QEMU for ${{ matrix.arch }} emulation
+        if: ${{ matrix.use_qemu }}
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.qemu_platform }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.arch }} dev image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: devtools/ci/Dockerfile.arm
+          platforms: ${{ matrix.platform }}
+          tags: liblognorm-arm-dev:${{ matrix.arch }}
+          load: true
+          cache-from: type=gha,scope=arm-dev-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=arm-dev-${{ matrix.arch }}
+
+      - name: Run ${{ matrix.arch }} CI pipeline
+        run: |
+          chmod -R go+rw .
+          docker run --rm --platform ${{ matrix.platform }} \
+            -e ARCH=${{ matrix.arch }} \
+            --cap-add SYS_ADMIN \
+            --cap-add SYS_PTRACE \
+            --security-opt seccomp=unconfined \
+            -v "${{ github.workspace }}:/rsyslog" \
+            -w /rsyslog \
+            liblognorm-arm-dev:${{ matrix.arch }} bash -c '
+              set -e
+              export CC=gcc
+              export CFLAGS="-g -O1 -fno-omit-frame-pointer"
+              export LDFLAGS=""
+              export CI_MAKE_CHECK_EXTRA="TESTSUITEFLAGS=--stop"
+              export CI_MAKE_CHECK_OPT="-j1"
+              export CI_CHECK_CMD="check"
+              if [ "$ARCH" = "arm64" ]; then
+                export CFLAGS="-g -O1 -fno-omit-frame-pointer -fsanitize=address -fsanitize-address-use-after-scope"
+                export LDFLAGS="-fsanitize=address"
+                export ASAN_OPTIONS="abort_on_error=1:symbolize=1:detect_leaks=0:disable_coredump=0"
+              fi
+              devtools/run-ci.sh
+            '
+
+      - name: Show error logs
+        if: ${{ failure() || cancelled() }}
+        run: |
+          devtools/gather-check-logs.sh
+          cat failed-tests.log
+
   clang_analyzer_CI:
     needs: compile
     if: ${{ needs.compile.result == 'success' }}
