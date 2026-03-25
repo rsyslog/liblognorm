@@ -3321,7 +3321,7 @@ PARSER_Parse(Repeat)
 			parsed_value = json_object_new_object();
 		}
 		r = ln_normalizeRec(npb, data->parser, strtoffs, 1,
-				    parsed_value, &endNode, data->failOnDuplicate, NULL, parser_name);
+				    parsed_value, &endNode, data->failOnDuplicate, parsed_value, parser_name);
 		strtoffs = npb->parsedTo;
 		LN_DBGPRINTF(npb->ctx, "repeat parser returns %d, parsed %zu, json: %s",
 			r, npb->parsedTo, json_object_to_json_string(parsed_value));

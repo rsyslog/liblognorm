@@ -1366,7 +1366,8 @@ static int
 fixJSON(struct ln_pdag *dag,
 	struct json_object **value,
 	struct json_object *json,
-	const ln_parser_t *const prs)
+	const ln_parser_t *const prs,
+	const int failOnDuplicate)
 
 {
 	int r = LN_WRONGPARSER;
@@ -1382,9 +1383,17 @@ fixJSON(struct ln_pdag *dag,
 			struct json_object_iterator it = json_object_iter_begin(*value);
 			struct json_object_iterator itEnd = json_object_iter_end(*value);
 			while (!json_object_iter_equal(&it, &itEnd)) {
+				const char *const key = json_object_iter_peek_name(&it);
 				struct json_object *const val = json_object_iter_peek_value(&it);
+				if(failOnDuplicate && json_object_object_get_ex(json, key, NULL)) {
+					LN_DBGPRINTF(dag->ctx, "field name '%s' already exists with failOnDuplicate set",
+						key);
+					json_object_put(*value);
+					*value = NULL;
+					goto done;
+				}
 				json_object_get(val);
-				json_object_object_add(json, json_object_iter_peek_name(&it), val);
+				json_object_object_add(json, key, val);
 				json_object_iter_next(&it);
 			}
 			json_object_put(*value);
@@ -1418,20 +1427,35 @@ fixJSON(struct ln_pdag *dag,
 			}
 			if(nSubobj != 1)
 				isDotDot = 0;
+			}
+			if(isDotDot) {
+				LN_DBGPRINTF(dag->ctx, "subordinate field name is '..', combining");
+				if(failOnDuplicate && json_object_object_get_ex(json, prs->name, NULL)) {
+					LN_DBGPRINTF(dag->ctx, "field name '%s' already exists with failOnDuplicate set",
+						prs->name);
+					json_object_put(*value);
+					*value = NULL;
+					goto done;
+				}
+				json_object_get(valDotDot);
+				json_object_put(*value);
+				json_object_object_add_ex(json, prs->name, valDotDot,
+					JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+			} else {
+				if(failOnDuplicate && json_object_object_get_ex(json, prs->name, NULL)) {
+					LN_DBGPRINTF(dag->ctx, "field name '%s' already exists with failOnDuplicate set",
+						prs->name);
+					json_object_put(*value);
+					*value = NULL;
+					goto done;
+				}
+				json_object_object_add_ex(json, prs->name, *value,
+					JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
+			}
 		}
-		if(isDotDot) {
-			LN_DBGPRINTF(dag->ctx, "subordinate field name is '..', combining");
-			json_object_get(valDotDot);
-			json_object_put(*value);
-			json_object_object_add_ex(json, prs->name, valDotDot,
-				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
-		} else {
-			json_object_object_add_ex(json, prs->name, *value,
-				JSON_C_OBJECT_ADD_KEY_IS_NEW|JSON_C_OBJECT_KEY_IS_CONSTANT);
-		}
-	}
-	r = 0;
-	*value = NULL;
+		r = 0;
+done:
+		*value = NULL;
 	return r;
 }
 
@@ -1645,7 +1669,7 @@ LN_DBGPRINTF(dag->ctx, "%zu: enter parser, dag node %p, json %p", offs, dag, jso
 
 			if(r == 0) {
 				LN_DBGPRINTF(dag->ctx, "%zu: parser matches at %zu", offs, i);
-				CHKR(fixJSON(dag, &value, json, prs));
+				CHKR(fixJSON(dag, &value, json, prs, failOnDuplicate));
 				value = NULL;
 				if(npb->ctx->opts & LN_CTXOPT_ADD_RULE) {
 					add_rule_to_mockup(npb, prs);
