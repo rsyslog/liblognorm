@@ -60,6 +60,7 @@ static int recOutput = OUTPUT_PARSED_RECS | OUTPUT_UNPARSED_RECS;
 				/**< controls which records to output */
 static int outputSummaryLine = 0;
 static int outputNbrUnparsed = 0;
+int outputCSVNoQuotes = 0;
 static int addErrLineNbr = 0;	/**< add line number info to unparsed events */
 static int flatTags = 0;	/**< print event.tags in JSON? */
 static FILE *fpDOT;
@@ -301,6 +302,8 @@ handle_generic_option(const char* opt) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE);
 	} else if (strcmp("addRuleLocation", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE_LOCATION);
+    } else if (strcmp("outputCSVNoQuotes", opt) == 0) {
+        outputCSVNoQuotes = 1;
 	} else {
 		fprintf(stderr, "invalid -o option '%s'\n", opt);
 		exit(1);
@@ -327,6 +330,7 @@ fprintf(stderr,
 	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 	"    -p           Print back only if the message has been parsed successfully\n"
 	"    -P           Print back only if the message has NOT been parsed successfully\n"
+	"    -ooutputCSVNoQuotes CSV output will not wrap fields in double quotation marks\n"
 	"    -L           Add source file line number information to unparsed line output\n"
 	"    -t<tag>      Print back only messages matching the tag\n"
 	"    -v           Print debug. When used 3 times, prints parse DAG\n"

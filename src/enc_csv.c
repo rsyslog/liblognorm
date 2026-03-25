@@ -53,6 +53,8 @@ static char hexdigit[16] =
 	{'0', '1', '2', '3', '4', '5', '6', '7', '8',
 	 '9', 'A', 'B', 'C', 'D', 'E', 'F' };
 
+extern int outputCSVNoQuotes; /* command line flag */
+
 /* TODO: CSV encoding for Unicode characters is as of RFC4627 not fully
  * supported. The algorithm is that we must build the wide character from
  * UTF-8 (if char > 127) and build the full 4-octet Unicode character out
@@ -63,7 +65,7 @@ static char hexdigit[16] =
 static int
 ln_addValue_CSV(const char *buf, es_str_t **str)
 {
-	int r;
+	int r = 0;
 	unsigned char c;
 	es_size_t i;
 	char numbuf[4];
@@ -119,8 +121,145 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 			}
 		}
 	}
-	r = 0;
 
+	return r;
+}
+
+
+/* Encode a CSV field value and report whether outer CSV quotes are required.
+ * The encoded payload itself uses the same escaping as the quoted CSV path.
+ */
+static int
+ln_addValue_CSV_NQ(const char *buf, es_str_t **str, int *needQuotes)
+{
+	int r = -1;
+	unsigned char c;
+	es_size_t i;
+	char numbuf[4];
+	int j;
+
+	assert(str != NULL);
+	assert(*str != NULL);
+	assert(buf != NULL);
+	assert(needQuotes != NULL);
+
+	for(i = 0; i < strlen(buf); i++) {
+		c = buf[i];
+		if(c == ',') {
+			*needQuotes = 1;
+			es_addChar(str, c);
+		} else if((c >= 0x23 && c <= 0x5b)
+		   || (c >= 0x5d /* && c <= 0x10FFFF*/)
+		   || c == 0x20 || c == 0x21) {
+			/* no need to escape */
+			es_addChar(str, c);
+		} else {
+			/* we must escape, try RFC4627-defined special sequences first */
+			switch(c) {
+			case '\0':
+				es_addBuf(str, "\\u0000", 6);
+				break;
+			case '\"':
+				*needQuotes = 1;
+				es_addBuf(str, "\\\"", 2);
+				break;
+			case '\\':
+				es_addBuf(str, "\\\\", 2);
+				break;
+			case '\010':
+				es_addBuf(str, "\\b", 2);
+				break;
+			case '\014':
+				es_addBuf(str, "\\f", 2);
+				break;
+			case '\n':
+				es_addBuf(str, "\\n", 2);
+				break;
+			case '\r':
+				es_addBuf(str, "\\r", 2);
+				break;
+			case '\t':
+				es_addBuf(str, "\\t", 2);
+				break;
+			default:
+				/* TODO : proper Unicode encoding (see header comment) */
+				for(j = 0 ; j < 4 ; ++j) {
+					numbuf[3-j] = hexdigit[c % 16];
+					c = c / 16;
+				}
+				es_addBuf(str, "\\u", 2);
+				es_addBuf(str, numbuf, 4);
+				break;
+			}
+		}
+	}
+
+	r = 0;
+	return r;
+}
+
+
+static int
+ln_addField_CSV_NQ(struct json_object *field, es_str_t **str)
+{
+	int r = 0;
+	int i;
+	struct json_object *obj;
+	int needComma = 0;
+	int needQuotes = 0;
+	const char *value;
+	char *cstr = NULL;
+	es_str_t *tmp_str = NULL;
+	
+	assert(field != NULL);
+	assert(str != NULL);
+	assert(*str != NULL);
+
+	CHKN(tmp_str = es_newStr(256));
+
+	switch(json_object_get_type(field)) {
+	case json_type_array:
+		CHKR(es_addChar(&tmp_str, '['));
+		for (i = json_object_array_length(field) - 1; i >= 0; i--) {
+			if(needComma) {
+				needQuotes = 1;
+				es_addChar(&tmp_str, ',');
+			} else {
+				needComma = 1;
+			}
+			CHKN(obj = json_object_array_get_idx(field, i));
+			CHKN(value = json_object_get_string(obj));
+			CHKR(ln_addValue_CSV_NQ(value, &tmp_str, &needQuotes));
+		}
+		CHKR(es_addChar(&tmp_str, ']'));
+		break;
+	case json_type_string:
+	case json_type_int:
+		CHKN(value = json_object_get_string(field));
+		CHKR(ln_addValue_CSV_NQ(value, &tmp_str, &needQuotes));
+		break;
+	case json_type_null:
+	case json_type_boolean:
+	case json_type_double:
+	case json_type_object:
+		CHKR(es_addBuf(&tmp_str, "***unsupported type***", sizeof("***unsupported type***")-1));
+		break;
+	default:
+		CHKR(es_addBuf(&tmp_str, "***OBJECT***", sizeof("***OBJECT***")-1));
+	}
+
+	CHKN(cstr = es_str2cstr(tmp_str, NULL));
+	if(needQuotes) {
+		CHKR(es_addChar(str, '"'));
+	}
+	CHKR(es_addBuf(str, cstr, strlen(cstr)));
+	if(needQuotes) {
+		CHKR(es_addChar(str, '"'));
+	}
+
+done:
+	free(cstr);
+	es_deleteStr(tmp_str);
 	return r;
 }
 
@@ -128,7 +267,8 @@ ln_addValue_CSV(const char *buf, es_str_t **str)
 static int
 ln_addField_CSV(struct json_object *field, es_str_t **str)
 {
-	int r, i;
+	int r = 0;
+	int i;
 	struct json_object *obj;
 	int needComma = 0;
 	const char *value;
@@ -165,8 +305,6 @@ ln_addField_CSV(struct json_object *field, es_str_t **str)
 	default:
 		CHKR(es_addBuf(str, "***OBJECT***", sizeof("***OBJECT***")-1));
 	}
-
-	r = 0;
 
 done:
 	return r;
@@ -207,9 +345,13 @@ ln_fmtEventToCSV(struct json_object *json, es_str_t **str, es_str_t *extraData)
 			needComma = 1;
 		}
 		if (field != NULL) {
-			CHKR(es_addChar(str, '"'));
-			ln_addField_CSV(field, str);
-			CHKR(es_addChar(str, '"'));
+			if (outputCSVNoQuotes) {
+				CHKR(ln_addField_CSV_NQ(field, str));
+			} else {
+				CHKR(es_addChar(str, '"'));
+				CHKR(ln_addField_CSV(field, str));
+				CHKR(es_addChar(str, '"'));
+			}
 		}
 	}
 	r = 0;

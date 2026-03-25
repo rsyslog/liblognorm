@@ -118,6 +118,10 @@ Special options. The following ones can be set:
    * **addOriginalMsg** Always add the "original-msg" data item. By
      default, this is only done when a message could not be parsed.
 
+   * **outputCSVNoQuotes** For CSV output, omit the outer field quotes
+     unless they are required to preserve the field content. Fields
+     containing commas or double quotes remain quoted.
+
    * **addRule** Add a mockup of the rule that was processed. Note that
      it is *not* an exact copy of the rule, but a rule that correctly
      describes the parsed message. Most importantly, prefixes are 
@@ -261,4 +265,3 @@ rulebase.
 .. figure:: graph.png
    :width: 90 %
    :alt: graph sample
-

@@ -41,6 +41,7 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_nested_segfault.sh \
 	missing_line_ending.sh \
 	lognormalizer-invld-call.sh \
+	lognormalizer_csv_noquotes.sh \
 	string_rb_simple.sh \
 	string_rb_simple_2_lines.sh \
 	names.sh \
