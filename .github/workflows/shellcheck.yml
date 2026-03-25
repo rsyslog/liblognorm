@@ -1,0 +1,45 @@
+---
+name: shellcheck
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - name: Identify changed shell files
+        id: changed
+        uses: tj-actions/changed-files@v46
+        with:
+          separator: "\n"
+          files: |
+            ai/*.sh
+            tests/*.sh
+
+      - name: Install shellcheck
+        if: steps.changed.outputs.any_changed == 'true'
+        run: sudo apt-get update && sudo apt-get install --yes shellcheck
+
+      - name: Run shellcheck
+        if: steps.changed.outputs.any_changed == 'true'
+        run: |
+          printf '%s\n' '${{ steps.changed.outputs.all_changed_files }}' | sed 's/\\$//' > changed-shell-files.txt
+          mapfile -t files < changed-shell-files.txt
+          shellcheck "${files[@]}"
+
+      - name: Skip shellcheck, no shell changes
+        if: steps.changed.outputs.any_changed != 'true'
+        run: echo "No shell files modified"
