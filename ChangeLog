@@ -1,5 +1,13 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- add a parameter skipempty to the json field type.
+  If skipempty is set as follows, empty json objects are dropped from
+  the parsed result.
+    %field_name:json:skipempty%
+  If any parameter other than "skipempty" is given ("bogus" in this
+  example), an error message "invalid flag for JSON parser: bogus"
+  is issued.
+  Thanks to Noriko Hosoi for the patch.
 - json parser: add optional "skipempty" flag
   This removes empty strings, empty arrays and empty objects from parsed
   JSON content before it is attached to the result tree.
