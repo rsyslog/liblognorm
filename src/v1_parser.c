@@ -3169,13 +3169,31 @@ PARSER(CheckpointLEA)
 
 		while(i < strLen && str[i] == ' ') /* skip leading SP */
 			++i;
-		iValue = i;
-		while(i < strLen && str[i] != ';') {
+		if(str[i] == '"') {
+			int continuous_backslash = 0;
+			iValue = i + 1;
 			++i;
+			while(i < strLen && (str[i] != '"' || (continuous_backslash & 1) == 1)) {
+				if(str[i] == '\\') {
+					++continuous_backslash;
+				} else {
+					continuous_backslash = 0;
+				}
+				++i;
+			}
+			if(i >= strLen || str[i] != '"')
+				FAIL(LN_WRONGPARSER);
+			lenValue = i - iValue;
+			++i; /* skip closing quote */
+		} else {
+			iValue = i;
+			while(i < strLen && str[i] != ';') {
+				++i;
+			}
+			lenValue = i - iValue;
 		}
 		if(i+1 > strLen || str[i] != ';')
 			FAIL(LN_WRONGPARSER);
-		lenValue = i - iValue;
 		++i; /* skip ';' */
 
 		if(value != NULL) {
@@ -3204,7 +3222,7 @@ done:
 	free(val);
 	if(r != 0 && value != NULL && *value != NULL) {
 		json_object_put(*value);
-		value = NULL;
+		*value = NULL;
 	}
 	return r;
 }

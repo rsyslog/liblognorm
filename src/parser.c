@@ -3472,13 +3472,20 @@ PARSER_Parse(CheckpointLEA)
 		lenName = i - iName;
 		++i; /* skip ':' */
 
-		while(i < npb->strLen && npb->str[i] == ' ') /* skip leading SP */
+		while(i < npb->strLen && npb->str[i] == ' ') { /* skip leading SP */
 			++i;
+		}
 		/* Improvement by KGuillemot & M4jr0 to support quoted values */
 		if( npb->str[i] == '"' ) {
+			int continuous_backslash = 0;
 			iValue = i+1;
 			i++;
-			while( i < npb->strLen && ( npb->str[i] != '"' || npb->str[i-1] == '\\' ) ) {
+			while( i < npb->strLen && ( npb->str[i] != '"' || (continuous_backslash & 1) == 1 ) ) {
+				if(npb->str[i] == '\\') {
+					++continuous_backslash;
+				} else {
+					continuous_backslash = 0;
+				}
 				++i;
 			}
 			// Do not take the " in value
@@ -3491,6 +3498,13 @@ PARSER_Parse(CheckpointLEA)
 				++i;
 			}
 			lenValue = i - iValue;
+			while(lenValue > 0 && npb->str[iValue + lenValue - 1] == ' ') {
+				--lenValue;
+			}
+		}
+
+		while(i < npb->strLen && npb->str[i] == ' ') {
+			++i;
 		}
 
 		if(i+1 > npb->strLen || (npb->str[i] != ';' && npb->str[i] != data->terminator))
@@ -3525,7 +3539,7 @@ done:
 	free(val);
 	if(r != 0 && value != NULL && *value != NULL) {
 		json_object_put(*value);
-		value = NULL;
+		*value = NULL;
 	}
 	return r;
 }
