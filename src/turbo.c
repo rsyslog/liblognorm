@@ -47,9 +47,7 @@
 #include "turbo_arena.h"
 #include "turbo_simd.h"
 #include "turbo_snapshot.h"
-
-/* Include JSON implementation directly (avoids Makefile changes) */
-#include "turbo_json_impl.c"
+#include "turbo_json.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -444,8 +442,8 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			*out_pc = ctx_pc;
 		}
 
-		if (prs->custTypeIdx >= 0 && (int)prs->custTypeIdx < comp->ctx->nTypes) {
-			ln_pdag *type_pdag = comp->ctx->type_pdags[prs->custTypeIdx].pdag;
+		if (prs->custType >= 0 && (int)prs->custType < comp->ctx->nTypes) {
+			ln_pdag *type_pdag = comp->ctx->type_pdags[prs->custType].pdag;
 
 			if (type_pdag) {
 				ln_instr_t call_instr = {0};
@@ -828,7 +826,10 @@ ln_turbo_compile(ln_ctx ctx)
 int
 ln_turbo_is_available(ln_ctx ctx)
 {
-	return ctx && ctx->turbo && ctx->turbo->enabled && ctx->turbo->code_len > 0;
+	if(!ctx || !ctx->turbo)
+		return 0;
+	ln_turbo_ctx_t *turbo = (ln_turbo_ctx_t *)ctx->turbo;
+	return turbo->enabled && turbo->code_len > 0;
 }
 
 /**
@@ -927,7 +928,8 @@ int
 ln_turbo_get_stats(ln_ctx ctx, ln_turbo_stats_t *stats)
 {
 	if (!ctx || !ctx->turbo || !stats) return -1;
-	*stats = ctx->turbo->stats;
+	ln_turbo_ctx_t *turbo = (ln_turbo_ctx_t *)ctx->turbo;
+	*stats = turbo->stats;
 	return 0;
 }
 

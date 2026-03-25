@@ -125,12 +125,20 @@ Special options. The following ones can be set:
      as such). This option is primarily meant for postprocessing, e.g.
      as input to an anonymizer.
 
-   * **addRuleRulcation** For rules that successfully parsed, add the
-     location of the rule inside the rulebase. But the file name as
-     well as the line number are given. If two rules evaluate to the same
+   * **addRuleLocation** For rules that successfully parsed, add the
+     location of the rule inside the rulebase. Both the file name and
+     the line number are given. If two rules evaluate to the same
      end node, only a single rule location is given. However, in
      practice this is extremely unlikely and as such for practical
      reasons the information can be considered reliable.
+
+   * **turbo** Enable TurboVM bytecode engine for normalization. This
+     requires liblognorm to be built with ``--enable-turbo``. When
+     enabled, normalization uses the compiled bytecode VM with SIMD
+     acceleration. Output uses native JSON types (numbers as integers,
+     not strings) and nested objects for dotted field names. Falls back
+     to standard normalization if bytecode compilation failed.
+     See :doc:`turbo` for details.
 
 ::
 

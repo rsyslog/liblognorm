@@ -24,6 +24,8 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
+#include "config.h"
+#include "turbo_json.h"
 #include "turbo_json_fast.h"
 #include "turbo_result_fast.h"
 #include <stdlib.h>
