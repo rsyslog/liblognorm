@@ -360,7 +360,7 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'V':
 			printVersion();
-			exit(1);
+			exit(0);
 			break;
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
