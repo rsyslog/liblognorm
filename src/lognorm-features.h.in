@@ -1,3 +1,7 @@
 #if @FEATURE_REGEXP@
 #define LOGNORM_REGEX_SUPPORTED 1
 #endif
+
+#if @FEATURE_TURBO@
+#define LOGNORM_TURBO_SUPPORTED 1
+#endif

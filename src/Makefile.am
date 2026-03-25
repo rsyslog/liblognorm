@@ -59,4 +59,32 @@ liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -l
 liblognorm_la_LDFLAGS = -version-info 6:0:1
 
 # Public API
-include_HEADERS = liblognorm.h
+include_HEADERS = liblognorm.h lognorm-features.h
+
+# TurboVM bytecode engine (optional, SIMD-accelerated log parsing)
+if ENABLE_TURBO
+liblognorm_la_SOURCES += \
+	turbo.c \
+	turbo.h \
+	turbo_vm.c \
+	turbo_vm.h \
+	turbo_vm_opt.h \
+	turbo_opcode.h \
+	turbo_simd.c \
+	turbo_simd.h \
+	turbo_arena.c \
+	turbo_arena.h \
+	turbo_result.c \
+	turbo_result.h \
+	turbo_result_fast.c \
+	turbo_result_fast.h \
+	turbo_json.h \
+	turbo_json_fast.c \
+	turbo_json_fast.h \
+	turbo_json_impl.c \
+	turbo_snapshot.c \
+	turbo_snapshot.h
+liblognorm_la_CPPFLAGS += $(TURBO_CFLAGS)
+include_HEADERS += turbo.h turbo_result.h turbo_result_fast.h \
+	turbo_arena.h turbo_snapshot.h turbo_opcode.h
+endif
