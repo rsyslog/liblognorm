@@ -57,6 +57,7 @@ TESTS_SHELLSCRIPTS = \
 	alternative_segfault.sh \
 	repeat_very_simple.sh \
 	repeat_simple.sh \
+	repeat_fail_on_duplicate.sh \
 	repeat_mismatch_in_while.sh \
 	repeat_while_alternative.sh \
 	repeat_alternative_nested.sh \

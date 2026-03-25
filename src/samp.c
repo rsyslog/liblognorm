@@ -648,9 +648,9 @@ processType(ln_ctx ctx,
 	// TODO: optimize
 	CHKN(str = es_newStr(lenBuf));
 	CHKR(es_addBuf(&str, (char*)buf + offs, lenBuf - offs));
-	struct ln_type_pdag *const td = ln_pdagFindType(ctx, typename, 1);
-	CHKN(td);
-	CHKR(addSampToTree(ctx, str, td->pdag, NULL));
+	int td = ln_pdagFindType(ctx, typename, 1);
+	CHKN((td >= 0 && td < ctx->nTypes) ? ctx->type_pdags[td].pdag : NULL);
+	CHKR(addSampToTree(ctx, str, ctx->type_pdags[td].pdag, NULL));
 	r = 0;
 done:
 	if(str != NULL)
@@ -912,7 +912,7 @@ done:
  * Read a character from our sample source.
  */
 static int
-ln_sampReadChar(const ln_ctx ctx, FILE *const __restrict__ repo, const char **inpbuf)
+ln_sampReadChar(const ln_ctx __attribute__((unused)) ctx, FILE *const __restrict__ repo, const char **inpbuf)
 {
 	int c;
 	assert((repo != NULL && inpbuf == NULL) || (repo == NULL && inpbuf != NULL));

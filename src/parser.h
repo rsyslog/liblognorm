@@ -39,11 +39,13 @@
 // TODO #warning check how to handle "value" - does it need to be set to NULL?
 
 #define PARSERDEF_NO_DATA(parser) \
-	int ln_v2_parse##parser(npb_t *npb, size_t *offs, void *const, size_t *parsed, struct json_object **value)
+	int ln_v2_parse##parser(npb_t *npb, size_t *offs, void *const, const char *parser_name, \
+			size_t *parsed, struct json_object **value)
 
 #define PARSERDEF(parser) \
 	int ln_construct##parser(ln_ctx ctx, json_object *const json, void **pdata); \
-	int ln_v2_parse##parser(npb_t *npb, size_t *offs, void *const, size_t *parsed, struct json_object **value); \
+	int ln_v2_parse##parser(npb_t *npb, size_t *offs, void *const, const char *parser_name, \
+			size_t *parsed, struct json_object **value); \
 	void ln_destruct##parser(ln_ctx ctx, void *const pdata)
 
 PARSERDEF(RFC5424Date);
@@ -89,6 +91,7 @@ struct data_Repeat {
 	ln_pdag *parser;
 	ln_pdag *while_cond;
 	int permitMismatchInParser;
+	int failOnDuplicate;
 };
 
 #endif /* #ifndef LIBLOGNORM_PARSER_H_INCLUDED */
