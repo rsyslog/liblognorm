@@ -1,5 +1,6 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- pcre2 used instead of pcre (which is no longer supported)
 - add a parameter skipempty to the json field type.
   If skipempty is set as follows, empty json objects are dropped from
   the parsed result.
