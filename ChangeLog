@@ -1,5 +1,14 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- json parser: add optional "skipempty" flag
+  This removes empty strings, empty arrays and empty objects from parsed
+  JSON content before it is attached to the result tree.
+  Thanks to Noriko Hosoi for the original patch. Follow-up work to rebase,
+  document, and align validation tests was done by Adiscon.
+  NOTE: This is a potential backward-compatibility change for malformed
+  rulebases that used extra json parser flags such as
+  "%field:json:bogus%". Such invalid flags were previously ignored and are
+  now rejected during rule loading.
 - Op-quoted-string : Add support for escaped characters
   Thanks to Kevin Guillemot for the patch. Some follow up work
   was done by Adiscon.

@@ -1057,6 +1057,30 @@ Note also that the space before "interim" must **not** be given in the
 rule, as it is consumed by the JSON parser. However, the space after
 "text" is required.
 
+Parameter ``skipempty``
+.......................
+
+The optional ``skipempty`` flag removes empty values from the parsed JSON
+object before it is attached to the result. Empty strings, empty arrays,
+and empty objects are removed recursively. If the whole JSON value becomes
+empty, the parser matches but produces no field value.
+
+Example::
+
+    rule=:%field:json:skipempty%'
+
+Input::
+
+   {"f1": "1", "f2": 2, "f3": "", "f4": {}, "f5": []}
+
+Result::
+
+   { "field": { "f1": "1", "f2": 2 } }
+
+Unknown flags are rejected as invalid configuration. This is a potential
+backward-compatibility change for malformed rulebases that previously used
+extra ``json`` parser flags which were silently ignored.
+
 alternative
 ###########
 

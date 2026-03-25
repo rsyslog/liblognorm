@@ -2411,74 +2411,229 @@ done:
 }
 
 /*
- * Delete children of the given object if it has children and they are empty.
+ * Build a pruned copy of a json object with empty strings, arrays, and
+ * objects removed recursively. This avoids relying on newer libfastjson
+ * array deletion APIs that are not available in all supported CI images.
  *
- * return 0 if object is not empty
- * return 1 if object is empty
- * return < 0 if error
+ * return 0 if a pruned value is returned in *result
+ * return 1 if the value becomes empty and should be skipped
+ * return < 0 on error
+ */
+struct prune_repl_s {
+	char *key;
+	struct json_object *val;
+};
+
+static int jsonPruneEmpty(struct json_object *__restrict__ json,
+	struct json_object **result);
+
+/**
+ * Free temporary state collected while pruning a JSON object in place.
  *
- * Caller should do this:
- * if (jsonSkipEmpty(obj) > 0) {
- *     json_object_put(obj);
- *     obj = NULL;
- * }
- * or otherwise not use obj if jsonSkipEmpty returns > 0.
+ * @param[in] delkeys list of keys scheduled for deletion
+ * @param[in] ndel number of entries in delkeys
+ * @param[in] repl list of replacement values scheduled for insertion
+ * @param[in] nrepl number of entries in repl
+ */
+static void
+jsonPruneObjectCleanup(char **delkeys, const size_t ndel,
+	struct prune_repl_s *repl, const size_t nrepl)
+{
+	for(size_t i = 0 ; i < ndel ; ++i)
+		free(delkeys[i]);
+	free(delkeys);
+	for(size_t i = 0 ; i < nrepl ; ++i) {
+		free(repl[i].key);
+		json_object_put(repl[i].val);
+	}
+	free(repl);
+}
+
+/**
+ * Prune a scalar JSON value.
+ *
+ * Empty strings are treated as removable. All other scalar values are kept
+ * by returning an additional reference to the original value.
+ *
+ * @param[in] json scalar JSON value to inspect
+ * @param[out] result retained value when the scalar is kept
+ * @returns 0 if result contains a kept value, 1 if the scalar is empty,
+ *          or a negative liblognorm error code on failure
  */
 static int
-jsonSkipEmpty(struct json_object *__restrict__ json)
+jsonPruneScalar(struct json_object *json, struct json_object **result)
+{
+	if(json_object_get_type(json) == json_type_string
+	&& json_object_get_string_len(json) == 0) {
+		return 1;
+	}
+
+	json_object_get(json);
+	*result = json;
+	return 0;
+}
+
+/**
+ * Build a pruned copy of a JSON array.
+ *
+ * Array entries that become empty are dropped. Non-empty entries are appended
+ * to a new array, which becomes the result.
+ *
+ * @param[in] json source array to prune
+ * @param[out] result pruned array when non-empty
+ * @returns 0 if result contains a kept array, 1 if the array becomes empty,
+ *          or a negative liblognorm error code on failure
+ */
+static int
+jsonPruneArray(struct json_object *json, struct json_object **result)
+{
+	int rc;
+	struct json_object *out = json_object_new_array();
+
+	if(out == NULL)
+		return LN_NOMEM;
+
+	for(int i = 0 ; i < json_object_array_length(json) ; ++i) {
+		struct json_object *elem = NULL;
+		rc = jsonPruneEmpty(json_object_array_get_idx(json, i), &elem);
+		if(rc < 0) {
+			json_object_put(out);
+			return rc;
+		}
+		if(rc == 0)
+			json_object_array_add(out, elem);
+	}
+
+	if(json_object_array_length(out) == 0) {
+		json_object_put(out);
+		return 1;
+	}
+
+	*result = out;
+	return 0;
+}
+
+/**
+ * Prune a JSON object in place while preserving compatibility with older
+ * libfastjson APIs.
+ *
+ * The helper first records keys to delete and values to replace, then applies
+ * those updates after iteration has completed so the object iterator remains
+ * valid.
+ *
+ * @param[in] json source object to prune
+ * @param[out] result retained object when non-empty
+ * @returns 0 if result contains a kept object, 1 if the object becomes empty,
+ *          or a negative liblognorm error code on failure
+ */
+static int
+jsonPruneObject(struct json_object *json, struct json_object **result)
 {
 	int rc = 0;
 	struct json_object *val = NULL;
+	char **delkeys = NULL;
+	size_t ndel = 0;
+	struct prune_repl_s *repl = NULL;
+	size_t nrepl = 0;
+	struct json_object_iterator it = json_object_iter_begin(json);
+	struct json_object_iterator itEnd = json_object_iter_end(json);
 
-	if(json == NULL) {
-		rc = 1;
-		goto finalize_it;
+	while (!json_object_iter_equal(&it, &itEnd)) {
+		struct json_object *child = NULL;
+		const char *name = json_object_iter_peek_name(&it);
+		val = json_object_iter_peek_value(&it);
+		rc = jsonPruneEmpty(val, &child);
+		if(rc < 0)
+			goto done;
+		if(rc > 0) {
+			char **newdel = realloc(delkeys, sizeof(char*) * (ndel + 1));
+			if(newdel == NULL) {
+				rc = LN_NOMEM;
+				goto done;
+			}
+			delkeys = newdel;
+			delkeys[ndel] = strdup(name);
+			if(delkeys[ndel] == NULL) {
+				rc = LN_NOMEM;
+				goto done;
+			}
+			++ndel;
+		} else if(child != val) {
+			struct prune_repl_s *newrepl = realloc(repl,
+				sizeof(struct prune_repl_s) * (nrepl + 1));
+			if(newrepl == NULL) {
+				json_object_put(child);
+				rc = LN_NOMEM;
+				goto done;
+			}
+			repl = newrepl;
+			repl[nrepl].key = strdup(name);
+			if(repl[nrepl].key == NULL) {
+				json_object_put(child);
+				rc = LN_NOMEM;
+				goto done;
+			}
+			repl[nrepl].val = child;
+			++nrepl;
+		} else {
+			json_object_put(child);
+		}
+		json_object_iter_next(&it);
 	}
+
+	for(size_t i = 0 ; i < ndel ; ++i) {
+		json_object_object_del(json, delkeys[i]);
+		free(delkeys[i]);
+	}
+	free(delkeys);
+	delkeys = NULL;
+	ndel = 0;
+
+	for(size_t i = 0 ; i < nrepl ; ++i) {
+		json_object_object_del(json, repl[i].key);
+		json_object_object_add(json, repl[i].key, repl[i].val);
+		free(repl[i].key);
+	}
+	free(repl);
+	repl = NULL;
+	nrepl = 0;
+
+	if(json_object_object_length(json) == 0) {
+		rc = 1;
+		goto done;
+	}
+
+	json_object_get(json);
+	*result = json;
+	rc = 0;
+
+done:
+	jsonPruneObjectCleanup(delkeys, ndel, repl, nrepl);
+	return rc;
+}
+
+static int
+jsonPruneEmpty(struct json_object *__restrict__ json,
+	struct json_object **result)
+{
+	*result = NULL;
+	if(json == NULL)
+		return 1;
 
 	switch (json_object_get_type(json)) {
 	case json_type_string:
-		rc = json_object_get_string_len(json) == 0;
-		break;
+		return jsonPruneScalar(json, result);
 	case json_type_array:
-	{
-		int i;
-		int arrayLen = json_object_array_length(json);
-		for (i = 0 ; i < arrayLen ; ++i) {
-			val = json_object_array_get_idx(json, i);
-			if ((rc = jsonSkipEmpty(val)) > 0) {
-				/* delete the empty item and reset the index and arrayLen */
-				json_object_array_del_idx(json, i--);
-				arrayLen = json_object_array_length(json);
-			} else if (rc < 0) {
-				goto finalize_it;
-			}
-		}
-		rc = json_object_array_length(json) == 0;
-		break;
-	}
+		return jsonPruneArray(json, result);
 	case json_type_object:
-	{
-		struct json_object_iterator it = json_object_iter_begin(json);
-		struct json_object_iterator itEnd = json_object_iter_end(json);
-		while (!json_object_iter_equal(&it, &itEnd)) {
-			val = json_object_iter_peek_value(&it);
-			if ((rc = jsonSkipEmpty(val)) > 0) {
-				json_object_object_del(json, json_object_iter_peek_name(&it));
-			} else if (rc < 0) {
-				goto finalize_it;
-			}
-			json_object_iter_next(&it);
-		}
-		rc = json_object_object_length(json) == 0;
-	}
+		return jsonPruneObject(json, result);
 	case json_type_null:
 	case json_type_boolean:
 	case json_type_double:
 	case json_type_int:
-	default: break;
+	default:
+		return jsonPruneScalar(json, result);
 	}
-finalize_it:
-	return rc;
 }
 
 /* 
@@ -2520,7 +2675,7 @@ PARSER_Parse(JSON)
 	if((tokener = json_tokener_new()) == NULL)
 		goto done;
 
-	struct json_object *const json
+	struct json_object *json
 		= json_tokener_parse_ex(tokener, npb->str+i, (int) (npb->strLen - i));
 
 	if(json == NULL)
@@ -2534,18 +2689,19 @@ PARSER_Parse(JSON)
 		json_object_put(json);
 	} else {
 		if (data && data->skipempty) {
-			int rc = jsonSkipEmpty(json);
+			struct json_object *pruned = NULL;
+			int rc = jsonPruneEmpty(json, &pruned);
+			json_object_put(json);
 			if (rc < 0) {
-				json_object_put(json);
 				FAIL(LN_WRONGPARSER);
 			} else if (rc > 0) {
 				/* 
 				 * json value is empty.
 				 * E.g., {"message":""}, {"message":[]}, {"message":{}}
 				 */
-				json_object_put(json);
 				FAIL(0);
 			}
+			json = pruned;
 		}
 		*value = json;
 	}
@@ -2560,7 +2716,7 @@ PARSER_Construct(JSON)
 	int r = 0;
 	struct json_object *ed;
 	struct data_JSON *data = NULL;
-	char *flag;
+	const char *flag;
 
 	if(json == NULL)
 		goto done;
@@ -2800,12 +2956,12 @@ struct data_NameValue {
  */
 PARSER_Parse(NameValue)
 	size_t i = *offs;
-        struct data_NameValue *const data = (struct data_NameValue*) pdata;
-        const char sep = data->sep;
-        const char ass = data->ass;
+	struct data_NameValue *const data = (struct data_NameValue*) pdata;
+	const char sep = (data != NULL) ? data->sep : 0;
+	const char ass = (data != NULL) ? data->ass : 0;
 
-        LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x)"
-			,sep, sep, ass, ass);
+	LN_DBGPRINTF(npb->ctx, "in parse_NameValue, separator is '%c'(0x%02x) assignator is '%c'(0x%02x)"
+		,sep, sep, ass, ass);
 
 	/* stage one */
 	while(i < npb->strLen) {
