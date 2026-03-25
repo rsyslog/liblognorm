@@ -10,9 +10,17 @@ add_rule 'rule=:[ %{"name":"f", "type":"checkpoint-lea", "terminator": "]"}%]'
 execute '[ tcp_flags: RST-ACK; src: 192.168.0.1; ]'
 assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
 
+execute '[ tcp_flags: RST-ACK; src: 192.168.0.1 ]'
+assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
+
 # Newest Checkpoint format
 execute '[ tcp_flags:"RST-ACK"; src:"192.168.0.1"; ]'
 assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
 
-cleanup_tmp_files
+execute '[ tcp_flags:"RST-ACK"; src:"192.168.0.1" ]'
+assert_output_json_eq '{ "f": { "tcp_flags": "RST-ACK", "src": "192.168.0.1" } }'
 
+execute '[ key:"value with \"escaped quote\""; path:"C:\\Windows\\System32" ]'
+assert_output_json_eq '{ "f": { "key": "value with \\\"escaped quote\\\"", "path": "C:\\\\Windows\\\\System32" } }'
+
+cleanup_tmp_files
