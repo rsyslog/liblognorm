@@ -146,7 +146,7 @@ eventHasTag(struct json_object *json, const char *tag)
 	struct json_object *tagbucket, *tagObj;
 	int i;
 	const char *tagCstr;
-	
+
 	if (tag == NULL)
 		return 1;
 	if (json_object_object_get_ex(json, "event.tags", &tagbucket)) {
@@ -167,7 +167,6 @@ eventHasTag(struct json_object *json, const char *tag)
 static void
 amendLineNbr(json_object *const json, const int line_nbr)
 {
-	
 	if(addErrLineNbr) {
 		struct json_object *jval;
 		jval = json_object_new_int(line_nbr);
@@ -215,45 +214,103 @@ normalize(void)
 {
 	FILE *fp = stdin;
 	char *line = NULL;
+	size_t line_cap = 0;
+	ssize_t line_len;
 	struct json_object *json = NULL;
 	long long unsigned numParsed = 0;
 	long long unsigned numUnparsed = 0;
 	long long unsigned numWrongTag = 0;
 	char *mandatoryTagCstr = NULL;
 	int line_nbr = 0;	/* must be int to keep compatible with older json-c */
+	int turbo_mode = 0;
+
+	if (ln_getCtxOpts(ctx) & LN_CTXOPT_TURBO) {
+		turbo_mode = 1;
+	}
+	if(verbose > 0) fprintf(stderr, "Turbo mode: '%d'\n", turbo_mode);
 
 	if (mandatoryTag != NULL) {
 		mandatoryTagCstr = es_str2cstr(mandatoryTag, NULL);
 	}
 
-	while((line = read_line(fp)) != NULL) {
-		++line_nbr;
-		if(verbose > 0) fprintf(stderr, "To normalize: '%s'\n", line);
-		ln_normalize(ctx, line, strlen(line), &json);
-		if(json != NULL) {
-			if(eventHasTag(json, mandatoryTagCstr)) {
-				struct json_object *dummy;
-				const int parsed = !json_object_object_get_ex(json,
-					"unparsed-data", &dummy);
-				if(parsed) {
-					numParsed++;
-					if(recOutput & OUTPUT_PARSED_RECS) {
-						outputEvent(json, line);
+	if (turbo_mode) {
+		/* --- TURBO FAST PATH --- */
+		while ((line_len = getline(&line, &line_cap, fp)) != -1) {
+			char *json_str;
+			size_t json_len;
+			int r;
+
+			++line_nbr;
+
+			/* Strip trailing newline/CR */
+			while (line_len > 0 &&
+			       (line[line_len - 1] == '\n' ||
+				line[line_len - 1] == '\r')) {
+				line[--line_len] = '\0';
+			}
+			if (line_len == 0) continue;
+
+			if(verbose > 0)
+				fprintf(stderr, "To normalize: '%s'\n", line);
+
+			json_str = NULL;
+			json_len = 0;
+			r = ln_normalize_to_str(ctx, line,
+				(size_t)line_len, &json_str, &json_len);
+
+			if (r == 0 && json_str) {
+				numParsed++;
+				if (recOutput & OUTPUT_PARSED_RECS) {
+					printf("%s\n", json_str);
+				}
+				free(json_str);
+			} else {
+				numUnparsed++;
+				if (recOutput & OUTPUT_UNPARSED_RECS) {
+					printf("{\"unparsed-data\":\"%s\"}\n",
+						line);
+				}
+			}
+		}
+		free(line);
+	} else {
+		/* --- LEGACY PATH --- */
+		while((line = read_line(fp)) != NULL) {
+			++line_nbr;
+			if(verbose > 0)
+				fprintf(stderr, "To normalize: '%s'\n", line);
+			ln_normalize(ctx, line, strlen(line), &json);
+			if(json != NULL) {
+				if(eventHasTag(json, mandatoryTagCstr)) {
+					struct json_object *dummy;
+					const int parsed =
+						!json_object_object_get_ex(
+						json, "unparsed-data",
+						&dummy);
+					if(parsed) {
+						numParsed++;
+						if(recOutput &
+						   OUTPUT_PARSED_RECS) {
+							outputEvent(json,
+								line);
+						}
+					} else {
+						numUnparsed++;
+						amendLineNbr(json, line_nbr);
+						if(recOutput &
+						   OUTPUT_UNPARSED_RECS) {
+							outputEvent(json,
+								line);
+						}
 					}
 				} else {
-					numUnparsed++;
-					amendLineNbr(json, line_nbr);
-					if(recOutput & OUTPUT_UNPARSED_RECS) {
-						outputEvent(json, line);
-					}
+					numWrongTag++;
 				}
-			} else {
-				numWrongTag++;
+				json_object_put(json);
+				json = NULL;
 			}
-			json_object_put(json);
-			json = NULL;
+			free(line);
 		}
-	free(line);
 	}
 	if(outputNbrUnparsed && numUnparsed > 0)
 		fprintf(stderr, "%llu unparsable entries\n", numUnparsed);
@@ -301,6 +358,10 @@ handle_generic_option(const char* opt) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE);
 	} else if (strcmp("addRuleLocation", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE_LOCATION);
+#ifdef ENABLE_TURBO
+	} else if (strcmp("turbo", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_TURBO);
+#endif
 	} else {
 		fprintf(stderr, "invalid -o option '%s'\n", opt);
 		exit(1);
@@ -325,6 +386,9 @@ fprintf(stderr,
 	"    -oaddRuleLocation Add location of matching rule to metadata\n"
 	"    -oaddExecPath Add exec_path attribute to output\n"
 	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
+#ifdef ENABLE_TURBO
+	"    -oturbo      Enable TurboVM fast path for JSON output\n"
+#endif
 	"    -p           Print back only if the message has been parsed successfully\n"
 	"    -P           Print back only if the message has NOT been parsed successfully\n"
 	"    -L           Add source file line number information to unparsed line output\n"

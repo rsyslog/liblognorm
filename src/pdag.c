@@ -26,6 +26,9 @@
 #include "internal.h"
 #include "parser.h"
 #include "helpers.h"
+#ifdef ENABLE_TURBO
+#include "turbo.h"
+#endif
 
 void ln_displayPDAGComponentAlternative(struct ln_pdag *dag, int level);
 void ln_displayPDAGComponent(struct ln_pdag *dag, int level);
@@ -1712,6 +1715,32 @@ done:
 #	ifdef	ADVANCED_STATS
 	--npb->astats.recursion_level;
 #	endif
+	return r;
+}
+
+int
+ln_normalize_to_str(ln_ctx ctx, const char *str, const size_t strLen,
+	char **json_str, size_t *json_len)
+{
+	int r;
+#ifdef ENABLE_TURBO
+	if(ln_turbo_is_available(ctx)) {
+		r = ln_turbo_normalize_to_str(ctx, str, strLen, json_str, json_len);
+		if(r == 0)
+			return 0;
+		ln_dbgprintf(ctx, "turbo normalize_to_str failed, fallback to walker");
+	}
+#endif
+	/* Fallback: recursive walker -> json_object -> string */
+	struct json_object *json = NULL;
+	r = ln_normalize(ctx, str, strLen, &json);
+	if(r == 0 && json != NULL) {
+		const char *rendered = json_object_to_json_string_ext(json,
+			JSON_C_TO_STRING_PLAIN);
+		*json_len = strlen(rendered);
+		*json_str = strdup(rendered);
+		json_object_put(json);
+	}
 	return r;
 }
 
