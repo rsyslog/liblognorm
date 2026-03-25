@@ -26,6 +26,12 @@ For a detailed breakdown of which files implement which concepts, see:
 - **Adding a new parser**: See `src/parser.c`. Use the `PARSER_Parse`, `PARSER_Construct`, etc. macros.
 - **Debugging**: The library has a debug callback system (`ln_setDebugCB`).
 
+## Parser Change Guidance
+1.  **Check the Whole Parser Family**: If you touch a parser implementation in `src/parser.c` or the legacy v1 parser files, search for the parser name in `tests/` and run all matching tests. This includes `*_jsoncnf.sh`, `*_v1.sh`, and terminator/edge-case variants when present.
+2.  **Watch for v1/v2 Split**: Some parser names exist in both the modern PDAG parser code (`src/parser.c`) and the legacy v1 parser code (`src/v1_parser.c`, `src/v1_samp.c`, or `src/v1_parser.h`). When changing parser behavior, ensure you have identified and validated all relevant code paths if they exist.
+3.  **Do Not Test During Relink**: Never run parser tests against `src/ln_test` while `make -C src ln_test` is still compiling or relinking. Wait for the build command to finish before executing any tests.
+4.  **Prefer Family Validation Over Single Repros**: A local reproduction for one failing sample is not sufficient validation for parser work. Run the full parser-specific test family before committing or opening a PR.
+
 ## Commit Rules
 1.  **Contextual Messages**: Commit messages must explain *why* a change was made, not just *what* changed. Relate changes to the project strategy (e.g., "AI first strategy") where applicable.
 2.  **Attribution**: All AI-assisted commits must include the following footer:
