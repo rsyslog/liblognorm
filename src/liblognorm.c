@@ -182,6 +182,29 @@ done:
 	return r;
 }
 
+/**
+ * Attempt TurboVM compilation after rulebase load.
+ * No-op when turbo is disabled or not requested.
+ */
+static void
+ln_tryTurboCompile(ln_ctx ctx, int load_result)
+{
+#ifdef ENABLE_TURBO
+	if(load_result == 0 && ctx->turbo != NULL && (ctx->opts & LN_CTXOPT_TURBO)) {
+		int r = ln_turbo_compile(ctx);
+		if(r != 0) {
+			ln_dbgprintf(ctx, "turbo VM compilation failed, "
+				"using recursive walker");
+		} else {
+			ln_dbgprintf(ctx, "turbo VM ready");
+		}
+	}
+#else
+	(void)ctx;
+	(void)load_result;
+#endif
+}
+
 int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
@@ -198,16 +221,7 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 	}
 
 	free((void*)tofree);
-#ifdef ENABLE_TURBO
-	if(r == 0 && ctx->turbo != NULL && (ctx->opts & LN_CTXOPT_TURBO)) {
-		int turbo_r = ln_turbo_compile(ctx);
-		if(turbo_r != 0) {
-			ln_dbgprintf(ctx, "turbo VM compilation failed, using recursive walker");
-		} else {
-			ln_dbgprintf(ctx, "turbo VM ready");
-		}
-	}
-#endif
+	ln_tryTurboCompile(ctx, r);
 done:
 	return r;
 }
@@ -225,16 +239,7 @@ ln_loadSamplesFromString(ln_ctx ctx, const char *string)
 	--ctx->include_level;
 	free((void*)tofree);
 	ctx->conf_file = NULL;
-#ifdef ENABLE_TURBO
-	if(r == 0 && ctx->turbo != NULL && (ctx->opts & LN_CTXOPT_TURBO)) {
-		int turbo_r = ln_turbo_compile(ctx);
-		if(turbo_r != 0) {
-			ln_dbgprintf(ctx, "turbo VM compilation failed, using recursive walker");
-		} else {
-			ln_dbgprintf(ctx, "turbo VM ready");
-		}
-	}
-#endif
+	ln_tryTurboCompile(ctx, r);
 done:
 	return r;
 }

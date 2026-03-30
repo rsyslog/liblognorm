@@ -146,7 +146,7 @@ eventHasTag(struct json_object *json, const char *tag)
 	struct json_object *tagbucket, *tagObj;
 	int i;
 	const char *tagCstr;
-
+	
 	if (tag == NULL)
 		return 1;
 	if (json_object_object_get_ex(json, "event.tags", &tagbucket)) {
@@ -167,6 +167,7 @@ eventHasTag(struct json_object *json, const char *tag)
 static void
 amendLineNbr(json_object *const json, const int line_nbr)
 {
+	
 	if(addErrLineNbr) {
 		struct json_object *jval;
 		jval = json_object_new_int(line_nbr);
@@ -267,8 +268,14 @@ normalize(void)
 			} else {
 				numUnparsed++;
 				if (recOutput & OUTPUT_UNPARSED_RECS) {
-					printf("{\"unparsed-data\":\"%s\"}\n",
-						line);
+					struct json_object *unp =
+						json_object_new_object();
+					json_object_object_add(unp,
+						"unparsed-data",
+						json_object_new_string(line));
+					printf("%s\n",
+						json_object_to_json_string(unp));
+					json_object_put(unp);
 				}
 			}
 		}
@@ -424,7 +431,7 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'V':
 			printVersion();
-			exit(1);
+			exit(0);
 			break;
 		case 'd': /* generate DOT file */
 			if(!strcmp(optarg, "")) {
