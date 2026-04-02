@@ -31,7 +31,7 @@
  *//*
  *
  * liblognorm - a fast samples-based log normalization library
- * Copyright 2010-2018 by Rainer Gerhards and Adiscon GmbH.
+ * Copyright 2010-2026 by Rainer Gerhards and Adiscon GmbH.
  *
  * Modified by Pavel Levshin (pavel@levshin.spb.ru) in 2013
  *
@@ -88,6 +88,20 @@
 
 #define FAIL(e) {r = (e); goto done;}
 
+/**
+ * @brief Convert an es_str_t to a null-terminated C string in-place.
+ *
+ * This function ensures that the internal buffer of the es_str_t has
+ * enough space for a null terminator and adds it at the end of the string.
+ * It returns a pointer to the internal buffer.
+ *
+ * @note The returned string is NOT a new allocation and MUST NOT be freed by the caller.
+ * The memory is still owned by the es_str_t object and will be freed when
+ * the es_str_t object is destroyed.
+ *
+ * @param[in,out] str Pointer to the es_str_t pointer to convert.
+ * @return A pointer to the null-terminated string, or NULL on error.
+ */
 static inline char* ln_es_str2cstr(es_str_t **str)
 {
 	int r = -1;
