@@ -215,7 +215,6 @@ normalize(void)
 {
 	FILE *fp = stdin;
 	char *line = NULL;
-	size_t line_cap = 0;
 	ssize_t line_len;
 	struct json_object *json = NULL;
 	long long unsigned numParsed = 0;
@@ -236,20 +235,15 @@ normalize(void)
 
 	if (turbo_mode) {
 		/* --- TURBO FAST PATH --- */
-		while ((line_len = getline(&line, &line_cap, fp)) != -1) {
+		while ((line = read_line(fp)) != NULL) {
 			char *json_str;
 			size_t json_len;
 			int r;
 
+			line_len = (ssize_t)strlen(line);
 			++line_nbr;
 
-			/* Strip trailing newline/CR */
-			while (line_len > 0 &&
-			       (line[line_len - 1] == '\n' ||
-				line[line_len - 1] == '\r')) {
-				line[--line_len] = '\0';
-			}
-			if (line_len == 0) continue;
+			if (line_len == 0) { free(line); line = NULL; continue; }
 
 			if(verbose > 0)
 				fprintf(stderr, "To normalize: '%s'\n", line);
@@ -278,8 +272,9 @@ normalize(void)
 					json_object_put(unp);
 				}
 			}
+			free(line);
+			line = NULL;
 		}
-		free(line);
 	} else {
 		/* --- LEGACY PATH --- */
 		while((line = read_line(fp)) != NULL) {

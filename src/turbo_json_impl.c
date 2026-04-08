@@ -405,6 +405,7 @@ write_field_value(const ln_fast_field_t *f, char *out, size_t outlen)
 	case LN_FTYPE_DOUBLE:
 		if (p + 32 >= end) return -1;
 		n = snprintf(p, end - p, "%.2f", f->v.d);
+		if (n < 0 || n >= (int)(end - p)) return -1;
 		return n;
 
 	case LN_FTYPE_BOOL:

@@ -208,8 +208,8 @@ emit_literal(compiler_t *comp, const char *lit, size_t len)
 {
 	ln_instr_t instr = {0};
 	instr.op = OP_LITERAL;
-	if (len >= sizeof(instr.data.str)) len = sizeof(instr.data.str) - 1;
-	instr.aux = (uint16_t)len;   /* AFTER truncation — aux must match memcpy'd bytes */
+	if (len >= sizeof(instr.data.str)) return 0;  /* too long for inline — fall back to v1 */
+	instr.aux = (uint16_t)len;
 	memcpy(instr.data.str, lit, len);
 	return emit(comp, &instr);
 }
@@ -226,14 +226,14 @@ emit_field(compiler_t *comp, ln_opcode_t op, const char *name, char delim)
 		if (name) {
 			size_t nlen = strlen(name);
 			if (nlen >= sizeof(instr.data.char_to.name))
-				nlen = sizeof(instr.data.char_to.name) - 1;
+				return 0;  /* field name too long — fall back to v1 */
 			memcpy(instr.data.char_to.name, name, nlen);
 		}
 	} else {
 		if (name) {
 			size_t nlen = strlen(name);
 			if (nlen >= sizeof(instr.data.str))
-				nlen = sizeof(instr.data.str) - 1;
+				return 0;  /* field name too long — fall back to v1 */
 			memcpy(instr.data.str, name, nlen);
 		}
 	}
@@ -270,7 +270,7 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
 		instr.op = OP_TAG;
 		size_t len = strlen(tagStr);
 		if (len >= sizeof(instr.data.str))
-			len = sizeof(instr.data.str) - 1;
+			return -1;  /* tag name too long — fall back to v1 */
 		memcpy(instr.data.str, tagStr, len);
 
 		if (emit(comp, &instr) == UINT32_MAX)
@@ -385,7 +385,7 @@ emit_ctx_push(compiler_t *comp, const char *name)
 	if (name) {
 		size_t nlen = strlen(name);
 		if (nlen >= sizeof(instr.data.str))
-			nlen = sizeof(instr.data.str) - 1;
+			return 0;  /* context name too long — fall back to v1 */
 		memcpy(instr.data.str, name, nlen);
 	}
 	return emit(comp, &instr);
@@ -542,7 +542,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		if (prs->name) {
 			size_t nlen = strlen(prs->name);
 			if (nlen >= sizeof(instr.data.char_to.name))
-				nlen = sizeof(instr.data.char_to.name) - 1;
+				return -1;  /* field name too long — fall back to v1 */
 			memcpy(instr.data.char_to.name, prs->name, nlen);
 		}
 		pc = emit(comp, &instr);
@@ -581,7 +581,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		if (prs->name) {
 			size_t nlen = strlen(prs->name);
 			if (nlen >= sizeof(instr.data.char_to.name))
-				nlen = sizeof(instr.data.char_to.name) - 1;
+				return -1;  /* field name too long — fall back to v1 */
 			memcpy(instr.data.char_to.name, prs->name, nlen);
 		}
 		pc = emit(comp, &instr);
