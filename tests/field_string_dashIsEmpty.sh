@@ -1,9 +1,11 @@
 #!/bin/bash
 # added 2021-06-07 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. $srcdir/exec.sh
+srcdir="${srcdir:-.}"
+# shellcheck disable=SC1091
+. "$srcdir"/exec.sh
 no_solaris10
-test_def $0 "quoted string with dash"
+test_def "$0" "quoted string with dash"
 
 add_rule 'version=2'
 add_rule 'rule=:%
@@ -20,8 +22,7 @@ add_rule 'rule=:%
 	 %'
 
 execute '"-"'
-assert_output_json_eq '{ "str": "\"-\""}'
+assert_output_json_eq '{ "str": "-"}'
 
 
 cleanup_tmp_files
-
