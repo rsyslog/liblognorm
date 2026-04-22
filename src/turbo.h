@@ -223,18 +223,6 @@ typedef struct ln_fast_result_snapshot_s ln_fast_result_snapshot_t;
  */
 ln_fast_result_snapshot_t *ln_turbo_snapshot_result(ln_ctx ctx);
 
-/**
- * Get the result from a snapshot (for field access).
- * Usable with all ln_fast_result_* accessor functions.
- */
-const ln_fast_result_t *
-ln_fast_result_snapshot_get(const ln_fast_result_snapshot_t *snap);
-
-/**
- * Free a snapshot (single free, NULL-safe).
- */
-void ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
-
 /*============================================================================
  * Statistics
  *============================================================================*/

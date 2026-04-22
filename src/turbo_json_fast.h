@@ -17,32 +17,6 @@
 extern "C" {
 #endif
 
-/**
- * @brief Estimate JSON output size.
- */
-size_t ln_fast_json_estimate(const ln_fast_result_t *r);
-
-/**
- * @brief Serialize to JSON string.
- *
- * Creates nested objects from dotted field names:
- * "timestamp_netscaler.day" -> {"timestamp_netscaler": {"day": ...}}
- *
- * @param r      Result to serialize
- * @param buf    Output buffer
- * @param buflen Buffer size
- * @param outlen Receives actual length (may be NULL)
- * @return 0 on success, -1 if buffer too small
- */
-int ln_fast_to_json(const ln_fast_result_t *r,
-					char *buf, size_t buflen, size_t *outlen);
-
-/**
- * @brief Allocating version.
- */
-int ln_fast_to_json_alloc(const ln_fast_result_t *r,
-						  char **json_str, size_t *json_len);
-
 #ifdef __cplusplus
 }
 #endif
