@@ -34,6 +34,9 @@
 #include "samp.h"
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"
+#ifdef ENABLE_TURBO
+#include "turbo.h"
+#endif
 
 #define CHECK_CTX \
 	if(ctx->objID != LN_ObjID_CTX) { \
@@ -90,6 +93,11 @@ ln_initCtx(void)
 		goto done;
 	}
 
+#ifdef ENABLE_TURBO
+	/* Turbo ctx is deferred until LN_CTXOPT_TURBO is set via ln_setCtxOpts() */
+	ctx->turbo = NULL;
+#endif
+
 done:
 	return ctx;
 }
@@ -97,6 +105,19 @@ done:
 void
 ln_setCtxOpts(ln_ctx ctx, const unsigned opts) {
 	ctx->opts |= opts;
+#ifdef ENABLE_TURBO
+	/* Lazy-init turbo context on first LN_CTXOPT_TURBO request */
+	if((opts & LN_CTXOPT_TURBO) && ctx->turbo == NULL) {
+		ctx->turbo = ln_turbo_ctx_init();
+		/* Non-fatal if NULL — will fall back to recursive walker */
+	}
+#endif
+}
+
+unsigned
+ln_getCtxOpts(ln_ctx ctx)
+{
+	return ctx->opts;
 }
 
 
@@ -109,6 +130,12 @@ ln_exitCtx(ln_ctx ctx)
 
 	ln_dbgprintf(ctx, "exitCtx %p", ctx);
 	ctx->objID = LN_ObjID_None; /* prevent double free */
+#ifdef ENABLE_TURBO
+	if(ctx->turbo != NULL) {
+		ln_turbo_ctx_free(ctx->turbo);
+		ctx->turbo = NULL;
+	}
+#endif
 	/* support for old cruft */
 	if(ctx->ptree != NULL)
 		ln_deletePTree(ctx->ptree);
@@ -155,6 +182,29 @@ done:
 	return r;
 }
 
+/**
+ * Attempt TurboVM compilation after rulebase load.
+ * No-op when turbo is disabled or not requested.
+ */
+static void
+ln_tryTurboCompile(ln_ctx ctx, int load_result)
+{
+#ifdef ENABLE_TURBO
+	if(load_result == 0 && ctx->turbo != NULL && (ctx->opts & LN_CTXOPT_TURBO)) {
+		int r = ln_turbo_compile(ctx);
+		if(r != 0) {
+			ln_dbgprintf(ctx, "turbo VM compilation failed, "
+				"using recursive walker");
+		} else {
+			ln_dbgprintf(ctx, "turbo VM ready");
+		}
+	}
+#else
+	(void)ctx;
+	(void)load_result;
+#endif
+}
+
 int
 ln_loadSamples(ln_ctx ctx, const char *file)
 {
@@ -171,6 +221,7 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 	}
 
 	free((void*)tofree);
+	ln_tryTurboCompile(ctx, r);
 done:
 	return r;
 }
@@ -188,6 +239,7 @@ ln_loadSamplesFromString(ln_ctx ctx, const char *string)
 	--ctx->include_level;
 	free((void*)tofree);
 	ctx->conf_file = NULL;
+	ln_tryTurboCompile(ctx, r);
 done:
 	return r;
 }

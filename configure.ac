@@ -172,6 +172,39 @@ AC_ARG_ENABLE(tools,
 )
 AM_CONDITIONAL(ENABLE_TOOLS, test x$enable_tools = xyes)
 
+# TurboVM bytecode engine with SIMD acceleration
+AC_ARG_ENABLE(turbo,
+        [AS_HELP_STRING([--enable-turbo],[Enable TurboVM bytecode engine (SIMD-accelerated) @<:@default=no@:>@])],
+        [case "${enableval}" in
+         yes) enable_turbo="yes" ;;
+          no) enable_turbo="no" ;;
+           *) AC_MSG_ERROR(bad value ${enableval} for --enable-turbo) ;;
+         esac],
+        [enable_turbo=no]
+)
+if test "x$enable_turbo" = "xyes"; then
+        AC_DEFINE(ENABLE_TURBO, 1, [Enable TurboVM bytecode engine.])
+        FEATURE_TURBO=1
+        case "$host_cpu" in
+            x86_64|amd64)
+                TURBO_CFLAGS="-msse4.2"
+                AC_DEFINE([LN_SIMD_SSE42], [1], [x86-64 SSE4.2 available])
+                ;;
+            aarch64|arm64)
+                TURBO_CFLAGS="-march=armv8-a+simd"
+                AC_DEFINE([LN_SIMD_NEON], [1], [ARM64 NEON available])
+                ;;
+            *)
+                TURBO_CFLAGS=""
+                ;;
+        esac
+        AC_SUBST(TURBO_CFLAGS)
+else
+        FEATURE_TURBO=0
+fi
+AC_SUBST(FEATURE_TURBO)
+AM_CONDITIONAL(ENABLE_TURBO, test x$enable_turbo = xyes)
+
 AC_CONFIG_FILES([Makefile \
 		lognorm.pc \
 		compat/Makefile \
@@ -195,3 +228,4 @@ echo "Valgrind enabled:            $enable_valgrind"
 echo "Debug mode enabled:          $enable_debug"
 echo "Tools enabled:               $enable_tools"
 echo "Docs enabled:                $enable_docs"
+echo "TurboVM enabled:             $enable_turbo"

@@ -1063,10 +1063,16 @@ static int
 checkVersion(FILE *const fp)
 {
 	char buf[64];
+	size_t len;
 
 	if(fgets(buf, sizeof(buf), fp) == NULL)
 		return -1;
-	if(!strcmp(buf, "version=2\n")) {
+	/* Strip trailing CR/LF for CRLF tolerance (rulebase files may
+	 * pass through git autocrlf or Windows editors). */
+	len = strlen(buf);
+	while(len > 0 && (buf[len-1] == '\n' || buf[len-1] == '\r'))
+		buf[--len] = '\0';
+	if(!strcmp(buf, "version=2")) {
 		return 2;
 	} else {
 		return 1;

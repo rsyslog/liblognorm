@@ -145,6 +145,7 @@ int ln_exitCtx(ln_ctx ctx);
 					          (not just in error case) */
 #define LN_CTXOPT_ADD_RULE		0x08 /**< add mockup rule */
 #define LN_CTXOPT_ADD_RULE_LOCATION	0x10 /**< add rule location (file, lineno) to metadata */
+#define LN_CTXOPT_TURBO			0x20 /**< enable TurboVM parsing */
 /**
  * Set options on ctx.
  *
@@ -263,5 +264,20 @@ int ln_loadSamplesFromString(ln_ctx ctx, const char *string);
  * @return Returns zero on success, something else otherwise.
  */
 int ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_object **json_p);
+
+/**
+ * Get current context options bitmask.
+ * @return current options
+ */
+unsigned ln_getCtxOpts(ln_ctx ctx);
+
+/**
+ * Normalize and produce JSON string directly.
+ * Uses TurboVM fast-path when available, falls back to recursive walker.
+ * Caller must free *json_str via free() on success.
+ * @return 0 on success
+ */
+int ln_normalize_to_str(ln_ctx ctx, const char *str, const size_t strLen,
+                        char **json_str, size_t *json_len);
 
 #endif /* #ifndef LOGNORM_H_INCLUDED */

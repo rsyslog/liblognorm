@@ -1,5 +1,18 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-??-??
+- add TurboVM bytecode engine for high-performance log parsing
+  Compiles rulebases into optimized bytecode executed by a linear VM
+  with SIMD-accelerated parsing primitives (SSE4.2 on x86-64, NEON
+  on ARM64, scalar fallback for other architectures).
+  Key features:
+  - arena-based allocation (single malloc per message, O(1) reset)
+  - fast result structure (typed fields, zero JSON overhead)
+  - snapshot support for async consumers (rsyslog worker queues)
+  - automatic fallback to recursive walker on compilation failure
+  New API: ln_turbo_normalize(), ln_fast_result_get_string/int(),
+  ln_turbo_snapshot_result(). New context option: LN_CTXOPT_TURBO.
+  Enabled via: ./configure --enable-turbo
+  Contributed by Jérémie Jourdin / Advens.
 - pcre2 used instead of pcre (which is no longer supported)
 - add a parameter skipempty to the json field type.
   If skipempty is set as follows, empty json objects are dropped from

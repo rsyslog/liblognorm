@@ -61,6 +61,9 @@ struct ln_ctx_s {
 			       * building.
 			       */
 	unsigned opts; /**< specific options, see LN_CTXOPTS_* defines */
+#ifdef ENABLE_TURBO
+	void *turbo; /**< TurboVM context (ln_turbo_ctx_t), NULL if disabled */
+#endif
 	struct ln_type_pdag *type_pdags; /**< array of our type pdags */
 	int nTypes;		 /**< number of type pdags */
 	int version;		/**< 1 or 2, depending on rulebase/algo version */

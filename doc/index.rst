@@ -22,6 +22,7 @@ Contents:
     configuration
     sample_rulebase
     lognormalizer
+    turbo
     libraryapi
     internals
     pdag_implementation_model

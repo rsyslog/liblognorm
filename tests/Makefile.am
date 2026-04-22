@@ -2,8 +2,8 @@ check_PROGRAMS = json_eq err_callback_cookie
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
 json_eq_SOURCES = $(json_eq_self_sources)
-json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
-json_eq_LDADD = $(JSON_C_LIBS) -lm -lestr
+json_eq_CPPFLAGS =  $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+json_eq_LDADD = $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
 json_eq_LDFLAGS = -no-install
 
 err_callback_cookie_SOURCES = err_callback_cookie.c
@@ -178,4 +178,35 @@ EXTRA_DIST = exec.sh \
 
 if ENABLE_REGEXP
 TESTS += $(REGEXP_TESTS)
+endif
+
+if ENABLE_TURBO
+check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
+
+turbo_test_arena_SOURCES = turbo_test_arena.c
+turbo_test_arena_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_arena_LDADD = ../src/liblognorm.la
+turbo_test_arena_LDFLAGS = -no-install
+
+turbo_test_result_SOURCES = turbo_test_result.c
+turbo_test_result_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_result_LDADD = ../src/liblognorm.la
+turbo_test_result_LDFLAGS = -no-install
+
+turbo_test_simd_SOURCES = turbo_test_simd.c
+turbo_test_simd_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS) $(TURBO_CFLAGS)
+turbo_test_simd_LDADD = ../src/liblognorm.la
+turbo_test_simd_LDFLAGS = -no-install
+
+turbo_test_vm_SOURCES = turbo_test_vm.c
+turbo_test_vm_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_vm_LDADD = ../src/liblognorm.la
+turbo_test_vm_LDFLAGS = -no-install
+
+turbo_test_json_SOURCES = turbo_test_json.c
+turbo_test_json_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_json_LDADD = ../src/liblognorm.la -lm
+turbo_test_json_LDFLAGS = -no-install
+
+TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
 endif
