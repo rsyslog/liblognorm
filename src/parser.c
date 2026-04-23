@@ -2811,10 +2811,8 @@ parseNameValue(npb_t *const npb,
 		while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
 			i++;
 	}
-	if(i >= npb->strLen)
-		goto done;
 
-	char quoting = npb->str[i];
+	char quoting = (i < npb->strLen) ? npb->str[i] : 0;
 	if(i < npb->strLen && (quoting == '"' || quoting == '\''))
 		i++;
 	else

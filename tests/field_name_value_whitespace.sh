@@ -24,6 +24,9 @@ assert_output_json_eq '{ "f": { "name1": "value1", "name2": "value2", "name3": "
 execute 'name1:   , name2 : value2'
 assert_output_json_eq '{ "f": { "name1": "", "name2": "value2" } }'
 
+execute 'name1:   '
+assert_output_json_eq '{ "f": { "name1": "" } }'
+
 # Check old behavior (default)
 reset_rules
 add_rule 'version=2'
