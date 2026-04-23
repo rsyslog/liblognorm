@@ -2,9 +2,11 @@
 # added 2023-02-14 by Kevin Guillemot
 # This file is part of the liblognorm project, released under ASL 2.0
 
-. $srcdir/exec.sh
+srcdir="${srcdir:-.}"
+# shellcheck disable=SC1091
+. "$srcdir"/exec.sh
 
-test_def $0 "Repeat with one parser named dot"
+test_def "$0" "Repeat with one parser named dot"
 add_rule 'version=2'
 add_rule 'rule=:a %{"name":"numbers", "type":"repeat",
 			"parser":[

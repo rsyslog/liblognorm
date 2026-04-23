@@ -64,6 +64,7 @@ TESTS_SHELLSCRIPTS = \
 	repeat_mismatch_in_while.sh \
 	repeat_while_alternative.sh \
 	repeat_alternative_nested.sh \
+	repeat_name_dot.sh \
 	parser_prios.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \
