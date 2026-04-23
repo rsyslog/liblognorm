@@ -1,9 +1,11 @@
 #!/bin/bash
 # added 2021-11-14 by Theo Bertin
 # This file is part of the liblognorm project, released under ASL 2.0
-. $srcdir/exec.sh
+srcdir="${srcdir:-.}"
+# shellcheck disable=SC1091
+. "$srcdir"/exec.sh
 
-test_def $0 "XML field"
+test_def "$0" "XML field"
 add_rule 'version=2'
 add_rule 'rule=:%field:xml%'
 
@@ -12,6 +14,9 @@ assert_output_json_eq '{ "field": { "note": "This is a simple note"} }'
 
 execute '<?xml version="1.0" encoding="UTF-8"?><note><one>first note</one><two>second note</two></note>'
 assert_output_json_eq '{ "field": { "note": { "one": "first note", "two": "second note" } } }'
+
+execute '<?xml version="1.0" encoding="UTF-8"?><note/>'
+assert_output_json_eq '{ "field": { "note": "" } }'
 
 # execute '@cee: {"f1": "1", "f2": 2}'
 # assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
@@ -33,4 +38,3 @@ assert_output_json_eq '{ "originalmsg": "<?xml version=\"1.0\" encoding=\"UTF-8\
 
 
 cleanup_tmp_files
-
