@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <time.h>
 
 #include "liblognorm.h"
@@ -43,6 +44,14 @@
 #include "samp.h"
 #include "helpers.h"
 
+#ifdef FEATURE_REGEXP
+#include <pcre.h>
+#endif
+
+#ifdef FEATURE_XML
+#include <libxml/xmlmemory.h>
+#include <libxml/parser.h>
+#endif
 /* how should output values be formatted? */
 enum FMT_MODE {
 	FMT_AS_STRING = 0,
@@ -69,6 +78,74 @@ hParseInt(const unsigned char **buf, size_t *lenBuf)
 	*lenBuf = len;
 	return i;
 }
+
+
+#ifdef FEATURE_XML
+static int
+xmlNodeHasElementChildren(xmlNode *node)
+{
+	for(xmlNode *child = node->children ; child != NULL ; child = child->next) {
+		if(child->type == XML_ELEMENT_NODE)
+			return 1;
+	}
+
+	return 0;
+}
+
+static int
+xmlNodeToJSON(xmlNode *node, struct json_object **out)
+{
+	xmlChar *content = NULL;
+	struct json_object *json = NULL;
+
+	*out = NULL;
+
+	if(!xmlNodeHasElementChildren(node)) {
+		content = xmlNodeGetContent(node);
+		json = json_object_new_string((const char *)
+			(content == NULL ? BAD_CAST "" : content));
+		if(json == NULL)
+			goto nomem;
+		*out = json;
+		json = NULL;
+		goto done;
+	}
+
+	json = json_object_new_object();
+	if(json == NULL)
+		goto nomem;
+	for(xmlNode *child = node->children ; child != NULL ; child = child->next) {
+		struct json_object *child_json = NULL;
+		int child_r;
+
+		if(child->type != XML_ELEMENT_NODE)
+			continue;
+
+		child_r = xmlNodeToJSON(child, &child_json);
+		if(child_r != 0) {
+			if(child_json != NULL)
+				json_object_put(child_json);
+			json_object_put(json);
+			json = NULL;
+			return child_r;
+		}
+		json_object_object_add(json, (const char *) child->name, child_json);
+	}
+
+	*out = json;
+	json = NULL;
+done:
+	if(content != NULL)
+		xmlFree(content);
+	if(json != NULL)
+		json_object_put(json);
+	return 0;
+nomem:
+	if(content != NULL)
+		xmlFree(content);
+	return LN_NOMEM;
+}
+#endif /* #ifdef FEATURE_XML */
 
 /* parser _parse interface
  *
@@ -2645,6 +2722,81 @@ jsonPruneEmpty(struct json_object *__restrict__ json,
 struct data_JSON {
 	int skipempty;
 };
+
+#ifdef FEATURE_XML
+/**
+ * Parse XML. This parser tries to find XML data inside a message.
+ * If it finds valid XML, it will extract it.
+ *
+ * Note: The XML Parser expects a string that begins with '<' and
+ * ends with '>'. whitespace or any other character at the
+ * beginning or at the end of the string will cause a parse failure
+ *
+ * Note: Is there is extra content after the XML content
+ * the parser will fail. A hack consist of finding the
+ * last '>' in the string and ignore the rest.
+ *
+ * added 2021-02-01 by jeremie.jourdin@advens.fr
+ */
+PARSER_Parse(XML)
+	xmlDocPtr doc = NULL;
+	xmlNodePtr root_element = NULL;
+	struct json_object *json = NULL;
+	struct json_object *root_json = NULL;
+	size_t newLen = 0;
+	const char *input = npb->str + *offs;
+
+	if(*offs >= npb->strLen || *input != '<')
+		goto done;
+
+	/* Preserve the longest-parsed-prefix semantics by only handing libxml2
+	 * the bounded XML-looking prefix that ends at the last '>' byte. */
+	for(size_t i = npb->strLen ; i > *offs ; --i) {
+		if(npb->str[i - 1] == '>') {
+			newLen = i - *offs;
+			break;
+		}
+	}
+	if(newLen == 0)
+		goto done;
+	if(newLen > INT_MAX)
+		goto done;
+
+	doc = xmlReadMemory(input, (int) newLen,
+		"liblognorm.xml", NULL,
+		XML_PARSE_NONET | XML_PARSE_NOERROR | XML_PARSE_NOWARNING);
+	if(doc == NULL)
+		goto done;
+
+	root_element = xmlDocGetRootElement(doc);
+	if(root_element == NULL || root_element->type != XML_ELEMENT_NODE)
+		goto done;
+
+	CHKN(json = json_object_new_object());
+	CHKR(xmlNodeToJSON(root_element, &root_json));
+	json_object_object_add(json, (const char *) root_element->name, root_json);
+	root_json = NULL;
+
+	*parsed = newLen;
+	r = 0;
+
+	if(value == NULL) {
+		json_object_put(json);
+		json = NULL;
+	} else {
+		*value = json;
+		json = NULL;
+	}
+done:
+	if(root_json != NULL)
+		json_object_put(root_json);
+	if(json != NULL)
+		json_object_put(json);
+	if(doc != NULL)
+		xmlFreeDoc(doc);
+	return r;
+}
+#endif /* #ifdef FEATURE_XML */
 /**
  * Parse JSON. This parser tries to find JSON data inside a message.
  * If it finds valid JSON, it will extract it. Extra data after the
