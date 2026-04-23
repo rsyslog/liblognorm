@@ -93,6 +93,7 @@ TESTS_SHELLSCRIPTS = \
 	field_mac48_jsoncnf.sh \
 	field_name_value.sh \
 	field_name_value_jsoncnf.sh \
+	field_name_value_whitespace.sh \
 	field_kernel_timestamp.sh \
 	field_kernel_timestamp_jsoncnf.sh \
 	field_whitespace.sh \
