@@ -1,4 +1,7 @@
 check_PROGRAMS = json_eq err_callback_cookie
+TESTS_TURBO_SHELLS = \
+	turbo_smoke.sh
+
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
 json_eq_SOURCES = $(json_eq_self_sources)
@@ -171,6 +174,7 @@ REGEXP_TESTS = \
 
 EXTRA_DIST = exec.sh \
 	$(TESTS_SHELLSCRIPTS) \
+	$(TESTS_TURBO_SHELLS) \
 	$(REGEXP_TESTS) \
 	err_callback_cookie.sh \
 	$(json_eq_self_sources) \
@@ -181,6 +185,8 @@ TESTS += $(REGEXP_TESTS)
 endif
 
 if ENABLE_TURBO
+TESTS += $(TESTS_TURBO_SHELLS)
+
 check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
 
 turbo_test_arena_SOURCES = turbo_test_arena.c

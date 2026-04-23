@@ -21,34 +21,6 @@
 extern "C" {
 #endif
 
-/**
- * @brief Estimate JSON output size.
- */
-size_t ln_fast_json_estimate(const ln_fast_result_t *r);
-
-/**
- * @brief Serialize result to JSON string.
- *
- * @param r       Result to serialize
- * @param buf     Output buffer
- * @param buflen  Buffer size
- * @param outlen  Receives actual length
- * @return 0 on success, -1 on error
- */
-int ln_fast_to_json(const ln_fast_result_t *r,
-					char *buf, size_t buflen, size_t *outlen);
-
-/**
- * @brief Serialize result to allocated JSON string.
- *
- * @param r        Result to serialize
- * @param json_str Receives allocated string (caller must free)
- * @param json_len Receives string length
- * @return 0 on success, -1 on error
- */
-int ln_fast_to_json_alloc(const ln_fast_result_t *r,
-						  char **json_str, size_t *json_len);
-
 #ifdef __cplusplus
 }
 #endif

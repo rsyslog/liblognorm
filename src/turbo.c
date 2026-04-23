@@ -405,8 +405,6 @@ emit_ctx_pop(compiler_t *comp)
 
 static int compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry);
 
-extern const char *ln_DataForDisplayLiteral(ln_ctx ctx, void *data);
-
 /* Forward declaration for name-value-list parser data (defined in parser.c) */
 struct data_NameValue {
 	char sep;   /* separator (between key/value pairs) */

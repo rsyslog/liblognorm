@@ -60,6 +60,42 @@ jobs:
           chmod +x devtools/run-build.sh
           devtools/devcontainer.sh --rm devtools/run-build.sh
 
+  turbo_compile:
+    name: turbo compile (${{ matrix.config }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        config: [gcc, clang]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run Turbo compile check
+        run: |
+          chmod -R go+rw .
+          export LIBLOGNORM_CONTAINER_UID=""
+          export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+          export LIBLOGNORM_CONFIGURE_OPTIONS_EXTRA='--enable-turbo'
+          export CFLAGS='-g'
+          case "${{ matrix.config }}" in
+          gcc)
+              export CC='gcc'
+              ;;
+          clang)
+              export CC='clang'
+              ;;
+          *)
+              echo "unknown configuration"
+              exit 1
+              ;;
+          esac
+          chmod +x devtools/run-build.sh
+          devtools/devcontainer.sh --rm devtools/run-build.sh
+
   CI:
     needs: compile
     if: ${{ needs.compile.result == 'success' }}
@@ -127,6 +163,59 @@ jobs:
           ubuntu_24_distcheck)
               export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
               export CI_CHECK_CMD='distcheck'
+              ;;
+          *)
+              echo "unknown configuration"
+              exit 1
+              ;;
+          esac
+          devtools/devcontainer.sh --rm devtools/run-ci.sh
+
+      - name: Show error logs
+        if: ${{ failure() || cancelled() }}
+        run: |
+          devtools/gather-check-logs.sh
+          cat failed-tests.log
+
+  turbo_CI:
+    needs: turbo_compile
+    if: ${{ needs.turbo_compile.result == 'success' }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [ubuntu_24_turbo, ubuntu_24_asan_turbo]
+    name: ${{ matrix.config }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Run Turbo container CI pipeline
+        run: |
+          chmod -R go+rw .
+          export LIBLOGNORM_CONTAINER_UID=""
+          export LIBLOGNORM_CONFIGURE_OPTIONS_EXTRA='--enable-turbo'
+          export CFLAGS='-g'
+          export LDFLAGS=''
+          export CC='gcc'
+          export USE_AUTO_DEBUG='off'
+          export CI_MAKE_CHECK_EXTRA='TESTSUITEFLAGS=--stop'
+          export CI_CHECK_CMD='check'
+          case "${{ matrix.config }}" in
+          ubuntu_24_turbo)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              ;;
+          ubuntu_24_asan_turbo)
+              export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
+              export CC='clang'
+              export CFLAGS="-fstack-protector -D_FORTIFY_SOURCE=2 \
+                     -fsanitize=address -fsanitize-address-use-after-scope \
+                     -g -O1 -fno-omit-frame-pointer -fno-color-diagnostics"
+              export LDFLAGS='-fsanitize=address'
+              export ASAN_OPTIONS='abort_on_error=1:symbolize=1:detect_leaks=0'
               ;;
           *)
               echo "unknown configuration"
