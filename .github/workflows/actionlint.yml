@@ -7,12 +7,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint:
+    name: actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
       - name: Lint GitHub Actions workflows
-        uses: reviewdog/action-actionlint@v1
+        uses: reviewdog/action-actionlint@e0207a28405ecad11953ba625a95d92f7889572a # v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          filter_mode: file
+          fail_level: any
