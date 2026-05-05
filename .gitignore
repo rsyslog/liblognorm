@@ -48,3 +48,6 @@ doc/_build/
 *.la
 *.lo
 *.o
+
+# Local machine-specific Codex notes
+AGENTS.local.md
