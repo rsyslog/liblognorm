@@ -20,6 +20,7 @@ jobs:
   zizmor:
     name: zizmor
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -33,4 +34,7 @@ jobs:
         with:
           advanced-security: false
           annotations: true
+          inputs: .github
+          online-audits: false
           persona: auditor
+          version: v1.24.1
