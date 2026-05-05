@@ -42,6 +42,7 @@ TESTS_SHELLSCRIPTS = \
 	usrdef_ipaddr_dotdot2.sh \
 	usrdef_ipaddr_dotdot3.sh \
 	usrdef_nested_segfault.sh \
+	rule_empty_tag_segfault.sh \
 	missing_line_ending.sh \
 	lognormalizer-invld-call.sh \
 	string_rb_simple.sh \
