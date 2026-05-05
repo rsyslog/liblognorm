@@ -29,16 +29,18 @@ permissions:
 
 jobs:
   lint:
+    name: yamllint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          persist-credentials: false
           fetch-depth: 2
 
       - name: Identify changed YAML files
         id: changed
-        uses: tj-actions/changed-files@v46
+        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46
         with:
           separator: "\n"
           files: |
@@ -51,8 +53,10 @@ jobs:
 
       - name: Run yamllint
         if: steps.changed.outputs.any_changed == 'true'
+        env:
+          CHANGED_YAML_FILES: ${{ steps.changed.outputs.all_changed_files }}
         run: |
-          printf '%s\n' '${{ steps.changed.outputs.all_changed_files }}' | sed 's/\\$//' > changed-yaml-files.txt
+          printf '%s\n' "$CHANGED_YAML_FILES" | sed 's/\\$//' > changed-yaml-files.txt
           mapfile -t files < changed-yaml-files.txt
           yamllint \
             -d '{extends: relaxed, rules: {line-length: {max: 120}}}' \

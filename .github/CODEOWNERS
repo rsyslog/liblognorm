@@ -1,0 +1,7 @@
+# Security-sensitive repository metadata
+/.github/CODEOWNERS @rgerhards @alorbach
+/.gitmodules @rgerhards @alorbach
+/.gitattributes @rgerhards @alorbach
+
+# CI workflows
+/.github/workflows/ @rgerhards @alorbach

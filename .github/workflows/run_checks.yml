@@ -24,6 +24,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
   compile:
     name: compile (${{ matrix.config }})
@@ -37,15 +39,19 @@ jobs:
         config: [gcc, clang]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Run compile check
+        env:
+          MATRIX_CONFIG: ${{ matrix.config }}
         run: |
           chmod -R go+rw .
           export LIBLOGNORM_CONTAINER_UID=""
           export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
           export CFLAGS='-g'
-          case "${{ matrix.config }}" in
+          case "$MATRIX_CONFIG" in
           gcc)
               export CC='gcc'
               ;;
@@ -72,16 +78,20 @@ jobs:
         config: [gcc, clang]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Run Turbo compile check
+        env:
+          MATRIX_CONFIG: ${{ matrix.config }}
         run: |
           chmod -R go+rw .
           export LIBLOGNORM_CONTAINER_UID=""
           export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
           export LIBLOGNORM_CONFIGURE_OPTIONS_EXTRA='--enable-turbo'
           export CFLAGS='-g'
-          case "${{ matrix.config }}" in
+          case "$MATRIX_CONFIG" in
           gcc)
               export CC='gcc'
               ;;
@@ -114,9 +124,13 @@ jobs:
     name: ${{ matrix.config }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Run container CI pipeline
+        env:
+          MATRIX_CONFIG: ${{ matrix.config }}
         run: |
           chmod -R go+rw .
           export LIBLOGNORM_CONTAINER_UID=""
@@ -126,7 +140,7 @@ jobs:
           export USE_AUTO_DEBUG='off'
           export CI_MAKE_CHECK_EXTRA='TESTSUITEFLAGS=--stop'
           export CI_CHECK_CMD='check'
-          case "${{ matrix.config }}" in
+          case "$MATRIX_CONFIG" in
           centos_8)
               export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_centos:8'
               ;;
@@ -191,9 +205,13 @@ jobs:
     name: ${{ matrix.config }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Run Turbo container CI pipeline
+        env:
+          MATRIX_CONFIG: ${{ matrix.config }}
         run: |
           chmod -R go+rw .
           export LIBLOGNORM_CONTAINER_UID=""
@@ -204,7 +222,7 @@ jobs:
           export USE_AUTO_DEBUG='off'
           export CI_MAKE_CHECK_EXTRA='TESTSUITEFLAGS=--stop'
           export CI_CHECK_CMD='check'
-          case "${{ matrix.config }}" in
+          case "$MATRIX_CONFIG" in
           ubuntu_24_turbo)
               export LIBLOGNORM_DEV_CONTAINER='rsyslog/rsyslog_dev_base_ubuntu:24.04'
               ;;
@@ -254,19 +272,21 @@ jobs:
     name: ${{ matrix.arch }} CI (${{ matrix.use_qemu && 'QEMU' || 'native, asan' }})
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU for ${{ matrix.arch }} emulation
         if: ${{ matrix.use_qemu }}
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: ${{ matrix.qemu_platform }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build ${{ matrix.arch }} dev image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: devtools/ci/Dockerfile.arm
@@ -277,16 +297,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=arm-dev-${{ matrix.arch }}
 
       - name: Run ${{ matrix.arch }} CI pipeline
+        env:
+          MATRIX_ARCH: ${{ matrix.arch }}
+          MATRIX_PLATFORM: ${{ matrix.platform }}
+          WORKSPACE_PATH: ${{ github.workspace }}
         run: |
           chmod -R go+rw .
-          docker run --rm --platform ${{ matrix.platform }} \
-            -e ARCH=${{ matrix.arch }} \
+          docker run --rm --platform "$MATRIX_PLATFORM" \
+            -e ARCH="$MATRIX_ARCH" \
             --cap-add SYS_ADMIN \
             --cap-add SYS_PTRACE \
             --security-opt seccomp=unconfined \
-            -v "${{ github.workspace }}:/rsyslog" \
+            -v "$WORKSPACE_PATH:/rsyslog" \
             -w /rsyslog \
-            liblognorm-arm-dev:${{ matrix.arch }} bash -c '
+            "liblognorm-arm-dev:$MATRIX_ARCH" bash -c '
               set -e
               export CC=gcc
               export CFLAGS="-g -O1 -fno-omit-frame-pointer"
@@ -318,8 +342,9 @@ jobs:
     name: clang static analyzer
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Run clang static analyzer
@@ -342,7 +367,7 @@ jobs:
       - name: Upload clang static analyzer report
         if: ${{ always() }}
         id: upload-report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: clang-static-analyzer-report
           path: scan-build-report
@@ -351,8 +376,10 @@ jobs:
 
       - name: Show clang static analyzer report link
         if: ${{ always() }}
+        env:
+          ARTIFACT_URL: ${{ steps.upload-report.outputs.artifact-url }}
         run: |
-          artifact="${{ steps.upload-report.outputs.artifact-url }}"
+          artifact="$ARTIFACT_URL"
           cat >> "$GITHUB_STEP_SUMMARY" <<EOF
           Clang static analyzer HTML report (download):
           $artifact
@@ -362,8 +389,10 @@ jobs:
 
       - name: Fail if analysis failed
         if: ${{ steps.run-clang.outputs.exitcode != '0' }}
+        env:
+          ARTIFACT_URL: ${{ steps.upload-report.outputs.artifact-url }}
         run: |
-          artifact="${{ steps.upload-report.outputs.artifact-url }}"
+          artifact="$ARTIFACT_URL"
           echo "clang static analyzer detected issues:" >&2
           tail -n 200 clang-analyzer.log >&2 || true
           echo >&2
@@ -385,7 +414,9 @@ jobs:
     name: rsyslog integration
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
 
       - name: Run rsyslog integration tests
         env:

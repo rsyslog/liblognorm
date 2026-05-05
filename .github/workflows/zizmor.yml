@@ -1,0 +1,40 @@
+---
+name: GitHub Actions Security Analysis with zizmor
+
+on:
+  pull_request:
+  push:
+    branches: [ "main" ]
+    paths:
+      - ".github/**"
+  schedule:
+    - cron: "37 3 * * 2"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+  zizmor:
+    name: zizmor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@b1d7e1fb5de872772f31590499237e7cce841e8e # v0.5.3
+        with:
+          advanced-security: false
+          annotations: true
+          inputs: .github
+          online-audits: false
+          persona: auditor
+          version: v1.24.1
