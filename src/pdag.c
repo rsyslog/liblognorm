@@ -1375,6 +1375,14 @@ fixJSON(struct ln_pdag *dag,
 {
 	int r = LN_WRONGPARSER;
 
+	if(json == NULL) {
+		if(*value != NULL)
+			json_object_put(*value);
+		*value = NULL;
+		r = 0;
+		goto done;
+	}
+
 	if(prs->name ==  NULL) {
 		if (*value != NULL) {
 			/* Free the unneeded value */
