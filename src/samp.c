@@ -511,6 +511,8 @@ processTags(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t *poffs, str
 	while(i < lenBuf && buf[i] != ':') {
 		if(buf[i] == ',') {
 			/* end of this tag */
+			if(str == NULL)
+				goto done;
 			CHKR(addTagStrToBucket(ctx, str, tagBucket));
 			es_deleteStr(str);
 			str = NULL;
@@ -523,7 +525,7 @@ processTags(ln_ctx ctx, const char *buf, es_size_t lenBuf, es_size_t *poffs, str
 		++i;
 	}
 
-	if(buf[i] != ':')
+	if(i >= lenBuf || buf[i] != ':')
 		goto done;
 	++i; /* skip ':' */
 
