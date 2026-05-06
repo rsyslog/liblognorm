@@ -1,5 +1,10 @@
 # AI Agent Context for liblognorm
 
+## Local Overlay
+Before starting work in this repository, read `AGENTS.local.md` if it exists.
+That file contains machine- and workflow-specific instructions that are not
+duplicated here.
+
 ## Project Overview
 **liblognorm** is a fast, samples-based log normalization library. It parses log messages (strings) into structured JSON objects based on a set of rules.
 
