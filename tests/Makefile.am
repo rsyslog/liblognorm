@@ -67,6 +67,7 @@ TESTS_SHELLSCRIPTS = \
 	repeat_alternative_nested.sh \
 	repeat_named_while_segfault.sh \
 	repeat_name_dot.sh \
+	parser_eof_hardening.sh \
 	parser_prios.sh \
 	parser_whitespace.sh \
 	parser_whitespace_jsoncnf.sh \
@@ -161,6 +162,9 @@ TESTS_SHELLSCRIPTS += \
 	field_cisco-interface-spec-at-EOL.sh \
 	field_float_with_invalid_ruledef.sh \
 	very_long_logline.sh
+
+TESTS_SHELLSCRIPTS += \
+	parser_eof_hardening_v1.sh
 
 
 #re-add to TESTS if needed: user_test

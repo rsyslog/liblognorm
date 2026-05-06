@@ -1618,6 +1618,9 @@ PARSER_Parse(OpQuotedString)
 	c = npb->str;
 	i = *offs;
 
+	if(i == npb->strLen)
+		goto done;
+
 	if(c[i] != '"') {
 		while(i < npb->strLen && c[i] != ' ')
 			i++;
@@ -2663,7 +2666,10 @@ PARSER_Parse(JSON)
 	struct json_tokener *tokener = NULL;
 	struct data_JSON *const data = (struct data_JSON*) pdata;
 
-	if(npb->str[i] != '{' && npb->str[i] != ']') {
+	if(i == npb->strLen)
+		goto done;
+
+	if(npb->str[i] != '{' && npb->str[i] != '[') {
 		/* this can't be json, see RFC4627, Sect. 2
 		 * see this bug in json-c:
 		 * https://github.com/json-c/json-c/issues/181
@@ -3515,7 +3521,7 @@ PARSER_Parse(CheckpointLEA)
 			FAIL(LN_WRONGPARSER);
 		}
 		/* Sometimes there is multiple colons */
-		while( i < npb->strLen && npb->str[i+1] == ':' ) {
+		while( i + 1 < npb->strLen && npb->str[i+1] == ':' ) {
 			i++;
 		}
 		lenName = i - iName;
@@ -3524,6 +3530,8 @@ PARSER_Parse(CheckpointLEA)
 		while(i < npb->strLen && npb->str[i] == ' ') { /* skip leading SP */
 			++i;
 		}
+		if(i == npb->strLen)
+			FAIL(LN_WRONGPARSER);
 		/* Improvement by KGuillemot & M4jr0 to support quoted values */
 		if( npb->str[i] == '"' ) {
 			int continuous_backslash = 0;
@@ -3539,6 +3547,8 @@ PARSER_Parse(CheckpointLEA)
 			}
 			// Do not take the " in value
 			lenValue = i - iValue;
+			if(i == npb->strLen)
+				FAIL(LN_WRONGPARSER);
 			// Skip "
 			++i;
 		} else {
@@ -3556,7 +3566,7 @@ PARSER_Parse(CheckpointLEA)
 			++i;
 		}
 
-		if(i+1 > npb->strLen || (npb->str[i] != ';' && npb->str[i] != data->terminator))
+		if(i >= npb->strLen || (npb->str[i] != ';' && npb->str[i] != data->terminator))
 			FAIL(LN_WRONGPARSER);
 
 		if(npb->str[i] == ';')
@@ -4003,7 +4013,7 @@ PARSER_Parse(String)
 
 	if((i - *offs < 1) || (data->matching == ST_MATCH_EXACT)) {
 		const size_t trmChkIdx = (bHaveQuotes) ? i+1 : i;
-		if(npb->str[trmChkIdx] != ' ' && trmChkIdx != npb->strLen)
+		if(trmChkIdx != npb->strLen && npb->str[trmChkIdx] != ' ')
 			goto done;
 	}
 
