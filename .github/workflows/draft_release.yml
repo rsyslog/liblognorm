@@ -128,7 +128,7 @@ jobs:
         )
       }}
     permissions:
-      contents: write
+      contents: write  # Creates/updates draft releases and uploads assets.
 
     steps:
       - name: Download release artifacts
