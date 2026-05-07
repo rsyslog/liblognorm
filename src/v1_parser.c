@@ -1852,6 +1852,9 @@ PARSER(OpQuotedString)
 	c = str;
 	i = *offs;
 
+	if(i == strLen)
+		goto done;
+
 	if(c[i] != '"') {
 		while(i < strLen && c[i] != ' ')
 			i++;
@@ -2574,7 +2577,10 @@ PARSER(JSON)
 	const size_t i = *offs;
 	struct json_tokener *tokener = NULL;
 
-	if(str[i] != '{' && str[i] != ']') {
+	if(i == strLen)
+		goto done;
+
+	if(str[i] != '{' && str[i] != '[') {
 		/* this can't be json, see RFC4627, Sect. 2
 		 * see this bug in json-c:
 		 * https://github.com/json-c/json-c/issues/181
@@ -3169,6 +3175,8 @@ PARSER(CheckpointLEA)
 
 		while(i < strLen && str[i] == ' ') /* skip leading SP */
 			++i;
+		if(i == strLen)
+			FAIL(LN_WRONGPARSER);
 		if(str[i] == '"') {
 			int continuous_backslash = 0;
 			iValue = i + 1;
@@ -3192,7 +3200,7 @@ PARSER(CheckpointLEA)
 			}
 			lenValue = i - iValue;
 		}
-		if(i+1 > strLen || str[i] != ';')
+		if(i >= strLen || str[i] != ';')
 			FAIL(LN_WRONGPARSER);
 		++i; /* skip ';' */
 
