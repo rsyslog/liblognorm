@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.1.0, 2026-??-??
+Version 2.1.0, 2026-05-07
 - add TurboVM bytecode engine for high-performance log parsing
   Compiles rulebases into optimized bytecode executed by a linear VM
   with SIMD-accelerated parsing primitives (SSE4.2 on x86-64, NEON
@@ -34,7 +34,14 @@ Version 2.1.0, 2026-??-??
 - Op-quoted-string : Add support for escaped characters
   Thanks to Kevin Guillemot for the patch. Some follow up work
   was done by Adiscon.
+- parser(quoted-string): return the extracted value without the surrounding
+  quote characters.
+- parser(name-value-list): add ignore_whitespaces option and accept trailing
+  empty trimmed values.
+- parser(repeat): allow one named dot among unnamed parsers.
 - fixed error callback cookie - the wrong one was provided
+- hardening: fix empty-tag rulebase crash, repeat while validation crash,
+  parser EOF handling, and harden GitHub Actions security.
 - improved CI with additional checks, including sanitizers and
   an rsyslog integration test
 - introduced doc for AI agents, e.g. AGENTS.md
