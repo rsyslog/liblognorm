@@ -14,6 +14,9 @@
 #include "config.h"
 #endif
 
+/* Public opaque snapshot type + get/free decls (and disabled-build stubs). */
+#include "lognorm-turbo.h"
+
 #if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
 
 #include <stddef.h>
@@ -30,11 +33,12 @@ extern "C" {
  * Memory layout: header struct followed by inline arena data copy.
  * All arena pointers in the result are rebased to point into arena_data[].
  */
-typedef struct ln_fast_result_snapshot_s {
+/* Completes the opaque ln_fast_result_snapshot_t declared in lognorm-turbo.h. */
+struct ln_fast_result_snapshot_s {
 	ln_fast_result_t result;    /**< Deep copy of result (pointers rebased) */
 	size_t           arena_size;/**< Size of arena data copy */
 	char             arena_data[];/**< Flexible array: arena bytes follow inline */
-} ln_fast_result_snapshot_t;
+};
 
 /**
  * @brief Create a snapshot from a turbo parse result.
@@ -53,27 +57,8 @@ ln_fast_result_snapshot_t *
 ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 								const ln_arena_t *arena);
 
-/**
- * @brief Get the result from a snapshot.
- *
- * The returned pointer is valid for the lifetime of the snapshot.
- * It can be used with all ln_fast_result_* accessor functions.
- *
- * @param snap  Snapshot to read from
- * @return Pointer to the result, or NULL if snap is NULL
- */
-const ln_fast_result_t *
-ln_fast_result_snapshot_get(const ln_fast_result_snapshot_t *snap);
-
-/**
- * @brief Free a snapshot.
- *
- * Single free() — the snapshot is a single allocation.
- *
- * @param snap  Snapshot to free (NULL-safe)
- */
-void
-ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
+/* ln_fast_result_snapshot_get() and ln_fast_result_snapshot_free() are part
+ * of the public, opaque API and are declared in lognorm-turbo.h. */
 
 #ifdef __cplusplus
 }
@@ -81,11 +66,9 @@ ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
 
 #else /* !ENABLE_TURBO && !LOGNORM_TURBO_SUPPORTED */
 
-/* Stubs when turbo is disabled */
-typedef void ln_fast_result_snapshot_t;
+/* Stubs when turbo is disabled (the snapshot type and the public get/free
+ * stubs are provided by lognorm-turbo.h, included via turbo_result_fast.h). */
 #define ln_fast_result_snapshot_create(src, arena)  ((void*)0)
-#define ln_fast_result_snapshot_get(snap)           ((void*)0)
-#define ln_fast_result_snapshot_free(snap)          ((void)(snap))
 
 #endif /* ENABLE_TURBO || LOGNORM_TURBO_SUPPORTED */
 

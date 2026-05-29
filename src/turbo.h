@@ -1,6 +1,10 @@
 /**
  * @file turbo.h
- * @brief liblognorm integration for TurboVM bytecode engine
+ * @brief liblognorm integration for TurboVM bytecode engine (internal).
+ *
+ * INTERNAL header — not installed. The public, opaque Turbo API lives in
+ * lognorm-turbo.h (which this header includes); only internal lifecycle,
+ * legacy and debug entry points are declared here.
  *//*
  * Copyright 2024-2026 by Advens and Jeremie Jourdin.
  * Copyright 2015-2026 by Rainer Gerhards and Adiscon GmbH.
@@ -17,6 +21,9 @@
 #include "config.h"
 #endif
 
+/* Public, opaque Turbo API (opaque types, enum, accessors, snapshots). */
+#include "lognorm-turbo.h"
+
 #if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
 
 #include <stddef.h>
@@ -27,24 +34,17 @@
 extern "C" {
 #endif
 
-/* Forward declarations */
-typedef struct ln_ctx_s *ln_ctx;
+/* Forward declarations (ln_ctx comes from lognorm-turbo.h) */
 struct json_object;  /* libfastjson (for legacy API only) */
 
 /*============================================================================
- * Turbo VM State (opaque)
+ * Turbo VM State (opaque, internal)
  *============================================================================*/
 
 typedef struct ln_turbo_ctx_s ln_turbo_ctx_t;
 
 /*============================================================================
- * Fast Result Structure (opaque for external use)
- *============================================================================*/
-
-typedef struct ln_fast_result_s ln_fast_result_t;
-
-/*============================================================================
- * Context Management
+ * Context Management (internal lifecycle)
  *============================================================================*/
 
 /**
@@ -68,44 +68,9 @@ void ln_turbo_ctx_free(ln_turbo_ctx_t *turbo);
  */
 int ln_turbo_compile(ln_ctx ctx);
 
-/**
- * Check if turbo VM is available for this context.
- */
-int ln_turbo_is_available(ln_ctx ctx);
-
 /*============================================================================
- * Normalization API - Choose based on your needs
+ * Legacy normalization (libfastjson object output) — internal
  *============================================================================*/
-
-/**
- * Normalize using turbo VM - JSON string output.
- * Best for CLI tools and JSON pipelines.
- *
- * @param ctx       liblognorm context
- * @param str       Input string to normalize
- * @param strLen    Length of input string
- * @param json_str  Receives JSON string (caller must free)
- * @param json_len  Receives JSON string length
- * @return 0 on match, negative on no match/error
- */
-int ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
-							  char **json_str, size_t *json_len);
-
-/**
- * Normalize using turbo VM - direct result access.
- * Best for rsyslog - ZERO JSON overhead!
- *
- * Result is valid until next normalize call on same context.
- * DO NOT free the result - it's owned by the turbo context.
- *
- * @param ctx       liblognorm context
- * @param str       Input string to normalize
- * @param strLen    Length of input string
- * @param result    Receives pointer to internal result structure
- * @return 0 on match, negative on no match/error
- */
-int ln_turbo_normalize_raw(ln_ctx ctx, const char *str, size_t strLen,
-						   const ln_fast_result_t **result);
 
 /**
  * Normalize using turbo VM - libfastjson object output.
@@ -121,110 +86,7 @@ int ln_turbo_normalize(ln_ctx ctx, const char *str, size_t strLen,
 					   struct json_object **json_p);
 
 /*============================================================================
- * Direct Field Access API (for rsyslog - no JSON overhead)
- *============================================================================*/
-
-/**
- * Get number of fields in result.
- */
-int ln_fast_result_field_count(const ln_fast_result_t *r);
-
-/**
- * Get field by index.
- *
- * @param r      Result
- * @param idx    Field index (0 to field_count-1)
- * @param name   Receives field name pointer (do not free)
- * @param nlen   Receives name length
- * @param value  Receives value pointer (do not free)
- * @param vlen   Receives value length
- * @return 0 on success, -1 if index out of range
- */
-int ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
-							 const char **name, size_t *nlen,
-							 const char **value, size_t *vlen);
-
-/**
- * Get string field by name.
- *
- * @param r      Result
- * @param name   Field name to find
- * @param value  Receives value pointer
- * @param vlen   Receives value length
- * @return 0 if found, -1 if not found
- */
-int ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
-							  const char **value, size_t *vlen);
-
-/**
- * Get integer field by name.
- *
- * @param r      Result
- * @param name   Field name to find
- * @param value  Receives integer value
- * @return 0 if found, -1 if not found or not an integer
- */
-int ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
-						   int64_t *value);
-
-/**
- * Get number of tags in result.
- */
-int ln_fast_result_tag_count(const ln_fast_result_t *r);
-
-/**
- * Get tag by index.
- *
- * @param r    Result
- * @param idx  Tag index (0 to tag_count-1)
- * @return Tag string or NULL if index out of range
- */
-const char *ln_fast_result_get_tag(const ln_fast_result_t *r, int idx);
-
-/**
- * Check if result has a specific tag.
- *
- * @param r    Result
- * @param tag  Tag to check
- * @return 1 if tag present, 0 if not
- */
-int ln_fast_result_has_tag(const ln_fast_result_t *r, const char *tag);
-
-/**
- * Get matched rule ID.
- *
- * @param r  Result
- * @return Rule ID string or NULL if no match
- */
-const char *ln_fast_result_get_rule_id(const ln_fast_result_t *r);
-
-/*============================================================================
- * Snapshot API (for rsyslog zero-JSON hot path)
- *============================================================================*/
-
-/**
- * Forward declare snapshot type.
- * Full definition in turbo_snapshot.h.
- */
-typedef struct ln_fast_result_snapshot_s ln_fast_result_snapshot_t;
-
-/**
- * Create a snapshot of the current turbo parse result.
- *
- * Must be called after a successful ln_turbo_normalize_raw() and before
- * the next normalize call on the same context (which resets the arena).
- *
- * The snapshot is a self-contained deep copy: single allocation containing
- * the result struct + arena data, with all pointers rebased.
- *
- * @param ctx  liblognorm context with a valid turbo result
- * @return Snapshot (caller must free with ln_fast_result_snapshot_free),
- *         or NULL on failure
- */
-ln_fast_result_snapshot_t *ln_turbo_snapshot_result(ln_ctx ctx);
-
-/*============================================================================
- * Statistics
+ * Statistics & debug (internal)
  *============================================================================*/
 
 typedef struct {
@@ -259,21 +121,14 @@ void ln_turbo_disasm(ln_ctx ctx, FILE *fp, const char *label);
 
 #else /* !ENABLE_TURBO && !LOGNORM_TURBO_SUPPORTED */
 
-/* Stub definitions when turbo is disabled */
+/* Stub definitions when turbo is disabled (public data-type stubs and the
+ * public entry-point stubs are provided by lognorm-turbo.h). */
 typedef void *ln_turbo_ctx_t;
-typedef void *ln_fast_result_t;
-typedef void *ln_fast_result_snapshot_t;
 
 #define ln_turbo_ctx_init()          NULL
 #define ln_turbo_ctx_free(t)         ((void)(t))
 #define ln_turbo_compile(ctx)        (-1)
-#define ln_turbo_is_available(ctx)   (0)
 #define ln_turbo_normalize(ctx, str, len, json) (-1)
-#define ln_turbo_normalize_to_str(ctx, str, len, js, jl) (-1)
-#define ln_turbo_normalize_raw(ctx, str, len, r) (-1)
-#define ln_turbo_snapshot_result(ctx)             ((void*)0)
-#define ln_fast_result_snapshot_get(snap)         ((void*)0)
-#define ln_fast_result_snapshot_free(snap)        ((void)(snap))
 #define ln_turbo_disasm(ctx, fp, label)          ((void)0)
 
 #endif /* ENABLE_TURBO || LOGNORM_TURBO_SUPPORTED */

@@ -1022,6 +1022,43 @@ ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
 }
 
 int
+ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
+							   const char **name, size_t *nlen,
+							   unsigned *type, unsigned *flags,
+							   const char **sval, size_t *slen,
+							   int64_t *ival, double *dval)
+{
+	if (!r || idx < 0 || idx >= r->n_fields) return -1;
+	const ln_fast_field_t *f = &r->fields[idx];
+	if (name)  *name  = f->name;
+	if (nlen)  *nlen  = f->name_len;
+	if (type)  *type  = f->type;
+	if (flags) *flags = (unsigned)(f->flags & LN_FFIELD_NESTED);
+	switch (f->type) {
+	case LN_FTYPE_STRING:
+		if (sval) *sval = f->v.str.ptr;
+		if (slen) *slen = f->v.str.len;
+		break;
+	case LN_FTYPE_STRING_INLINE:
+		if (sval) *sval = f->v.inl;
+		if (slen) *slen = strlen(f->v.inl);
+		break;
+	case LN_FTYPE_INT:
+		if (ival) *ival = f->v.i;
+		break;
+	case LN_FTYPE_BOOL:
+		if (ival) *ival = f->v.b ? 1 : 0;
+		break;
+	case LN_FTYPE_DOUBLE:
+		if (dval) *dval = f->v.d;
+		break;
+	default: /* LN_FTYPE_NULL */
+		break;
+	}
+	return 0;
+}
+
+int
 ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
 						  const char **value, size_t *vlen)
 {

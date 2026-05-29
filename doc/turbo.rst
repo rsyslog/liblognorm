@@ -94,6 +94,34 @@ The standard ``ln_normalize()`` function also benefits from TurboVM
 when it is enabled — the bytecode engine is used internally, with
 automatic fallback to the recursive walker if needed.
 
+High-performance API (lognorm-turbo.h)
+--------------------------------------
+
+Consumers that want to avoid json-c construction entirely (for example
+rsyslog's ``mmnormalize`` worker hot path) can use the curated public
+header ``lognorm-turbo.h``. It is installed alongside ``liblognorm.h``
+and ``lognorm-features.h`` and gated on ``LOGNORM_TURBO_SUPPORTED``::
+
+    #include <liblognorm/lognorm-features.h>
+    #if defined(LOGNORM_TURBO_SUPPORTED)
+    #include <liblognorm/lognorm-turbo.h>
+    #endif
+
+The header exposes only opaque types and a function-level contract; the
+internal ``turbo*.h`` headers and the fast-result/snapshot struct layouts
+are **not** installed and may change between releases without affecting the
+ABI. The contract covers:
+
+- ``ln_turbo_normalize_raw()`` — normalize into an opaque, context-owned
+  result (valid until the next normalize call on that context);
+- ``ln_turbo_snapshot_result()`` / ``ln_fast_result_snapshot_get()`` /
+  ``ln_fast_result_snapshot_free()`` — retain a result beyond the next call;
+- typed accessors ``ln_fast_result_field_count()``,
+  ``ln_fast_result_get_field()``, ``ln_fast_result_get_field_typed()``
+  (preserves ``LN_FTYPE_*`` value type and the ``LN_FFIELD_NESTED`` flag),
+  ``ln_fast_result_get_string()`` / ``_get_int()``, the tag accessors and
+  ``ln_fast_result_get_rule_id()``.
+
 Supported Parsers
 -----------------
 

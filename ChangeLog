@@ -9,8 +9,13 @@ Version 2.1.0, 2026-05-07
   - fast result structure (typed fields, zero JSON overhead)
   - snapshot support for async consumers (rsyslog worker queues)
   - automatic fallback to recursive walker on compilation failure
-  New API: ln_turbo_normalize(), ln_fast_result_get_string/int(),
-  ln_turbo_snapshot_result(). New context option: LN_CTXOPT_TURBO.
+  New context option: LN_CTXOPT_TURBO. The simple path is available
+  through liblognorm.h (ln_normalize() / ln_normalize_to_str()).
+  High-performance consumers use the curated, opaque public header
+  lognorm-turbo.h (raw fast-result access via ln_turbo_normalize_raw(),
+  snapshots via ln_turbo_snapshot_result(), and typed field accessors
+  including ln_fast_result_get_field_typed()). The TurboVM implementation
+  headers (turbo*.h) remain internal and are not installed.
   Enabled via: ./configure --enable-turbo
   Contributed by Jérémie Jourdin / Advens.
 - pcre2 used instead of pcre (which is no longer supported)
