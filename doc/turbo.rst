@@ -74,12 +74,6 @@ on the normalization context before loading rules::
     ln_setCtxOpts(ctx, LN_CTXOPT_TURBO);
     ln_loadSamples(ctx, "/path/to/rules.rb");
 
-After loading, verify that compilation succeeded::
-
-    if (ln_turbo_is_available(ctx)) {
-        /* TurboVM ready — ln_normalize() will use the fast path */
-    }
-
 For direct string output (bypassing json-c entirely)::
 
     char *json_str = NULL;

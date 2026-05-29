@@ -9,8 +9,8 @@ Version 2.1.0, 2026-05-07
   - fast result structure (typed fields, zero JSON overhead)
   - snapshot support for async consumers (rsyslog worker queues)
   - automatic fallback to recursive walker on compilation failure
-  New API: ln_turbo_normalize(), ln_fast_result_get_string/int(),
-  ln_turbo_snapshot_result(). New context option: LN_CTXOPT_TURBO.
+  New API: LN_CTXOPT_TURBO and ln_normalize_to_str().
+  TurboVM implementation headers and raw fast-result helpers remain internal.
   Enabled via: ./configure --enable-turbo
   Contributed by Jérémie Jourdin / Advens.
 - pcre2 used instead of pcre (which is no longer supported)
