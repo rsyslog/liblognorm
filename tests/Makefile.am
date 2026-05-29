@@ -1,6 +1,7 @@
 check_PROGRAMS = json_eq err_callback_cookie
 TESTS_TURBO_SHELLS = \
-	turbo_smoke.sh
+	turbo_smoke.sh \
+	field_name_value_whitespace_turbo.sh
 
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c

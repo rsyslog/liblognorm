@@ -219,10 +219,15 @@ static int test_instruction_builders(void)
     TEST_ASSERT(strncmp(i.data.char_to.name, "msg", 3) == 0, "field name");
 
     /* FIELD_NAME_VALUE */
-    i = ln_i_field_name_value("pairs", ' ', '=');
+    i = ln_i_field_name_value("pairs", ' ', '=', 0);
     TEST_ASSERT_EQ(i.op, OP_FIELD_NAME_VALUE, "field_name_value opcode");
     TEST_ASSERT_EQ(i.data.char_to.delim, ' ', "separator");
     TEST_ASSERT_EQ(i.data.char_to.ass, '=', "assignator");
+    TEST_ASSERT_EQ(i.data.char_to.ignore_ws, 0, "ignore_ws default");
+
+    /* FIELD_NAME_VALUE with ignore_whitespaces */
+    i = ln_i_field_name_value("pairs", ',', ':', 1);
+    TEST_ASSERT_EQ(i.data.char_to.ignore_ws, 1, "ignore_ws set");
 
     /* SKIP_SPACE */
     i = ln_i_skip_space();

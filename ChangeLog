@@ -9,6 +9,8 @@ Version 2.1.0, 2026-05-07
   - fast result structure (typed fields, zero JSON overhead)
   - snapshot support for async consumers (rsyslog worker queues)
   - automatic fallback to recursive walker on compilation failure
+  - name-value-list honors the ignore_whitespaces option, matching the
+    standard parser
   New context option: LN_CTXOPT_TURBO. The simple path is available
   through liblognorm.h (ln_normalize() / ln_normalize_to_str()).
   High-performance consumers use the curated, opaque public header

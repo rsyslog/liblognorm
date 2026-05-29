@@ -1138,6 +1138,7 @@ vm_exec_instr(ln_vm_t *vm)
 		const char sep = (char)inst->data.char_to.delim;  /* 0 = whitespace */
 		const char ass = (char)inst->data.char_to.ass;     /* 0 = '=' */
 		const char ass_char = ass ? ass : '=';
+		const int ignore_ws = inst->data.char_to.ignore_ws;
 		const char *p;
 		const char *end;
 		int n_pairs;
@@ -1154,12 +1155,20 @@ vm_exec_instr(ln_vm_t *vm)
 
 		while (p < end) {
 			/* --- Parse name --- */
-			const char *name_start = p;
-			size_t name_end_off;
-			size_t name_len;
+			const char *name_start;
+			size_t name_end_off; /* raw distance to assignator */
+			size_t name_len;     /* stored name length (may be trimmed) */
 			const char *val_start;
 			size_t val_len;
 			char *arena_name;
+
+			/* ignore_whitespaces: skip leading whitespace before the name
+			 * (SIMD-accelerated; same whitespace class as isspace). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+				if (p >= end) break;
+			}
+			name_start = p;
 
 			/* Scan for assignator char using SIMD find_char */
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
@@ -1172,23 +1181,36 @@ vm_exec_instr(ln_vm_t *vm)
 			name_len = name_end_off;
 			if (name_len == 0) break;
 
-			/* Validate name characters: alnum, '.', '_', '-' */
 			if (ass == 0) {
-				/* Default mode: strict name validation */
+				/* Default mode: name must be a contiguous run of valid
+				 * chars immediately followed by '=' (matches the
+				 * standard parser; no trailing-whitespace trim here). */
 				int valid = 1;
 				size_t k;
 				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
+					unsigned char c = (unsigned char)name_start[k];
 					if (!(isalnum(c) || c == '.' || c == '_' || c == '-')) {
 						valid = 0;
 						break;
 					}
 				}
 				if (!valid) break;
+			} else if (ignore_ws) {
+				/* Custom assignator: name is anything before ass; trim its
+				 * trailing whitespace to match the standard parser. */
+				while (name_len > 0
+					&& isspace((unsigned char)name_start[name_len - 1]))
+					name_len--;
+				if (name_len == 0) break;
 			}
-			/* else: custom assignator mode — name is anything before ass */
 
-			p += name_len + 1; /* skip name + assignator */
+			p += name_end_off + 1; /* skip name span + assignator */
+
+			/* ignore_whitespaces: skip whitespace between assignator and
+			 * value (SIMD-accelerated). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
 
 			/* --- Parse value --- */
 			if (p < end && (*p == '"' || *p == '\'')) {
@@ -1225,6 +1247,13 @@ vm_exec_instr(ln_vm_t *vm)
 						val_len++;
 				}
 				p += val_len;
+				/* ignore_whitespaces: trim trailing whitespace from an
+				 * unquoted value (quoted values are kept verbatim). */
+				if (ignore_ws) {
+					while (val_len > 0
+						&& isspace((unsigned char)val_start[val_len - 1]))
+						val_len--;
+				}
 			}
 
 			/* --- Store the field --- */
@@ -1237,7 +1266,17 @@ vm_exec_instr(ln_vm_t *vm)
 			vm_add_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
-			/* --- Skip separator(s) --- */
+			/* --- Advance to the next pair ---
+			 * Matches the standard parser: with ignore_whitespaces and a
+			 * custom separator, skip whitespace before the separator; then
+			 * a separator (whitespace when sep == 0) must follow, otherwise
+			 * stop. Finally consume the separator run. */
+			if (ignore_ws && sep) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
+			if (p < end
+				&& !(sep ? (*p == sep) : isspace((unsigned char)*p)))
+				break;
 			if (sep) {
 				while (p < end && *p == sep) p++;
 			} else {
@@ -2329,6 +2368,7 @@ ln_vm_continue(ln_vm_t *vm)
 		char sep;
 		char ass;
 		char ass_char;
+		int ignore_ws;
 		int n_pairs;
 
 		vm->instr_count++;
@@ -2339,6 +2379,7 @@ ln_vm_continue(ln_vm_t *vm)
 		sep = (char)inst->data.char_to.delim;
 		ass = (char)inst->data.char_to.ass;
 		ass_char = ass ? ass : '=';
+		ignore_ws = inst->data.char_to.ignore_ws;
 
 		if (ctx_name[0]) {
 			vm_push_field_ctx(vm, ctx_name, false);
@@ -2349,12 +2390,20 @@ ln_vm_continue(ln_vm_t *vm)
 		n_pairs = 0;
 
 		while (p < end) {
-			const char *name_start = p;
-			size_t name_end_off;
-			size_t name_len;
+			const char *name_start;
+			size_t name_end_off; /* raw distance to assignator */
+			size_t name_len;     /* stored name length (may be trimmed) */
 			const char *val_start;
 			size_t val_len;
 			char *arena_name;
+
+			/* ignore_whitespaces: skip leading whitespace before the name
+			 * (SIMD-accelerated; same whitespace class as isspace). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+				if (p >= end) break;
+			}
+			name_start = p;
 
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
 			if (name_end_off >= (size_t)(end - p)) break;
@@ -2363,19 +2412,33 @@ ln_vm_continue(ln_vm_t *vm)
 			if (name_len == 0) break;
 
 			if (ass == 0) {
+				/* Default mode: contiguous valid-char name followed by '='
+				 * (matches the standard parser; no trailing-ws trim). */
 				int valid = 1;
 				size_t k;
 				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
+					unsigned char c = (unsigned char)name_start[k];
 					if (!(isalnum(c) || c == '.' || c == '_' || c == '-')) {
 						valid = 0;
 						break;
 					}
 				}
 				if (!valid) break;
+			} else if (ignore_ws) {
+				/* Custom assignator: trim the name's trailing whitespace. */
+				while (name_len > 0
+					&& isspace((unsigned char)name_start[name_len - 1]))
+					name_len--;
+				if (name_len == 0) break;
 			}
 
-			p += name_len + 1;
+			p += name_end_off + 1; /* skip name span + assignator */
+
+			/* ignore_whitespaces: skip whitespace between assignator and
+			 * value (SIMD-accelerated). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
 
 			if (p < end && (*p == '"' || *p == '\'')) {
 				char quote = *p;
@@ -2405,6 +2468,12 @@ ln_vm_continue(ln_vm_t *vm)
 						val_len++;
 				}
 				p += val_len;
+				/* ignore_whitespaces: trim trailing ws from unquoted value */
+				if (ignore_ws) {
+					while (val_len > 0
+						&& isspace((unsigned char)val_start[val_len - 1]))
+						val_len--;
+				}
 			}
 
 			/* Arena-allocate name so it outlives this stack frame */
@@ -2415,6 +2484,13 @@ ln_vm_continue(ln_vm_t *vm)
 			vm_add_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
+			/* Advance to the next pair (see scalar handler for rationale). */
+			if (ignore_ws && sep) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
+			if (p < end
+				&& !(sep ? (*p == sep) : isspace((unsigned char)*p)))
+				break;
 			if (sep) {
 				while (p < end && *p == sep) p++;
 			} else {

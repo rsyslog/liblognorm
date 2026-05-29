@@ -405,10 +405,12 @@ emit_ctx_pop(compiler_t *comp)
 
 static int compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry);
 
-/* Forward declaration for name-value-list parser data (defined in parser.c) */
+/* Forward declaration for name-value-list parser data (defined in parser.c).
+ * Layout must match struct data_NameValue in parser.c. */
 struct data_NameValue {
 	char sep;   /* separator (between key/value pairs) */
 	char ass;   /* assignator (between key and value) */
+	bool ignore_whitespaces; /* trim surrounding whitespace for key/value */
 };
 
 /* Forward declaration for char-sep parser data (defined in parser.c).
@@ -525,18 +527,21 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		instr.op = OP_SKIP_SPACE;
 		pc = emit(comp, &instr);
 	} else if (op == OP_FIELD_NAME_VALUE) {
-		/* name-value-list: extract sep/ass from parser_data */
+		/* name-value-list: extract sep/ass/ignore_whitespaces from parser_data */
 		char sep = 0, ass = 0;  /* 0 = default (whitespace sep, '=' ass) */
+		uint8_t ignore_ws = 0;
 		if (prs->parser_data) {
 			struct data_NameValue *nvdata = (struct data_NameValue *)prs->parser_data;
 			sep = nvdata->sep;
 			ass = nvdata->ass;
+			ignore_ws = nvdata->ignore_whitespaces ? 1 : 0;
 		}
 		ln_instr_t instr = {0};
 		instr.op = OP_FIELD_NAME_VALUE;
 		instr.flags = LN_INSTR_F_STORE;
 		instr.data.char_to.delim = (uint8_t)sep;
 		instr.data.char_to.ass   = (uint8_t)ass;
+		instr.data.char_to.ignore_ws = ignore_ws;
 		if (prs->name) {
 			size_t nlen = strlen(prs->name);
 			if (nlen >= sizeof(instr.data.char_to.name))

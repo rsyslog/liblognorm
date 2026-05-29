@@ -141,7 +141,8 @@ typedef struct {
 			char     name[56]; /**< Field name */
 			uint8_t  delim;    /**< Delimiter char */
 			uint8_t  ass;      /**< Assignator char (for name-value-list) */
-			uint8_t  _pad[2];
+			uint8_t  ignore_ws;/**< name-value-list: trim surrounding whitespace */
+			uint8_t  _pad[1];
 		} char_to;
 
 		/* Static key-value pair (for OP_STATIC_FIELD) */
@@ -253,12 +254,14 @@ static inline ln_instr_t ln_i_field_char_to(const char *name, char delim) {
 }
 
 /** Create FIELD_NAME_VALUE instruction */
-static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char ass) {
+static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char ass,
+											   uint8_t ignore_ws) {
 	ln_instr_t i = {0};
 	i.op = OP_FIELD_NAME_VALUE;
 	i.flags = LN_INSTR_F_STORE;
 	i.data.char_to.delim = (uint8_t)sep;
 	i.data.char_to.ass   = (uint8_t)ass;
+	i.data.char_to.ignore_ws = ignore_ws;
 	if (name) {
 		for (int j = 0; j < 56 && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
