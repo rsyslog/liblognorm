@@ -19,7 +19,7 @@ AC_PROG_LIBTOOL
 m4_ifdef([AX_IS_RELEASE], [
 	AX_IS_RELEASE([git-directory])
 	m4_ifdef([AX_COMPILER_FLAGS], [
-		AX_COMPILER_FLAGS()
+		AX_COMPILER_FLAGS([], [], [], [], [-Wno-inline])
 	], [
 		if test "$GCC" = "yes"
 		then CFLAGS="$CFLAGS -W -Wall -Wformat-security -Wshadow -Wcast-align -Wpointer-arith -Wmissing-format-attribute -g"
