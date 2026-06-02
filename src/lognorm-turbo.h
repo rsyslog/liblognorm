@@ -209,13 +209,36 @@ void ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
 
 #else /* !ENABLE_TURBO && !LOGNORM_TURBO_SUPPORTED */
 
-/* No-op stubs so consumers can compile unconditionally. */
+/* No-op stubs mirroring the full public surface, so consumers can compile and
+ * link unconditionally even when TurboVM is not built. Calls in conditional
+ * (runtime-disabled but still compiled) blocks degrade to error/empty values. */
+typedef struct ln_ctx_s *ln_ctx;
 typedef void *ln_fast_result_t;
 typedef void *ln_fast_result_snapshot_t;
+
+typedef enum {
+	LN_FTYPE_NULL = 0,
+	LN_FTYPE_STRING,
+	LN_FTYPE_STRING_INLINE,
+	LN_FTYPE_INT,
+	LN_FTYPE_DOUBLE,
+	LN_FTYPE_BOOL
+} ln_ftype_t;
+
+#define LN_FFIELD_NESTED 0x04
 
 #define ln_turbo_is_available(ctx)                        (0)
 #define ln_turbo_normalize_to_str(ctx, str, len, js, jl)  (-1)
 #define ln_turbo_normalize_raw(ctx, str, len, r)          (-1)
+#define ln_fast_result_field_count(r)                     (0)
+#define ln_fast_result_get_field(r, idx, name, nlen, val, vlen)  (-1)
+#define ln_fast_result_get_field_typed(r, idx, name, nlen, type, flags, sval, slen, ival, dval)  (-1)
+#define ln_fast_result_get_string(r, name, val, vlen)     (-1)
+#define ln_fast_result_get_int(r, name, val)              (-1)
+#define ln_fast_result_tag_count(r)                       (0)
+#define ln_fast_result_get_tag(r, idx)                    ((const char *)0)
+#define ln_fast_result_has_tag(r, tag)                    (0)
+#define ln_fast_result_get_rule_id(r)                     ((const char *)0)
 #define ln_turbo_snapshot_result(ctx)                     ((void *)0)
 #define ln_fast_result_snapshot_get(snap)                 ((void *)0)
 #define ln_fast_result_snapshot_free(snap)                ((void)(snap))
