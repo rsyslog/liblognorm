@@ -653,12 +653,24 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 
 	*entry = first;
 
+	/* A node can be terminal AND still have continuation parsers when its
+	 * rule is a strict prefix of a longer rule.  The continuations are tried
+	 * first; if they all fail the terminal OP_MATCH below must still be
+	 * reachable, so reserve a fallback fork to it here (lowest priority). */
+	uint32_t term_fallback_pc = UINT32_MAX;
+	if (node->flags.isTerminal) {
+		term_fallback_pc = emit_fork(comp);
+		if (term_fallback_pc == UINT32_MAX) { comp->depth--; return -1; }
+	}
+
 	if (node->nparsers == 1) {
 		uint32_t pc;
 		r = compile_parser(comp, &node->parsers[0], &pc);
 		if (r != 0) { comp->depth--; return r; }
 
 		if (node->flags.isTerminal) {
+			comp->turbo->code[term_fallback_pc].data.jump.offset =
+				(int32_t)comp->turbo->code_len - (int32_t)term_fallback_pc;
 			if (comp->in_custom_type == 0) {
 				if (emit_match(comp, node) == UINT32_MAX) {
 					comp->depth--;
@@ -707,6 +719,8 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 	free(fork_pcs);
 
 	if (node->flags.isTerminal) {
+		comp->turbo->code[term_fallback_pc].data.jump.offset =
+			(int32_t)comp->turbo->code_len - (int32_t)term_fallback_pc;
 		if (comp->in_custom_type == 0) {
 			if (emit_match(comp, node) == UINT32_MAX) {
 				comp->depth--;
