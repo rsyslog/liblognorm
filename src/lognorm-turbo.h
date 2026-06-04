@@ -24,13 +24,16 @@
 #ifndef LIBLOGNORM_LOGNORM_TURBO_H_INCLUDED
 #define	LIBLOGNORM_LOGNORM_TURBO_H_INCLUDED
 
-/* When building liblognorm itself, config.h provides ENABLE_TURBO.
- * External consumers pull the installed feature macros instead. */
+/* Turbo availability is published by lognorm-features.h, which liblognorm
+ * installs alongside this header and generates with LOGNORM_TURBO_SUPPORTED set
+ * to match the build.  Include it unconditionally so a consumer's own
+ * HAVE_CONFIG_H (pulling in their config.h) can never hide an installed
+ * Turbo-enabled library.  When building liblognorm itself, config.h
+ * additionally provides ENABLE_TURBO. */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
-#else
-#include "lognorm-features.h"
 #endif
+#include "lognorm-features.h"
 
 #if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
 

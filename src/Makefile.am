@@ -60,8 +60,10 @@ liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -l
 # soname stays liblognorm.so.5 (current-age), interface revision bumped.
 liblognorm_la_LDFLAGS = -version-info 7:0:2
 
-# Public API
-include_HEADERS = liblognorm.h lognorm-features.h
+# Public API.  lognorm-turbo.h is installed unconditionally — it provides no-op
+# stubs when Turbo is disabled, so consumers can include it against any build.
+# Only the implementation sources stay behind ENABLE_TURBO (below).
+include_HEADERS = liblognorm.h lognorm-features.h lognorm-turbo.h
 
 # TurboVM bytecode engine (optional, SIMD-accelerated log parsing)
 if ENABLE_TURBO
@@ -85,9 +87,6 @@ liblognorm_la_SOURCES += \
 	turbo_json_fast.h \
 	turbo_json_impl.c \
 	turbo_snapshot.c \
-	turbo_snapshot.h \
-	lognorm-turbo.h
+	turbo_snapshot.h
 liblognorm_la_CPPFLAGS += $(TURBO_CFLAGS)
-# Only the curated, opaque public header is installed; turbo*.h stay internal.
-include_HEADERS += lognorm-turbo.h
 endif
