@@ -347,6 +347,19 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 static uint32_t
 emit_match(compiler_t *comp, struct ln_pdag *node)
 {
+	/* A top-level rule matches only when it has consumed the ENTIRE input:
+	 * the recursive normalizer accepts a terminal for normalization only at
+	 * end-of-input.  Assert that first so turbo agrees — otherwise a rule
+	 * whose last parser stops before EOL, or a strict-prefix rule reached via
+	 * the fallback fork, would falsely match a longer line on its trailing
+	 * bytes.  (Custom-type sub-matches end in OP_RET, not here, so they are
+	 * unaffected.) */
+	ln_instr_t end_instr = {0};
+	end_instr.op = OP_ASSERT_END;
+	uint32_t entry = emit(comp, &end_instr);
+	if (entry == UINT32_MAX)
+		return UINT32_MAX;
+
 	/* Emit tags first — these populate result.tags[] */
 	if (emit_tags(comp, node) != 0)
 		return UINT32_MAX;
@@ -366,7 +379,11 @@ emit_match(compiler_t *comp, struct ln_pdag *node)
 	}
 
 	comp->n_rules++;
-	return emit(comp, &instr);
+	if (emit(comp, &instr) == UINT32_MAX)
+		return UINT32_MAX;
+	/* Entry is the ASSERT_END — every path into this terminal (sequential,
+	 * fallback fork, or a sibling-branch fork) goes through the EOL gate. */
+	return entry;
 }
 
 static uint32_t
