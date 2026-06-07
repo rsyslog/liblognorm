@@ -26,14 +26,19 @@
 
 /* Turbo availability is published by lognorm-features.h, which liblognorm
  * installs alongside this header and generates with LOGNORM_TURBO_SUPPORTED set
- * to match the build.  Include it unconditionally so a consumer's own
- * HAVE_CONFIG_H (pulling in their config.h) can never hide an installed
- * Turbo-enabled library.  When building liblognorm itself, config.h
- * additionally provides ENABLE_TURBO. */
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
+ * to match the build.  This is a public installed header, so it must NOT pull
+ * in the private build-time config.h: doing so would leak liblognorm's private
+ * PACKAGE and HAVE_xxx macros into a consumer, or shadow them with the
+ * consumer's own config.h.  Availability comes solely from the installed
+ * lognorm-features.h; liblognorm's own .c files include config.h (for
+ * ENABLE_TURBO) before this header. */
 #include "lognorm-features.h"
+
+/* Opaque liblognorm context.  Forward-declared as an incomplete struct rather
+ * than re-typedef'd to `ln_ctx`: liblognorm.h owns that typedef, and repeating
+ * it here is ill-formed under strict C99 when both public headers are included.
+ * Callers obtain a context from ln_initCtx() (liblognorm.h) and pass it here. */
+struct ln_ctx_s;
 
 #if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
 
@@ -44,9 +49,7 @@
 extern "C" {
 #endif
 
-/* Forward declaration of the liblognorm context (also typedef'd, identically,
- * in liblognorm.h — a redundant typedef is permitted and harmless). */
-typedef struct ln_ctx_s *ln_ctx;
+/* (ln_ctx context type: see the struct ln_ctx_s forward-declaration above.) */
 
 /*============================================================================
  * Opaque types
@@ -86,7 +89,7 @@ typedef enum {
  * Check whether a compiled TurboVM program is available for this context.
  * @return non-zero if turbo normalization can be used, 0 otherwise.
  */
-int ln_turbo_is_available(ln_ctx ctx);
+int ln_turbo_is_available(struct ln_ctx_s *ctx);
 
 /*============================================================================
  * Normalization
@@ -102,7 +105,7 @@ int ln_turbo_is_available(ln_ctx ctx);
  * @param json_len  receives the JSON string length
  * @return 0 on match, negative on no-match/error.
  */
-int ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
+int ln_turbo_normalize_to_str(struct ln_ctx_s *ctx, const char *str, size_t strLen,
 							  char **json_str, size_t *json_len);
 
 /**
@@ -118,7 +121,7 @@ int ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
  * @param result  receives a pointer to the (opaque) result
  * @return 0 on match, negative on no-match/error.
  */
-int ln_turbo_normalize_raw(ln_ctx ctx, const char *str, size_t strLen,
+int ln_turbo_normalize_raw(struct ln_ctx_s *ctx, const char *str, size_t strLen,
 						   const ln_fast_result_t **result);
 
 /*============================================================================
@@ -194,7 +197,7 @@ const char *ln_fast_result_get_rule_id(const ln_fast_result_t *r);
  *
  * @return snapshot (free with ln_fast_result_snapshot_free), or NULL on error.
  */
-ln_fast_result_snapshot_t *ln_turbo_snapshot_result(ln_ctx ctx);
+ln_fast_result_snapshot_t *ln_turbo_snapshot_result(struct ln_ctx_s *ctx);
 
 /**
  * Get the result held by a snapshot. Valid for the snapshot's lifetime and
@@ -215,7 +218,6 @@ void ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
 /* No-op stubs mirroring the full public surface, so consumers can compile and
  * link unconditionally even when TurboVM is not built. Calls in conditional
  * (runtime-disabled but still compiled) blocks degrade to error/empty values. */
-typedef struct ln_ctx_s *ln_ctx;
 typedef void *ln_fast_result_t;
 typedef void *ln_fast_result_snapshot_t;
 
