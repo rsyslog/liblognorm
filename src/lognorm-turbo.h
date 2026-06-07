@@ -161,7 +161,7 @@ int ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
  */
 int ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 								   const char **name, size_t *nlen,
-								   unsigned *type, unsigned *flags,
+								   ln_ftype_t *type, unsigned *flags,
 								   const char **sval, size_t *slen,
 								   int64_t *ival, double *dval);
 

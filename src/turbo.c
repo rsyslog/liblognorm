@@ -430,12 +430,13 @@ struct data_NameValue {
 	bool ignore_whitespaces; /* trim surrounding whitespace for key/value */
 };
 
-/* Forward declaration for char-sep parser data (defined in parser.c).
- * Layout matches the beginning of data_CharTo — both start with
- * term_chars + n_term_chars, so the cast is ABI-safe. */
+/* Mirrors the layout-prefix of parser.c's private data_CharTo /
+ * data_CharSeparated (no shared header). Both start with the same two fields;
+ * types must match parser.c exactly -- n_term_chars is size_t, not int (an int
+ * mirror only happens to work on little-endian LP64). Keep in lockstep. */
 struct data_CharSeparated {
-	char *term_chars;
-	int   n_term_chars;
+	char  *term_chars;
+	size_t n_term_chars;
 };
 
 /* Forward declaration for Checkpoint LEA parser data (defined in parser.c). */
@@ -1060,7 +1061,7 @@ ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
 int
 ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 							   const char **name, size_t *nlen,
-							   unsigned *type, unsigned *flags,
+							   ln_ftype_t *type, unsigned *flags,
 							   const char **sval, size_t *slen,
 							   int64_t *ival, double *dval)
 {
@@ -1068,7 +1069,7 @@ ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 	const ln_fast_field_t *f = &r->fields[idx];
 	if (name)  *name  = f->name;
 	if (nlen)  *nlen  = f->name_len;
-	if (type)  *type  = f->type;
+	if (type)  *type  = (ln_ftype_t)f->type;
 	if (flags) *flags = (unsigned)(f->flags & LN_FFIELD_NESTED);
 	switch (f->type) {
 	case LN_FTYPE_STRING:

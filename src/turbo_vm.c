@@ -1007,8 +1007,13 @@ json_emit_bool(ln_json_ctx_t *c, bool v)
 static int json_parse_value(ln_json_ctx_t *c, int depth);
 
 /*
- * Parse a JSON number at ctx->pos. Decides int vs double by presence of
- * '.', 'e' or 'E'. Emits via json_emit_int / json_emit_double.
+ * Parse a JSON number at ctx->pos with a strict JSON-grammar validator:
+ *   optional leading '-', required integer digits, optional '.'+frac digits,
+ *   optional 'e'/'E' (+/-) exp digits. Returns -1 on any invalid form
+ *   (lone '-'/'.', '+'-prefix, multiple '.'/'e', sign mid-number, ...) WITHOUT
+ *   advancing the cursor, so the caller backtracks the whole line instead of
+ *   mis-consuming garbage. On success advances pos by exactly the validated
+ *   length. Decides int vs double by presence of '.', 'e' or 'E'.
  */
 static int
 json_parse_number(ln_json_ctx_t *c)
@@ -1018,16 +1023,30 @@ json_parse_number(ln_json_ctx_t *c)
 	size_t i = 0;
 	bool is_double = false;
 
-	if (i < rem && (s[i] == '-' || s[i] == '+')) i++;
-	while (i < rem) {
-		char ch = s[i];
-		if (ch >= '0' && ch <= '9') { i++; continue; }
-		if (ch == '.' || ch == 'e' || ch == 'E' || ch == '+' || ch == '-') {
-			is_double = true; i++; continue;
-		}
-		break;
+	if (i < rem && s[i] == '-') i++;        /* JSON allows leading '-' only */
+
+	{
+		size_t int_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == int_start) return -1;      /* integer digits required */
 	}
-	if (i == 0) return -1;
+
+	if (i < rem && s[i] == '.') {
+		size_t frac_start;
+		is_double = true; i++;
+		frac_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == frac_start) return -1;     /* '.' must be followed by digits */
+	}
+
+	if (i < rem && (s[i] == 'e' || s[i] == 'E')) {
+		size_t exp_start;
+		is_double = true; i++;
+		if (i < rem && (s[i] == '+' || s[i] == '-')) i++;
+		exp_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == exp_start) return -1;      /* exponent digits required */
+	}
 
 	if (is_double) {
 		char tmp[64];
@@ -1071,13 +1090,14 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 		c->pos++;                                   /* opening quote */
 		if (json_scan_string(c, &kstr, &klen) != 0) return -1;
 
-		/* append ".<key>" to dotted path (truncate silently if it overflows) */
+		/* append ".<key>" to dotted path; fail (backtrack the line) on
+		 * overflow rather than silently dropping the segment, which would
+		 * mislabel this leaf under the parent/root key = silent corruption. */
 		c->key_len = saved_len;
-		if (saved_len + 1 + klen < LN_JSON_KEYBUF) {
-			if (saved_len > 0) c->key[c->key_len++] = '.';
-			memcpy(c->key + c->key_len, kstr, klen);
-			c->key_len += klen;
-		}
+		if (saved_len + 1 + klen >= LN_JSON_KEYBUF) return -1;
+		if (saved_len > 0) c->key[c->key_len++] = '.';
+		memcpy(c->key + c->key_len, kstr, klen);
+		c->key_len += klen;
 
 		json_skip_ws(c);
 		if (c->pos >= c->len || c->buf[c->pos] != ':') return -1;
@@ -1117,13 +1137,13 @@ json_parse_array(ln_json_ctx_t *c, int depth)
 		json_skip_ws(c);
 		if (c->pos >= c->len) return -1;
 
-		/* index-suffix key for scalar elements */
+		/* index-suffix key for scalar elements; fail (backtrack the line)
+		 * on overflow rather than silently mislabelling the element. */
 		c->key_len = saved_len;
 		n = snprintf(ib, sizeof(ib), ".%d", idx);
-		if (n > 0 && saved_len + (size_t)n < LN_JSON_KEYBUF) {
-			memcpy(c->key + c->key_len, ib, (size_t)n);
-			c->key_len += (size_t)n;
-		}
+		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) return -1;
+		memcpy(c->key + c->key_len, ib, (size_t)n);
+		c->key_len += (size_t)n;
 
 		if (json_parse_value(c, depth + 1) != 0) return -1;
 		c->key_len = saved_len;
@@ -1211,7 +1231,11 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 	/* Seed the dotted prefix with the (context-resolved) field name so the
 	 * flattened leaves nest under it, exactly like vm_add_string_field. */
 	full_name = vm_build_field_name(vm, field_name, &fn_len);
-	if (full_name && full_name[0] && fn_len < LN_JSON_KEYBUF) {
+	if (full_name && full_name[0]) {
+		/* Fail (backtrack the line) if the seed prefix alone overflows the
+		 * key buffer rather than emitting every leaf under a truncated /
+		 * empty root = silent corruption. */
+		if (fn_len >= LN_JSON_KEYBUF) return -1;
 		memcpy(c.key, full_name, fn_len);
 		c.key_len = fn_len;
 	}
