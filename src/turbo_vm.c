@@ -997,6 +997,30 @@ json_emit_double(ln_json_ctx_t *c, double v)
 		c->n_emitted++;
 }
 
+/*
+ * Emit s[0..len) (an already grammar-validated JSON number span) as a double.
+ * The common case fits the stack buffer; a pathologically long number is copied
+ * in full via the VM arena before strtod, because truncating to the stack buffer
+ * could cut a trailing 'eNN' exponent and silently corrupt the magnitude. strtod
+ * saturates out-of-range values to +/-HUGE_VAL per C, which is acceptable here.
+ */
+static void
+json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
+{
+	char stackbuf[64];
+	const char *num;
+
+	if (len < sizeof(stackbuf)) {
+		memcpy(stackbuf, s, len);
+		stackbuf[len] = '\0';
+		num = stackbuf;
+	} else {
+		num = ln_arena_strndup(c->vm->arena, s, len);
+		if (num == NULL) return;   /* OOM: drop this field, keep the line */
+	}
+	json_emit_double(c, strtod(num, NULL));
+}
+
 /* bool emitted as the STRING "true"/"false" (string-store convention). */
 static void
 json_emit_bool(ln_json_ctx_t *c, bool v)
@@ -1049,22 +1073,15 @@ json_parse_number(ln_json_ctx_t *c)
 	}
 
 	if (is_double) {
-		char tmp[64];
-		size_t cl = i < sizeof(tmp) - 1 ? i : sizeof(tmp) - 1;
-		memcpy(tmp, s, cl); tmp[cl] = '\0';
-		json_emit_double(c, strtod(tmp, NULL));
+		json_emit_double_span(c, s, i);
 	} else {
 		int64_t v;
 		size_t consumed;
 		if (parse_number(s, i, &v, &consumed) == 0)
 			json_emit_int(c, v);
-		else {
-			/* overflow / too-long int: keep as double for fidelity */
-			char tmp[64];
-			size_t cl = i < sizeof(tmp) - 1 ? i : sizeof(tmp) - 1;
-			memcpy(tmp, s, cl); tmp[cl] = '\0';
-			json_emit_double(c, strtod(tmp, NULL));
-		}
+		else
+			/* overflow / too-long int: keep full span as double for fidelity */
+			json_emit_double_span(c, s, i);
 	}
 	c->pos += i;
 	return 0;

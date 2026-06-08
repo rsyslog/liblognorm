@@ -40,10 +40,13 @@
  * Callers obtain a context from ln_initCtx() (liblognorm.h) and pass it here. */
 struct ln_ctx_s;
 
-#if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
-
+/* size_t / int64_t appear in the public signatures (the real prototypes and the
+ * no-op stubs alike), so the standard headers are needed no matter which branch
+ * compiles.  Standard headers only -- never config.h (see the note above). */
 #include <stddef.h>
 #include <stdint.h>
+
+#if defined(ENABLE_TURBO) || defined(LOGNORM_TURBO_SUPPORTED)
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,7 +220,14 @@ void ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
 
 /* No-op stubs mirroring the full public surface, so consumers can compile and
  * link unconditionally even when TurboVM is not built. Calls in conditional
- * (runtime-disabled but still compiled) blocks degrade to error/empty values. */
+ * (runtime-disabled but still compiled) blocks degrade to error/empty values.
+ *
+ * Implemented as static inline functions, NOT function-like macros: a macro
+ * that discards its arguments leaves the caller's locals unreferenced (tripping
+ * -Wunused-variable in consumer builds) and type-checks nothing.  The inline
+ * stubs use their parameters (cast to void) and mirror the real signatures, so
+ * consumer code compiles identically whether or not TurboVM is present. */
+
 typedef void *ln_fast_result_t;
 typedef void *ln_fast_result_snapshot_t;
 
@@ -232,21 +242,125 @@ typedef enum {
 
 #define LN_FFIELD_NESTED 0x04
 
-#define ln_turbo_is_available(ctx)                        (0)
-#define ln_turbo_normalize_to_str(ctx, str, len, js, jl)  (-1)
-#define ln_turbo_normalize_raw(ctx, str, len, r)          (-1)
-#define ln_fast_result_field_count(r)                     (0)
-#define ln_fast_result_get_field(r, idx, name, nlen, val, vlen)  (-1)
-#define ln_fast_result_get_field_typed(r, idx, name, nlen, type, flags, sval, slen, ival, dval)  (-1)
-#define ln_fast_result_get_string(r, name, val, vlen)     (-1)
-#define ln_fast_result_get_int(r, name, val)              (-1)
-#define ln_fast_result_tag_count(r)                       (0)
-#define ln_fast_result_get_tag(r, idx)                    ((const char *)0)
-#define ln_fast_result_has_tag(r, tag)                    (0)
-#define ln_fast_result_get_rule_id(r)                     ((const char *)0)
-#define ln_turbo_snapshot_result(ctx)                     ((void *)0)
-#define ln_fast_result_snapshot_get(snap)                 ((void *)0)
-#define ln_fast_result_snapshot_free(snap)                ((void)(snap))
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+static inline int
+ln_turbo_is_available(struct ln_ctx_s *ctx)
+{
+	(void)ctx;
+	return 0;
+}
+
+static inline int
+ln_turbo_normalize_to_str(struct ln_ctx_s *ctx, const char *str, size_t strLen,
+		char **json_str, size_t *json_len)
+{
+	(void)ctx; (void)str; (void)strLen; (void)json_str; (void)json_len;
+	return -1;
+}
+
+static inline int
+ln_turbo_normalize_raw(struct ln_ctx_s *ctx, const char *str, size_t strLen,
+		const ln_fast_result_t **result)
+{
+	(void)ctx; (void)str; (void)strLen; (void)result;
+	return -1;
+}
+
+static inline int
+ln_fast_result_field_count(const ln_fast_result_t *r)
+{
+	(void)r;
+	return 0;
+}
+
+static inline int
+ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
+		const char **name, size_t *nlen, const char **value, size_t *vlen)
+{
+	(void)r; (void)idx; (void)name; (void)nlen; (void)value; (void)vlen;
+	return -1;
+}
+
+static inline int
+ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
+		const char **name, size_t *nlen, ln_ftype_t *type, unsigned *flags,
+		const char **sval, size_t *slen, int64_t *ival, double *dval)
+{
+	(void)r; (void)idx; (void)name; (void)nlen; (void)type; (void)flags;
+	(void)sval; (void)slen; (void)ival; (void)dval;
+	return -1;
+}
+
+static inline int
+ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
+		const char **value, size_t *vlen)
+{
+	(void)r; (void)name; (void)value; (void)vlen;
+	return -1;
+}
+
+static inline int
+ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
+		int64_t *value)
+{
+	(void)r; (void)name; (void)value;
+	return -1;
+}
+
+static inline int
+ln_fast_result_tag_count(const ln_fast_result_t *r)
+{
+	(void)r;
+	return 0;
+}
+
+static inline const char *
+ln_fast_result_get_tag(const ln_fast_result_t *r, int idx)
+{
+	(void)r; (void)idx;
+	return (const char *)0;
+}
+
+static inline int
+ln_fast_result_has_tag(const ln_fast_result_t *r, const char *tag)
+{
+	(void)r; (void)tag;
+	return 0;
+}
+
+static inline const char *
+ln_fast_result_get_rule_id(const ln_fast_result_t *r)
+{
+	(void)r;
+	return (const char *)0;
+}
+
+static inline ln_fast_result_snapshot_t *
+ln_turbo_snapshot_result(struct ln_ctx_s *ctx)
+{
+	(void)ctx;
+	return (ln_fast_result_snapshot_t *)0;
+}
+
+static inline const ln_fast_result_t *
+ln_fast_result_snapshot_get(const ln_fast_result_snapshot_t *snap)
+{
+	(void)snap;
+	return (const ln_fast_result_t *)0;
+}
+
+static inline void
+ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap)
+{
+	(void)snap;
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ENABLE_TURBO || LOGNORM_TURBO_SUPPORTED */
 

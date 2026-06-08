@@ -87,6 +87,15 @@ assert_output_json_eq '{ "unparsed-data": "{\"n\": --5}" }'
 execute '{"a": -3, "b": 2.50, "c": 6.022e23}'
 assert_output_json_eq '{ "field": { "a": -3, "b": 2.5, "c": 6.022e23 } }'
 
+# Long number (span > the 64-byte stack buffer): must reach strtod IN FULL via
+# the arena path. The old code copied only the first 63 bytes before strtod, so
+# a long mantissa could be cut short of its trailing exponent and the magnitude
+# silently corrupted. This 70-digit integer overflows int64 -> kept as a double;
+# the value must round-trip to ~1e69, not the ~1e62 a 63-char truncation gives.
+big=$(python3 -c 'print("1" + "0"*69)')
+execute "{\"big\": $big}"
+assert_output_json_eq '{ "field": { "big": 1e69 } }'
+
 # Key-buffer overflow must FAIL the parse (backtrack), not silently mislabel the
 # leaf under a truncated key. A deeply-nested path whose dotted key exceeds the
 # 512-byte scratch buffer must not match.
