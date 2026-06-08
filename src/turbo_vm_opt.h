@@ -140,9 +140,30 @@
  * DISPATCH: jump to the handler for the current instruction at pc.
  * The prefetch of the NEXT instruction's cache line overlaps with
  * the current handler's execution.
+ *
+ * Two safety guards run before every fetch (security audit #4, #7):
+ *   - PC bounds: a program that runs off the end (e.g. missing HALT,
+ *     or a wild jump target) must not perform an OOB read of
+ *     prog->code[pc] and a wild indirect jump. This restores parity
+ *     with the legacy switch path (vm_exec_instr), which guards pc.
+ *   - Instruction limit: an always-succeeding self-loop (e.g. JUMP
+ *     offset=0) never reaches the backtrack: label, so the limit must
+ *     be enforced here on the dispatch path to bound execution.
+ *
+ * Requires `vm` and `MAX_INSTRUCTIONS` in scope (ln_vm_continue).
  */
 #define DISPATCH() \
 	do { \
+		if (UNLIKELY(pc >= prog->code_len)) { \
+			vm->pc = pc; vm->ip = ip; \
+			vm->error = "PC out of bounds"; \
+			return LN_VM_ERROR; \
+		} \
+		if (UNLIKELY(++vm->instr_count > MAX_INSTRUCTIONS)) { \
+			vm->pc = pc; vm->ip = ip; \
+			vm->error = "instruction limit exceeded"; \
+			return LN_VM_LIMIT; \
+		} \
 		PREFETCH(&prog->code[pc + 1]); \
 		goto *dispatch_table[prog->code[pc].op]; \
 	} while (0)

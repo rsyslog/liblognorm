@@ -228,8 +228,11 @@ void ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap);
  * stubs use their parameters (cast to void) and mirror the real signatures, so
  * consumer code compiles identically whether or not TurboVM is present. */
 
-typedef void *ln_fast_result_t;
-typedef void *ln_fast_result_snapshot_t;
+/* Same incomplete struct types as the real branch above, so the opaque handles
+ * are type-identical in both build configurations (a consumer cannot silently
+ * cross the void* boundary). They are only ever held as pointers. */
+typedef struct ln_fast_result_s          ln_fast_result_t;
+typedef struct ln_fast_result_snapshot_s ln_fast_result_snapshot_t;
 
 typedef enum {
 	LN_FTYPE_NULL = 0,

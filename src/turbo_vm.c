@@ -930,6 +930,10 @@ json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
 		if (dup) *out_len = n;
 		return dup;
 	}
+	/* n is an input-derived length; guard n+1 against size_t wrap -- n ==
+	 * SIZE_MAX would make ln_arena_alloc see 0 and round it up to a 1-byte
+	 * buffer, which the unescape loop below would then overflow. */
+	if (n == SIZE_MAX) return NULL;
 	dst = ln_arena_alloc(vm->arena, n + 1);
 	if (!dst) return NULL;
 	for (i = 0; i < n; i++) {
@@ -1148,7 +1152,9 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 		 * overflow rather than silently dropping the segment, which would
 		 * mislabel this leaf under the parent/root key = silent corruption. */
 		c->key_len = saved_len;
-		if (saved_len + 1 + klen >= LN_JSON_KEYBUF) return -1;
+		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF)
+			return -1;   /* klen is input-derived: reject it alone first so the
+			              * sum below cannot size_t-wrap past the bound */
 		if (saved_len > 0) c->key[c->key_len++] = '.';
 		memcpy(c->key + c->key_len, kstr, klen);
 		c->key_len += klen;
@@ -1439,6 +1445,8 @@ vm_exec_instr(ln_vm_t *vm)
 
 	case OP_LITERAL: {
 		uint16_t len = inst->aux;
+		/* Bound inline compare to the 60-byte union (security audit #6b). */
+		if (len > LN_INSTR_MAX_INLINE) return -1;
 		if (remaining < len) return -1;
 		if (memcmp(vm->ip, inst->data.str, len) != 0) return -1;
 		vm->ip += len;
@@ -1448,6 +1456,8 @@ vm_exec_instr(ln_vm_t *vm)
 
 	case OP_LITERAL_CI: {
 		uint16_t len = inst->aux;
+		/* Bound inline compare to the 60-byte union (security audit #6b). */
+		if (len > LN_INSTR_MAX_INLINE) return -1;
 		if (remaining < len) return -1;
 		for (uint16_t i = 0; i < len; i++) {
 			if (tolower((unsigned char)vm->ip[i]) !=
@@ -2458,6 +2468,27 @@ ln_vm_continue(ln_vm_t *vm)
 	#define INST()       (&prog->code[pc])
 	#define WRITEBACK()  do { vm->pc = pc; vm->ip = ip; } while(0)
 
+	/*
+	 * VALIDATE_TARGET (security audit #5): compute a control-flow target
+	 * (jump/fork/call/ret) in int64_t and range-check it against
+	 * [0, code_len) BEFORE it is used or pushed. This prevents a crafted
+	 * relative offset from wrapping uint32_t arithmetic back into a
+	 * valid-looking-but-wrong pc. The DISPATCH bounds guard is the
+	 * backstop; this yields a clean error at the offending site.
+	 * `_t64` is the int64_t target expression; on success `_dst` (a
+	 * uint32_t lvalue) receives the validated value.
+	 */
+	#define VALIDATE_TARGET(_dst, _t64) \
+		do { \
+			int64_t _tt = (_t64); \
+			if (UNLIKELY(_tt < 0 || (uint64_t)_tt >= prog->code_len)) { \
+				vm->error = "control-flow target out of bounds"; \
+				WRITEBACK(); \
+				return LN_VM_ERROR; \
+			} \
+			(_dst) = (uint32_t)_tt; \
+		} while (0)
+
 	/* Start dispatch */
 	DISPATCH();
 
@@ -2481,16 +2512,14 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(jump) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
-		pc += inst->data.jump.offset;
+		VALIDATE_TARGET(pc, (int64_t)pc + inst->data.jump.offset);
 		DISPATCH();
 	}
 
 	CASE(fork) {
 		const ln_instr_t *inst = INST();
 		uint32_t alt_pc;
-		vm->instr_count++;
-		alt_pc = pc + inst->data.jump.offset;
+		VALIDATE_TARGET(alt_pc, (int64_t)pc + inst->data.jump.offset);
 		vm->pc = pc; vm->ip = ip; /* push_fork reads vm state */
 		if (UNLIKELY(!vm_push_fork(vm, alt_pc))) {
 			WRITEBACK();
@@ -2506,26 +2535,30 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(call) {
 		const ln_instr_t *inst;
-		vm->instr_count++;
+		uint32_t ret_pc, target_pc;
 		if (UNLIKELY(vm->call_sp >= LN_VM_MAX_CALLS)) {
 			vm->error = "call stack overflow";
 			WRITEBACK();
 			BACKTRACK();
 		}
 		inst = INST();
-		vm->calls[vm->call_sp++] = pc + 1;
-		pc += inst->data.jump.offset;
+		/* Validate both the return addr (pc+1) and the call target
+		 * before mutating the call stack (security audit #5). */
+		VALIDATE_TARGET(ret_pc, (int64_t)pc + 1);
+		VALIDATE_TARGET(target_pc, (int64_t)pc + inst->data.jump.offset);
+		vm->calls[vm->call_sp++] = ret_pc;
+		pc = target_pc;
 		DISPATCH();
 	}
 
 	CASE(ret) {
-		vm->instr_count++;
 		if (UNLIKELY(vm->call_sp == 0)) {
 			vm->error = "call stack underflow";
 			WRITEBACK();
 			BACKTRACK();
 		}
-		pc = vm->calls[--vm->call_sp];
+		/* Validate the popped return target (security audit #5). */
+		VALIDATE_TARGET(pc, (int64_t)vm->calls[--vm->call_sp]);
 		DISPATCH();
 	}
 
@@ -2535,7 +2568,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_push) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, false))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2544,7 +2576,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(ctx_pop) {
-		vm->instr_count++;
 		if (UNLIKELY(!vm_pop_field_ctx(vm))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2555,7 +2586,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_nest) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, true))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2565,7 +2595,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(ctx_unnest) {
-		vm->instr_count++;
 		if (UNLIKELY(!vm_pop_field_ctx(vm))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2581,8 +2610,13 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(literal) {
 		const ln_instr_t *inst = INST();
 		uint16_t len;
-		vm->instr_count++;
 		len = inst->aux;
+		/* Inline literals live in the 60-byte union; a malformed aux must
+		 * not let memcmp over-read past data.str (security audit #6b). */
+		if (UNLIKELY(len > LN_INSTR_MAX_INLINE)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		if (UNLIKELY(REMAINING() < len)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2606,8 +2640,12 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(literal_ci) {
 		const ln_instr_t *inst = INST();
 		uint16_t len;
-		vm->instr_count++;
 		len = inst->aux;
+		/* Bound the inline compare to the 60-byte union (security audit #6b). */
+		if (UNLIKELY(len > LN_INSTR_MAX_INLINE)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		if (UNLIKELY(REMAINING() < len)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2625,7 +2663,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(char) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2640,7 +2677,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(any) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2663,7 +2699,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_word) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_word(ip, REMAINING(), &span) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2679,7 +2714,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_number(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2695,7 +2729,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_number(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2714,7 +2747,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_float) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_float(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2729,7 +2761,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_ipv4) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_ipv4(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2744,7 +2775,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_ipv6) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_ipv6(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2760,7 +2790,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_hex(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2775,7 +2804,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_quoted) {
 		const ln_instr_t *inst = INST();
 		size_t start, len, consumed;
-		vm->instr_count++;
 		if (UNLIKELY(parse_op_quoted(ip, REMAINING(), &start, &len, &consumed) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2791,7 +2819,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		ln_span_t span;
-		vm->instr_count++;
 		delim = (char)inst->data.char_to.delim;
 		if (UNLIKELY(ln_simd_char_to(ip, REMAINING(), delim, &span) != LN_SIMD_OK)) {
 			WRITEBACK();
@@ -2808,7 +2835,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		size_t len;
-		vm->instr_count++;
 		delim = (char)inst->data.char_to.delim;
 		if (UNLIKELY(parse_char_to(ip, REMAINING(), delim, &len) != 0)) {
 			WRITEBACK();
@@ -2824,7 +2850,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_rest) {
 		const ln_instr_t *inst = INST();
 		size_t rem;
-		vm->instr_count++;
 		rem = REMAINING();
 		vm->ip = ip;
 		vm_add_string_field(vm, inst->data.str, ip, rem);
@@ -2836,7 +2861,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_json) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		vm->ip = ip;
 		/* SIMD stage-1 structural scan + scalar stage-2 flatten.
 		 * On parse failure BACKTRACK restores result->n_fields from the
@@ -2854,7 +2878,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_mac) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_mac48(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2869,7 +2892,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_date) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2904,7 +2926,6 @@ ln_vm_continue(ln_vm_t *vm)
 		int ignore_ws;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -3050,7 +3071,6 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(skip_space) {
-		vm->instr_count++;
 		ip += ln_simd_skip_space(ip, REMAINING());
 		pc++;
 		DISPATCH();
@@ -3059,7 +3079,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_space1) {
 		size_t rem;
 		size_t skipped;
-		vm->instr_count++;
 		rem = REMAINING();
 		if (UNLIKELY(rem == 0 || !isspace((unsigned char)ip[0]))) {
 			WRITEBACK();
@@ -3076,7 +3095,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_n) {
 		const ln_instr_t *inst = INST();
 		uint16_t n;
-		vm->instr_count++;
 		n = inst->aux;
 		if (UNLIKELY(REMAINING() < n)) {
 			WRITEBACK();
@@ -3092,7 +3110,6 @@ ln_vm_continue(ln_vm_t *vm)
 		char c;
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		c = inst->data.str[0];
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, c);
@@ -3110,7 +3127,6 @@ ln_vm_continue(ln_vm_t *vm)
 		char c;
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		c = inst->data.str[0];
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, c);
@@ -3126,7 +3142,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_line) {
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, '\n');
 		ip += (pos < rem) ? pos + 1 : rem;
@@ -3140,7 +3155,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(tag) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.str[0]) {
 			ln_fast_add_tag(vm->result, inst->data.str);
 		}
@@ -3150,7 +3164,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(rule_id) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.str[0]) {
 			ln_fast_set_rule_id(vm->result, inst->data.str);
 		}
@@ -3160,7 +3173,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(static_field) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.kv.key[0]) {
 			uint16_t klen = inst->aux;
 			size_t vlen = strlen(inst->data.kv.val);
@@ -3177,7 +3189,6 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(assert_char) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1 || *ip != INST()->data.str[0])) {
 			WRITEBACK();
 			BACKTRACK();
@@ -3187,7 +3198,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(assert_end) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() > 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -3197,7 +3207,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(assert_start) {
-		vm->instr_count++;
 		if (UNLIKELY(ip != vm->input)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -3215,7 +3224,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		uint32_t pri;
 		int digits;
-		vm->instr_count++;
 		rem = REMAINING();
 		if (UNLIKELY(rem < 3 || ip[0] != '<')) {
 			WRITEBACK();
@@ -3247,7 +3255,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
 		const char *name;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -3276,7 +3283,6 @@ ln_vm_continue(ln_vm_t *vm)
 			"SignatureID", "Name", "Severity"
 		};
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -3415,7 +3421,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -3538,7 +3543,6 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t rem;
 		size_t json_len;
 
-		vm->instr_count++;
 
 		fname = inst->data.str;
 		rem = REMAINING();
@@ -3594,7 +3598,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -3679,13 +3682,11 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(nop) {
-		vm->instr_count++;
 		pc++;
 		DISPATCH();
 	}
 
 	CASE(debug) {
-		vm->instr_count++;
 		WRITEBACK();
 		fprintf(stderr, "[DEBUG] pc=%u ip=%zu ctx_sp=%u\n",
 				pc, (size_t)(ip - vm->input), vm->field_ctx_sp);
@@ -3723,6 +3724,7 @@ backtrack:
 	#undef REMAINING
 	#undef INST
 	#undef WRITEBACK
+	#undef VALIDATE_TARGET
 }
 
 #else /* !LN_VM_COMPUTED_GOTO — switch-based fallback */
