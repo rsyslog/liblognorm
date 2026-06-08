@@ -96,6 +96,18 @@ big=$(python3 -c 'print("1" + "0"*69)')
 execute "{\"big\": $big}"
 assert_output_json_eq '{ "field": { "big": 1e69 } }'
 
+# Locale-independence: the decimal separator is always '.' regardless of the
+# process LC_NUMERIC. Under a comma-decimal locale, plain strtod() would parse
+# "1.5" as 1.0; turbo parses via a private C locale (strtod_l) so it stays 1.5.
+# (Falls back to the C locale itself if de_DE is not installed -> still 1.5.)
+LC_ALL=de_DE.UTF-8 LC_NUMERIC=de_DE.UTF-8 execute '{"v": 1.5}'
+assert_output_json_eq '{ "field": { "v": 1.5 } }'
+
+# Malformed \u escape must be emitted literally INCLUDING its backslash (the old
+# code dropped the '\' and emitted only "u1z34"). The 'z' makes \u non-hex.
+execute '{"s": "\u1z34"}'
+assert_output_json_eq '{ "field": { "s": "\\u1z34" } }'
+
 # Key-buffer overflow must FAIL the parse (backtrack), not silently mislabel the
 # leaf under a truncated key. A deeply-nested path whose dotted key exceeds the
 # 512-byte scratch buffer must not match.

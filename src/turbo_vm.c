@@ -24,6 +24,10 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
+/* config.h MUST precede the system headers: it defines _GNU_SOURCE, which is what
+ * makes glibc's <stdlib.h> declare strtod_l (modern glibc has no <xlocale.h>).
+ * FreeBSD/macOS declare strtod_l in <xlocale.h>, included below. */
+#include "config.h"
 #include "turbo_vm.h"
 #include "turbo_vm_opt.h"
 #include "turbo_simd.h"
@@ -32,6 +36,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <locale.h>
+#if defined(__has_include)
+# if __has_include(<xlocale.h>)
+#  include <xlocale.h>
+# endif
+#endif
 
 /*============================================================================
  * Debug Tracing
@@ -942,7 +952,10 @@ json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
 						break;
 					}
 				}
-				dst[o++] = 'u';   /* malformed \u: emit literally */
+				/* malformed \u: emit the backslash + 'u' literally; the
+				 * hex-ish bytes that follow are emitted as normal chars. */
+				dst[o++] = '\\';
+				dst[o++] = 'u';
 				break;
 			}
 			default: dst[o++] = e; break;
@@ -997,18 +1010,45 @@ json_emit_double(ln_json_ctx_t *c, double v)
 		c->n_emitted++;
 }
 
+/* JSON numbers always use '.' as the decimal separator, but strtod() honours the
+ * process LC_NUMERIC, so in a comma-decimal locale (de_DE, fr_FR, ...) it would
+ * parse "1.5" as 1.0 -- silently corrupting the value and diverging from the v1
+ * path (libfastjson, which is locale-independent). We parse through a private C
+ * locale (strtod_l) instead. The locale is an immutable process-global resource:
+ * created once at library load, before any thread starts, and never modified, so
+ * sharing it across threads needs no locking. */
+static locale_t turbo_c_locale;
+
+__attribute__((constructor))
+static void turbo_c_locale_init(void)
+{
+	turbo_c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+}
+
+__attribute__((destructor))
+static void turbo_c_locale_fini(void)
+{
+	if (turbo_c_locale != (locale_t)0) {
+		freelocale(turbo_c_locale);
+		turbo_c_locale = (locale_t)0;
+	}
+}
+
 /*
  * Emit s[0..len) (an already grammar-validated JSON number span) as a double.
  * The common case fits the stack buffer; a pathologically long number is copied
- * in full via the VM arena before strtod, because truncating to the stack buffer
- * could cut a trailing 'eNN' exponent and silently corrupt the magnitude. strtod
- * saturates out-of-range values to +/-HUGE_VAL per C, which is acceptable here.
+ * in full via the VM arena, because truncating to the stack buffer could cut a
+ * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
+ * through the private C locale (strtod_l) so the decimal point is always '.'
+ * regardless of the process locale; out-of-range values saturate to +/-HUGE_VAL
+ * per C, which is acceptable here.
  */
 static void
 json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 {
 	char stackbuf[64];
 	const char *num;
+	double v;
 
 	if (len < sizeof(stackbuf)) {
 		memcpy(stackbuf, s, len);
@@ -1018,7 +1058,11 @@ json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 		num = ln_arena_strndup(c->vm->arena, s, len);
 		if (num == NULL) return;   /* OOM: drop this field, keep the line */
 	}
-	json_emit_double(c, strtod(num, NULL));
+	/* Plain strtod only as a fallback if newlocale() failed at load (OOM). */
+	v = (turbo_c_locale != (locale_t)0)
+		? strtod_l(num, NULL, turbo_c_locale)
+		: strtod(num, NULL);
+	json_emit_double(c, v);
 }
 
 /* bool emitted as the STRING "true"/"false" (string-store convention). */
