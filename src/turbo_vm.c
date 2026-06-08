@@ -248,7 +248,27 @@ ln_vm_init(ln_vm_t *vm, ln_arena_t *arena)
 	memset(vm, 0, sizeof(*vm));
 	vm->arena = arena;
 
+	/* Private C locale for locale-independent number parsing (strtod_l). JSON
+	 * numbers always use '.' as the decimal point, but plain strtod() honours
+	 * LC_NUMERIC and would read "1.5" as 1.0 under a comma-decimal locale. "C"
+	 * needs no locale files, so newlocale only fails on OOM; on failure we fail
+	 * init, so the caller drops turbo and uses the locale-independent v1 path
+	 * rather than ever parsing a number under the wrong locale. Freed by
+	 * ln_vm_destroy. */
+	vm->c_locale = (void *)newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+	if (vm->c_locale == NULL) return LN_VM_ERROR;
+
 	return LN_VM_OK;
+}
+
+void
+ln_vm_destroy(ln_vm_t *vm)
+{
+	if (!vm) return;
+	if (vm->c_locale != NULL) {
+		freelocale((locale_t)vm->c_locale);
+		vm->c_locale = NULL;
+	}
 }
 
 void
@@ -1010,45 +1030,22 @@ json_emit_double(ln_json_ctx_t *c, double v)
 		c->n_emitted++;
 }
 
-/* JSON numbers always use '.' as the decimal separator, but strtod() honours the
- * process LC_NUMERIC, so in a comma-decimal locale (de_DE, fr_FR, ...) it would
- * parse "1.5" as 1.0 -- silently corrupting the value and diverging from the v1
- * path (libfastjson, which is locale-independent). We parse through a private C
- * locale (strtod_l) instead. The locale is an immutable process-global resource:
- * created once at library load, before any thread starts, and never modified, so
- * sharing it across threads needs no locking. */
-static locale_t turbo_c_locale;
-
-__attribute__((constructor))
-static void turbo_c_locale_init(void)
-{
-	turbo_c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
-}
-
-__attribute__((destructor))
-static void turbo_c_locale_fini(void)
-{
-	if (turbo_c_locale != (locale_t)0) {
-		freelocale(turbo_c_locale);
-		turbo_c_locale = (locale_t)0;
-	}
-}
-
 /*
  * Emit s[0..len) (an already grammar-validated JSON number span) as a double.
  * The common case fits the stack buffer; a pathologically long number is copied
  * in full via the VM arena, because truncating to the stack buffer could cut a
  * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
- * through the private C locale (strtod_l) so the decimal point is always '.'
- * regardless of the process locale; out-of-range values saturate to +/-HUGE_VAL
- * per C, which is acceptable here.
+ * through the VM's private C locale (strtod_l), so the decimal point is always
+ * '.' regardless of the process LC_NUMERIC -- matching the locale-independent v1
+ * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
+ * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
+ * the turbo context is never built and the v1 path is used instead.
  */
 static void
 json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 {
 	char stackbuf[64];
 	const char *num;
-	double v;
 
 	if (len < sizeof(stackbuf)) {
 		memcpy(stackbuf, s, len);
@@ -1058,11 +1055,7 @@ json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 		num = ln_arena_strndup(c->vm->arena, s, len);
 		if (num == NULL) return;   /* OOM: drop this field, keep the line */
 	}
-	/* Plain strtod only as a fallback if newlocale() failed at load (OOM). */
-	v = (turbo_c_locale != (locale_t)0)
-		? strtod_l(num, NULL, turbo_c_locale)
-		: strtod(num, NULL);
-	json_emit_double(c, v);
+	json_emit_double(c, strtod_l(num, NULL, (locale_t)c->vm->c_locale));
 }
 
 /* bool emitted as the STRING "true"/"false" (string-store convention). */

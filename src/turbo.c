@@ -801,6 +801,7 @@ ln_turbo_ctx_free(ln_turbo_ctx_t *turbo)
 		free(turbo->json_buf);
 		turbo->json_buf = NULL;
 	}
+	ln_vm_destroy(&turbo->vm);
 	if (turbo->arena.base) {
 		ln_arena_destroy(&turbo->arena);
 	}

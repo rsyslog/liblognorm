@@ -112,6 +112,10 @@ typedef struct {
 	/* Output - FAST RESULT */
 	ln_fast_result_t *result;   /**< Parse result (optimized) */
 	ln_arena_t  *arena;         /**< Arena for overflow storage */
+	void        *c_locale;      /**< C locale_t for locale-independent number
+	                              *  parsing (strtod_l); owned, created in
+	                              *  ln_vm_init, freed in ln_vm_destroy. void* so
+	                              *  this header needs no <locale.h>. */
 
 	/* Statistics */
 	uint64_t    instr_count;    /**< Instructions executed */
@@ -130,6 +134,7 @@ typedef struct {
  *============================================================================*/
 
 int ln_vm_init(ln_vm_t *vm, ln_arena_t *arena);
+void ln_vm_destroy(ln_vm_t *vm);
 void ln_vm_reset(ln_vm_t *vm);
 
 /*============================================================================
