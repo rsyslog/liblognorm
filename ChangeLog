@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.1.0, 2026-05-07
+Version 2.1.0, 2026-06-23
 - add TurboVM bytecode engine for high-performance log parsing
   Compiles rulebases into optimized bytecode executed by a linear VM
   with SIMD-accelerated parsing primitives (SSE4.2 on x86-64, NEON
