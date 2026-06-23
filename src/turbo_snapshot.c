@@ -56,13 +56,50 @@ rebase_ptr(const char *ptr, const uint8_t *old_base, const char *new_base)
 	return new_base + offset;
 }
 
+/**
+ * @brief Number of trailing bytes a non-arena string needs in the snapshot
+ *        backing buffer when it has to be copied in (len + 1 for the NUL).
+ *
+ * A pointer needs copying iff it is non-NULL and does NOT already live in the
+ * arena region (those are handled by the cheap rebase path). The byte count
+ * uses the stored length — values carry an explicit length and may contain
+ * embedded NULs; names are length-prefixed too. We always append a trailing
+ * NUL so the snapshot strings stay C-string compatible like the originals.
+ */
+static inline size_t
+copy_bytes_if_external(const char *ptr, size_t len,
+					   const uint8_t *arena_base, size_t arena_used)
+{
+	if (!ptr) return 0;
+	if (arena_base && ptr_in_arena(ptr, arena_base, arena_used)) return 0;
+	return len + 1;
+}
+
+/**
+ * @brief Append @p len bytes from @p src into the snapshot backing buffer at
+ *        @p *off, NUL-terminate, and return the destination pointer. Advances
+ *        @p *off past the written bytes (+ the NUL).
+ */
+static inline const char *
+append_external(char *backing, size_t *off, const char *src, size_t len)
+{
+	char *dst = backing + *off;
+	memcpy(dst, src, len);
+	dst[len] = '\0';
+	*off += len + 1;
+	return dst;
+}
+
 ln_fast_result_snapshot_t *
 ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 								const ln_arena_t *arena)
 {
 	size_t arena_used = 0;
 	const uint8_t *arena_base = NULL;
+	size_t extra = 0;        /* bytes for non-arena strings copied in */
+	size_t off;              /* bump offset into the backing buffer    */
 	size_t total;
+	char *backing;
 	ln_fast_result_snapshot_t *snap;
 
 	if (!src) return NULL;
@@ -73,62 +110,97 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 		arena_base = arena->base;
 	}
 
-	/* Single allocation: header + arena data */
-	total = sizeof(ln_fast_result_snapshot_t) + arena_used;
+	/* Pass 1: size the extra space needed for every pointer that does NOT
+	 * live in the arena and therefore cannot be rebased. "Not in arena" does
+	 * NOT imply "long-lived/static" — OP_FIELD_REST/WORD/STR_TO/CHAR_TO/QUOTED
+	 * store long (>= LN_FAST_INLINE_SIZE) values as raw pointers straight into
+	 * the input line. Those, plus non-static names and the original message,
+	 * must be copied so the snapshot can outlive the input line. */
+	for (int i = 0; i < src->n_fields; i++) {
+		const ln_fast_field_t *f = &src->fields[i];
+
+		if (f->type == LN_FTYPE_STRING)
+			extra += copy_bytes_if_external(f->v.str.ptr, f->v.str.len,
+											arena_base, arena_used);
+		if (!(f->flags & LN_FFIELD_STATIC_NAME))
+			extra += copy_bytes_if_external(f->name, f->name_len,
+											arena_base, arena_used);
+	}
+	extra += copy_bytes_if_external(src->original, src->original_len,
+									arena_base, arena_used);
+
+	/* Single allocation: header + arena data + non-arena string copies */
+	total = sizeof(ln_fast_result_snapshot_t) + arena_used + extra;
 	snap = malloc(total);
 	if (!snap) return NULL;
 
 	/* Copy the result struct */
 	memcpy(&snap->result, src, sizeof(ln_fast_result_t));
-	snap->arena_size = arena_used;
+	/* arena_size tracks the whole owned backing region (arena + extra) so the
+	 * snapshot remains a single self-contained allocation. */
+	snap->arena_size = arena_used + extra;
 
-	/* Copy arena bytes */
+	backing = snap->arena_data;
+
+	/* Copy arena bytes into the head of the backing buffer */
 	if (arena_used > 0) {
-		memcpy(snap->arena_data, arena_base, arena_used);
+		memcpy(backing, arena_base, arena_used);
 	}
 
 	/* Detach from original arena — snapshot is self-contained */
 	snap->result.arena = NULL;
 
-	/* Rebase all pointers that reference the arena region */
+	/* Pass 2: rebase arena pointers; copy-and-repoint non-arena ones. The
+	 * non-arena copies are bump-appended after the arena region. */
+	off = arena_used;
 	for (int i = 0; i < snap->result.n_fields; i++) {
 		ln_fast_field_t *f = &snap->result.fields[i];
 
-		/* Rebase field name if it points into the arena */
-		if (f->name && arena_base &&
-			!(f->flags & LN_FFIELD_STATIC_NAME) &&
-			ptr_in_arena(f->name, arena_base, arena_used)) {
-			f->name = rebase_ptr(f->name, arena_base,
-								 (const char *)snap->arena_data);
+		/* Field name: rebase if in arena, else copy in (unless static). */
+		if (f->name && !(f->flags & LN_FFIELD_STATIC_NAME)) {
+			if (arena_base && ptr_in_arena(f->name, arena_base, arena_used)) {
+				f->name = rebase_ptr(f->name, arena_base, backing);
+			} else {
+				f->name = append_external(backing, &off,
+										  f->name, f->name_len);
+			}
 		}
 
-		/* Rebase string value if it points into the arena */
-		if (f->type == LN_FTYPE_STRING && f->v.str.ptr &&
-			arena_base &&
-			ptr_in_arena(f->v.str.ptr, arena_base, arena_used)) {
-			f->v.str.ptr = rebase_ptr(f->v.str.ptr, arena_base,
-									  (const char *)snap->arena_data);
+		/* String value: rebase if in arena, else copy in. */
+		if (f->type == LN_FTYPE_STRING && f->v.str.ptr) {
+			if (arena_base &&
+				ptr_in_arena(f->v.str.ptr, arena_base, arena_used)) {
+				f->v.str.ptr = rebase_ptr(f->v.str.ptr, arena_base, backing);
+			} else {
+				f->v.str.ptr = append_external(backing, &off,
+											   f->v.str.ptr, f->v.str.len);
+			}
 		}
 		/* LN_FTYPE_STRING_INLINE: data is inline in the struct, already copied */
 		/* LN_FTYPE_INT/DOUBLE/BOOL: no pointers to rebase */
 	}
 
-	/* Rebase rule_id if it points into the arena (unlikely, usually static) */
+	/* Rebase rule_id if it points into the arena (otherwise it is a
+	 * compile-time-static rule identifier with program lifetime). */
 	if (snap->result.rule_id && arena_base &&
 		ptr_in_arena(snap->result.rule_id, arena_base, arena_used)) {
 		snap->result.rule_id = rebase_ptr(snap->result.rule_id, arena_base,
-										  (const char *)snap->arena_data);
+										  backing);
 	}
 
-	/* Note: original message pointer (result.original) typically points
-	 * into the input buffer, NOT the arena. We leave it as-is because
-	 * the input buffer outlives the snapshot in the rsyslog pipeline
-	 * (message string is on the smsg_t). If it pointed into the arena,
-	 * we'd rebase it too. */
-	if (snap->result.original && arena_base &&
-		ptr_in_arena(snap->result.original, arena_base, arena_used)) {
-		snap->result.original = rebase_ptr(snap->result.original, arena_base,
-										   (const char *)snap->arena_data);
+	/* Original message: rebase if in arena, else copy in. It usually points
+	 * straight into the (caller-owned, soon-to-be-freed/reused) input line,
+	 * so a verbatim pointer copy would dangle. */
+	if (snap->result.original) {
+		if (arena_base &&
+			ptr_in_arena(snap->result.original, arena_base, arena_used)) {
+			snap->result.original = rebase_ptr(snap->result.original,
+											   arena_base, backing);
+		} else {
+			snap->result.original = append_external(backing, &off,
+													snap->result.original,
+													snap->result.original_len);
+		}
 	}
 
 	/* Tag strings are static (compile-time constants), no rebasing needed */

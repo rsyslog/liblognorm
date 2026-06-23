@@ -197,6 +197,57 @@ static int test_find_not_char_set_edge(void)
     return 1;
 }
 
+/*
+ * Regression: embedded NUL must NOT truncate the SSE4.2 scan.
+ *
+ * The buggy implicit-length PCMPISTRI treated each 16-byte chunk as
+ * ending at its first 0x00, so a delimiter after an embedded NUL was
+ * silently skipped -> the SSE path mis-segmented lines that the NEON
+ * and scalar paths parsed correctly (detection evasion). With the
+ * explicit-length PCMPESTRI fix, all three backends must agree.
+ *
+ * The chunk below is exactly 16 bytes so it is consumed entirely by the
+ * SIMD fast path (i + 16 <= len), exercising the patched code rather
+ * than the scalar tail.
+ */
+static int test_embedded_nul_no_truncation(void)
+{
+    /* 16-byte chunk: "aaaa\0bbb;ccccccc" — NUL at idx 4, ';' at idx 8 */
+    static const char chunk[16] = {
+        'a','a','a','a','\0','b','b','b',
+        ';','c','c','c','c','c','c','c'
+    };
+
+    /* find_char_set must find ';' at offset 8, not skip the chunk */
+    TEST_ASSERT_EQ(ln_simd_find_char_set(chunk, 16, ";"), 8,
+                   "find ';' after embedded NUL (SSE fast path)");
+
+    /* find_not_char_set: first byte not in {a} is the NUL at offset 4 */
+    TEST_ASSERT_EQ(ln_simd_find_not_char_set(chunk, 16, "a"), 4,
+                   "first non-'a' is the embedded NUL at offset 4");
+
+    /* skip_space: leading whitespace then NUL then ';' — NUL stops skip */
+    static const char wschunk[16] = {
+        ' ',' ',' ','\0',' ',' ',' ',';',
+        'c','c','c','c','c','c','c','c'
+    };
+    TEST_ASSERT_EQ(ln_simd_skip_space(wschunk, 16), 3,
+                   "skip_space stops at embedded NUL (offset 3)");
+
+    /*
+     * Cross-check: results must match the byte-accurate scalar reference,
+     * regardless of which backend was compiled in.
+     */
+    {
+        size_t ref = 16, k;
+        for (k = 0; k < 16; k++) { if (chunk[k] == ';') { ref = k; break; } }
+        TEST_ASSERT_EQ(ln_simd_find_char_set(chunk, 16, ";"), ref,
+                       "find_char_set agrees with scalar reference");
+    }
+
+    return 1;
+}
+
 /*============================================================================
  * skip_space Tests
  *============================================================================*/
@@ -822,6 +873,7 @@ int main(void)
     printf("find_not_char_set tests:\n");
     RUN_TEST(test_find_not_char_set_basic);
     RUN_TEST(test_find_not_char_set_edge);
+    RUN_TEST(test_embedded_nul_no_truncation);
     printf("\n");
 
     printf("skip_space tests:\n");

@@ -347,6 +347,19 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 static uint32_t
 emit_match(compiler_t *comp, struct ln_pdag *node)
 {
+	/* A top-level rule matches only when it has consumed the ENTIRE input:
+	 * the recursive normalizer accepts a terminal for normalization only at
+	 * end-of-input.  Assert that first so turbo agrees — otherwise a rule
+	 * whose last parser stops before EOL, or a strict-prefix rule reached via
+	 * the fallback fork, would falsely match a longer line on its trailing
+	 * bytes.  (Custom-type sub-matches end in OP_RET, not here, so they are
+	 * unaffected.) */
+	ln_instr_t end_instr = {0};
+	end_instr.op = OP_ASSERT_END;
+	uint32_t entry = emit(comp, &end_instr);
+	if (entry == UINT32_MAX)
+		return UINT32_MAX;
+
 	/* Emit tags first — these populate result.tags[] */
 	if (emit_tags(comp, node) != 0)
 		return UINT32_MAX;
@@ -366,7 +379,11 @@ emit_match(compiler_t *comp, struct ln_pdag *node)
 	}
 
 	comp->n_rules++;
-	return emit(comp, &instr);
+	if (emit(comp, &instr) == UINT32_MAX)
+		return UINT32_MAX;
+	/* Entry is the ASSERT_END — every path into this terminal (sequential,
+	 * fallback fork, or a sibling-branch fork) goes through the EOL gate. */
+	return entry;
 }
 
 static uint32_t
@@ -405,18 +422,21 @@ emit_ctx_pop(compiler_t *comp)
 
 static int compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry);
 
-/* Forward declaration for name-value-list parser data (defined in parser.c) */
+/* Forward declaration for name-value-list parser data (defined in parser.c).
+ * Layout must match struct data_NameValue in parser.c. */
 struct data_NameValue {
 	char sep;   /* separator (between key/value pairs) */
 	char ass;   /* assignator (between key and value) */
+	bool ignore_whitespaces; /* trim surrounding whitespace for key/value */
 };
 
-/* Forward declaration for char-sep parser data (defined in parser.c).
- * Layout matches the beginning of data_CharTo — both start with
- * term_chars + n_term_chars, so the cast is ABI-safe. */
+/* Mirrors the layout-prefix of parser.c's private data_CharTo /
+ * data_CharSeparated (no shared header). Both start with the same two fields;
+ * types must match parser.c exactly -- n_term_chars is size_t, not int (an int
+ * mirror only happens to work on little-endian LP64). Keep in lockstep. */
 struct data_CharSeparated {
-	char *term_chars;
-	int   n_term_chars;
+	char  *term_chars;
+	size_t n_term_chars;
 };
 
 /* Forward declaration for Checkpoint LEA parser data (defined in parser.c). */
@@ -525,18 +545,21 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		instr.op = OP_SKIP_SPACE;
 		pc = emit(comp, &instr);
 	} else if (op == OP_FIELD_NAME_VALUE) {
-		/* name-value-list: extract sep/ass from parser_data */
+		/* name-value-list: extract sep/ass/ignore_whitespaces from parser_data */
 		char sep = 0, ass = 0;  /* 0 = default (whitespace sep, '=' ass) */
+		uint8_t ignore_ws = 0;
 		if (prs->parser_data) {
 			struct data_NameValue *nvdata = (struct data_NameValue *)prs->parser_data;
 			sep = nvdata->sep;
 			ass = nvdata->ass;
+			ignore_ws = nvdata->ignore_whitespaces ? 1 : 0;
 		}
 		ln_instr_t instr = {0};
 		instr.op = OP_FIELD_NAME_VALUE;
 		instr.flags = LN_INSTR_F_STORE;
 		instr.data.char_to.delim = (uint8_t)sep;
 		instr.data.char_to.ass   = (uint8_t)ass;
+		instr.data.char_to.ignore_ws = ignore_ws;
 		if (prs->name) {
 			size_t nlen = strlen(prs->name);
 			if (nlen >= sizeof(instr.data.char_to.name))
@@ -648,12 +671,24 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 
 	*entry = first;
 
+	/* A node can be terminal AND still have continuation parsers when its
+	 * rule is a strict prefix of a longer rule.  The continuations are tried
+	 * first; if they all fail the terminal OP_MATCH below must still be
+	 * reachable, so reserve a fallback fork to it here (lowest priority). */
+	uint32_t term_fallback_pc = UINT32_MAX;
+	if (node->flags.isTerminal) {
+		term_fallback_pc = emit_fork(comp);
+		if (term_fallback_pc == UINT32_MAX) { comp->depth--; return -1; }
+	}
+
 	if (node->nparsers == 1) {
 		uint32_t pc;
 		r = compile_parser(comp, &node->parsers[0], &pc);
 		if (r != 0) { comp->depth--; return r; }
 
 		if (node->flags.isTerminal) {
+			comp->turbo->code[term_fallback_pc].data.jump.offset =
+				(int32_t)comp->turbo->code_len - (int32_t)term_fallback_pc;
 			if (comp->in_custom_type == 0) {
 				if (emit_match(comp, node) == UINT32_MAX) {
 					comp->depth--;
@@ -702,6 +737,8 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 	free(fork_pcs);
 
 	if (node->flags.isTerminal) {
+		comp->turbo->code[term_fallback_pc].data.jump.offset =
+			(int32_t)comp->turbo->code_len - (int32_t)term_fallback_pc;
 		if (comp->in_custom_type == 0) {
 			if (emit_match(comp, node) == UINT32_MAX) {
 				comp->depth--;
@@ -764,6 +801,7 @@ ln_turbo_ctx_free(ln_turbo_ctx_t *turbo)
 		free(turbo->json_buf);
 		turbo->json_buf = NULL;
 	}
+	ln_vm_destroy(&turbo->vm);
 	if (turbo->arena.base) {
 		ln_arena_destroy(&turbo->arena);
 	}
@@ -1016,6 +1054,43 @@ ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
 		/* Non-string types: caller should use typed accessors */
 		*value = NULL;
 		*vlen = 0;
+		break;
+	}
+	return 0;
+}
+
+int
+ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
+							   const char **name, size_t *nlen,
+							   ln_ftype_t *type, unsigned *flags,
+							   const char **sval, size_t *slen,
+							   int64_t *ival, double *dval)
+{
+	if (!r || idx < 0 || idx >= r->n_fields) return -1;
+	const ln_fast_field_t *f = &r->fields[idx];
+	if (name)  *name  = f->name;
+	if (nlen)  *nlen  = f->name_len;
+	if (type)  *type  = (ln_ftype_t)f->type;
+	if (flags) *flags = (unsigned)(f->flags & LN_FFIELD_NESTED);
+	switch (f->type) {
+	case LN_FTYPE_STRING:
+		if (sval) *sval = f->v.str.ptr;
+		if (slen) *slen = f->v.str.len;
+		break;
+	case LN_FTYPE_STRING_INLINE:
+		if (sval) *sval = f->v.inl;
+		if (slen) *slen = strlen(f->v.inl);
+		break;
+	case LN_FTYPE_INT:
+		if (ival) *ival = f->v.i;
+		break;
+	case LN_FTYPE_BOOL:
+		if (ival) *ival = f->v.b ? 1 : 0;
+		break;
+	case LN_FTYPE_DOUBLE:
+		if (dval) *dval = f->v.d;
+		break;
+	default: /* LN_FTYPE_NULL */
 		break;
 	}
 	return 0;

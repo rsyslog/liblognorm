@@ -24,13 +24,24 @@
  *
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
+/* config.h MUST precede the system headers: it defines _GNU_SOURCE, which is what
+ * makes glibc's <stdlib.h> declare strtod_l (modern glibc has no <xlocale.h>).
+ * FreeBSD/macOS declare strtod_l in <xlocale.h>, included below. */
+#include "config.h"
 #include "turbo_vm.h"
 #include "turbo_vm_opt.h"
 #include "turbo_simd.h"
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
+#include <locale.h>
+#if defined(__has_include)
+# if __has_include(<xlocale.h>)
+#  include <xlocale.h>
+# endif
+#endif
 
 /*============================================================================
  * Debug Tracing
@@ -237,7 +248,27 @@ ln_vm_init(ln_vm_t *vm, ln_arena_t *arena)
 	memset(vm, 0, sizeof(*vm));
 	vm->arena = arena;
 
+	/* Private C locale for locale-independent number parsing (strtod_l). JSON
+	 * numbers always use '.' as the decimal point, but plain strtod() honours
+	 * LC_NUMERIC and would read "1.5" as 1.0 under a comma-decimal locale. "C"
+	 * needs no locale files, so newlocale only fails on OOM; on failure we fail
+	 * init, so the caller drops turbo and uses the locale-independent v1 path
+	 * rather than ever parsing a number under the wrong locale. Freed by
+	 * ln_vm_destroy. */
+	vm->c_locale = (void *)newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+	if (vm->c_locale == NULL) return LN_VM_ERROR;
+
 	return LN_VM_OK;
+}
+
+void
+ln_vm_destroy(ln_vm_t *vm)
+{
+	if (!vm) return;
+	if (vm->c_locale != NULL) {
+		freelocale((locale_t)vm->c_locale);
+		vm->c_locale = NULL;
+	}
 }
 
 void
@@ -772,6 +803,510 @@ parse_json(const char *buf, size_t len, size_t *out_len)
 	return -1;
 }
 
+/*============================================================================
+ * SIMD-accelerated JSON flattening
+ *============================================================================
+ *
+ * OP_FIELD_JSON flattens a nested JSON object into the flat result store using
+ * dotted keys (e.g. {"alert":{"severity":3}} -> "alert.severity"=3). The
+ * dotted keys integrate with the existing flat result-tree key convention --
+ * the JSON serializer re-nests them on output -- and reuse the same separator
+ * the other nested turbo fields use (vm_build_field_name '.').
+ *
+ * Design: a length-gated hybrid scan that REUSES the VM's existing SIMD
+ * primitives (ln_simd_find_char / ln_simd_skip_space -- SSE4.2 + NEON + scalar
+ * backends) rather than inventing new vector machinery, so OP_FIELD_JSON
+ * inherits the dual-arch + scalar fallback contract for free.
+ *
+ *   - Structural walk (scalar recursive descent): typical log JSON is
+ *     structurally DENSE -- structural bytes sit only a few bytes apart -- so a
+ *     16-wide vector structural-set scan loses its per-chunk setup cost against
+ *     a tight scalar dispatch on the next byte. A pure-SIMD structural-set scan
+ *     measured slower than the scalar walk on representative log corpora, so we
+ *     walk structural bytes scalarly.
+ *   - String-body leap (length-gated SIMD): the one place long byte runs occur
+ *     is inside long string values (URLs, long identifiers). json_scan_string()
+ *     uses ln_simd_find_char() to jump to the closing quote, but ONLY when the
+ *     remaining span is >= 2 vector widths; short bodies take the scalar path.
+ *     This yields the SIMD win where it exists and zero regression where it
+ *     doesn't.
+ *   - Whitespace is skipped via the vectorized ln_simd_skip_space().
+ *
+ * Value lifetime (correctness landmine): BOTH the dotted key and any string
+ * value are ln_arena_strndup'd into the VM arena before we return. The flat
+ * store keeps STATIC (non-owning) pointers; only arena pointers survive for the
+ * lifetime of the result. A pointer into the transient input line would dangle.
+ * Keys are built in a small stack buffer then arena-duped.
+ */
+
+#define LN_JSON_MAX_DEPTH  64           /* matches LN_FAST_MAX_FIELDS ceiling */
+#define LN_JSON_KEYBUF     512          /* dotted-path scratch (stack) */
+
+typedef struct {
+	ln_vm_t      *vm;
+	const char   *buf;          /* whole JSON span being parsed */
+	size_t        len;
+	size_t        pos;          /* scalar cursor (offset into buf) */
+	char          key[LN_JSON_KEYBUF];  /* current dotted prefix */
+	size_t        key_len;      /* bytes used in key[] */
+	int           n_emitted;    /* leaves added to the flat store */
+	bool          full;         /* hit LN_FAST_MAX_FIELDS -- stop adding */
+} ln_json_ctx_t;
+
+/*
+ * Stage-1 SIMD skip of insignificant whitespace at ctx->pos. Reuses the VM's
+ * vectorized whitespace skip.
+ */
+static inline void
+json_skip_ws(ln_json_ctx_t *c)
+{
+	if (c->pos < c->len)
+		c->pos += ln_simd_skip_space(c->buf + c->pos, c->len - c->pos);
+}
+
+/*
+ * Stage-1 SIMD scan of a JSON string body starting just AFTER the opening
+ * quote. Uses ln_simd_find_char() to leap to the next '"' and corrects for
+ * backslash escapes scalarly (escapes are rare in typical log JSON, so the SIMD
+ * leap dominates). On return str/slen describe the raw (still-escaped) body
+ * and ctx->pos points just past the closing quote. Returns -1 if unterminated.
+ */
+static int
+json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
+{
+	size_t start = c->pos;          /* first byte of body */
+	size_t p = c->pos;
+
+	for (;;) {
+		size_t rem = c->len - p;
+		size_t off;
+		size_t bs = 0;
+		size_t q;
+		/* Length-gated SIMD: typical log JSON is structurally dense (short
+		 * string bodies, structural bytes a few bytes apart) so a 16-wide
+		 * vector scan loses its per-chunk setup cost against a tight scalar
+		 * loop on short bodies. We only pay for SIMD once a long body
+		 * (>= 2 vector widths) is plausible -- that captures the long values
+		 * (URLs, long identifiers) where the leap actually pays off. Net:
+		 * scalar-or-better on dense JSON, SIMD win on long values, zero
+		 * regression elsewhere. */
+		if (rem >= 2 * LN_SIMD_WIDTH) {
+			off = ln_simd_find_char(c->buf + p, rem, '"');
+		} else {
+			off = 0;
+			while (off < rem && c->buf[p + off] != '"') off++;
+		}
+		if (off >= rem) return -1;  /* no closing quote */
+		p += off;
+		/* count preceding backslashes to know if this quote is escaped */
+		q = p;
+		while (q > start && c->buf[q - 1] == '\\') { bs++; q--; }
+		if ((bs & 1) == 0) {        /* even => real closing quote */
+			*str = c->buf + start;
+			*slen = p - start;
+			c->pos = p + 1;         /* consume closing quote */
+			return 0;
+		}
+		p++;                        /* escaped quote, keep scanning */
+		if (p >= c->len) return -1;
+	}
+}
+
+/*
+ * Unescape a raw JSON string body into an arena buffer (the common JSON
+ * sequences: \" \\ \/ \n \r \t \b \f and \uXXXX -> UTF-8).
+ * If the body has no backslash, we arena-strndup directly (fast path). Returns
+ * arena pointer + out length, or NULL on OOM.
+ */
+static const char *
+json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
+{
+	const char *bs = memchr(s, '\\', n);
+	char *dst;
+	size_t o = 0;
+	size_t i;
+	if (bs == NULL) {
+		char *dup = ln_arena_strndup(vm->arena, s, n);
+		if (dup) *out_len = n;
+		return dup;
+	}
+	/* n is an input-derived length; guard n+1 against size_t wrap -- n ==
+	 * SIZE_MAX would make ln_arena_alloc see 0 and round it up to a 1-byte
+	 * buffer, which the unescape loop below would then overflow. */
+	if (n == SIZE_MAX) return NULL;
+	dst = ln_arena_alloc(vm->arena, n + 1);
+	if (!dst) return NULL;
+	for (i = 0; i < n; i++) {
+		char ch = s[i];
+		if (ch == '\\' && i + 1 < n) {
+			char e = s[++i];
+			switch (e) {
+			case '"':  dst[o++] = '"';  break;
+			case '\\': dst[o++] = '\\'; break;
+			case '/':  dst[o++] = '/';  break;
+			case 'n':  dst[o++] = '\n'; break;
+			case 'r':  dst[o++] = '\r'; break;
+			case 't':  dst[o++] = '\t'; break;
+			case 'b':  dst[o++] = '\b'; break;
+			case 'f':  dst[o++] = '\f'; break;
+			case 'u': {
+				/* \uXXXX -> UTF-8 (BMP only; surrogate pairs left as-is). */
+				if (i + 4 < n) {
+					unsigned cp = 0; int ok = 1, k;
+					for (k = 1; k <= 4; k++) {
+						char h = s[i + k]; unsigned d;
+						if (h >= '0' && h <= '9') d = (unsigned)(h - '0');
+						else if (h >= 'a' && h <= 'f') d = (unsigned)(h - 'a' + 10);
+						else if (h >= 'A' && h <= 'F') d = (unsigned)(h - 'A' + 10);
+						else { ok = 0; break; }
+						cp = (cp << 4) | d;
+					}
+					if (ok) {
+						i += 4;
+						if (cp < 0x80) {
+							dst[o++] = (char)cp;
+						} else if (cp < 0x800) {
+							dst[o++] = (char)(0xC0 | (cp >> 6));
+							dst[o++] = (char)(0x80 | (cp & 0x3F));
+						} else {
+							dst[o++] = (char)(0xE0 | (cp >> 12));
+							dst[o++] = (char)(0x80 | ((cp >> 6) & 0x3F));
+							dst[o++] = (char)(0x80 | (cp & 0x3F));
+						}
+						break;
+					}
+				}
+				/* malformed \u: emit the backslash + 'u' literally; the
+				 * hex-ish bytes that follow are emitted as normal chars. */
+				dst[o++] = '\\';
+				dst[o++] = 'u';
+				break;
+			}
+			default: dst[o++] = e; break;
+			}
+		} else {
+			dst[o++] = ch;
+		}
+	}
+	dst[o] = '\0';
+	*out_len = o;
+	return dst;
+}
+
+/* Emit a leaf into the flat store. key[]/key_len is the dotted path. */
+static void
+json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
+{
+	size_t vlen;
+	const char *key;
+	const char *val;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	val = json_unescape_arena(c->vm, raw, raw_len, &vlen);
+	if (!key || !val) return;
+	if (ln_fast_add_string_static(c->vm->result, key, (uint16_t)c->key_len,
+				      val, (uint32_t)vlen) == 0)
+		c->n_emitted++;
+}
+
+static void
+json_emit_int(ln_json_ctx_t *c, int64_t v)
+{
+	const char *key;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_int_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
+		c->n_emitted++;
+}
+
+static void
+json_emit_double(ln_json_ctx_t *c, double v)
+{
+	const char *key;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_double_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
+		c->n_emitted++;
+}
+
+/*
+ * Emit s[0..len) (an already grammar-validated JSON number span) as a double.
+ * The common case fits the stack buffer; a pathologically long number is copied
+ * in full via the VM arena, because truncating to the stack buffer could cut a
+ * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
+ * through the VM's private C locale (strtod_l), so the decimal point is always
+ * '.' regardless of the process LC_NUMERIC -- matching the locale-independent v1
+ * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
+ * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
+ * the turbo context is never built and the v1 path is used instead.
+ */
+static void
+json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
+{
+	char stackbuf[64];
+	const char *num;
+
+	if (len < sizeof(stackbuf)) {
+		memcpy(stackbuf, s, len);
+		stackbuf[len] = '\0';
+		num = stackbuf;
+	} else {
+		num = ln_arena_strndup(c->vm->arena, s, len);
+		if (num == NULL) return;   /* OOM: drop this field, keep the line */
+	}
+	json_emit_double(c, strtod_l(num, NULL, (locale_t)c->vm->c_locale));
+}
+
+/* bool emitted as the STRING "true"/"false" (string-store convention). */
+static void
+json_emit_bool(ln_json_ctx_t *c, bool v)
+{
+	json_emit_string(c, v ? "true" : "false", v ? 4 : 5);
+}
+
+static int json_parse_value(ln_json_ctx_t *c, int depth);
+
+/*
+ * Parse a JSON number at ctx->pos with a strict JSON-grammar validator:
+ *   optional leading '-', required integer digits, optional '.'+frac digits,
+ *   optional 'e'/'E' (+/-) exp digits. Returns -1 on any invalid form
+ *   (lone '-'/'.', '+'-prefix, multiple '.'/'e', sign mid-number, ...) WITHOUT
+ *   advancing the cursor, so the caller backtracks the whole line instead of
+ *   mis-consuming garbage. On success advances pos by exactly the validated
+ *   length. Decides int vs double by presence of '.', 'e' or 'E'.
+ */
+static int
+json_parse_number(ln_json_ctx_t *c)
+{
+	const char *s = c->buf + c->pos;
+	size_t rem = c->len - c->pos;
+	size_t i = 0;
+	bool is_double = false;
+
+	if (i < rem && s[i] == '-') i++;        /* JSON allows leading '-' only */
+
+	{
+		size_t int_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == int_start) return -1;      /* integer digits required */
+	}
+
+	if (i < rem && s[i] == '.') {
+		size_t frac_start;
+		is_double = true; i++;
+		frac_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == frac_start) return -1;     /* '.' must be followed by digits */
+	}
+
+	if (i < rem && (s[i] == 'e' || s[i] == 'E')) {
+		size_t exp_start;
+		is_double = true; i++;
+		if (i < rem && (s[i] == '+' || s[i] == '-')) i++;
+		exp_start = i;
+		while (i < rem && s[i] >= '0' && s[i] <= '9') i++;
+		if (i == exp_start) return -1;      /* exponent digits required */
+	}
+
+	if (is_double) {
+		json_emit_double_span(c, s, i);
+	} else {
+		int64_t v;
+		size_t consumed;
+		if (parse_number(s, i, &v, &consumed) == 0)
+			json_emit_int(c, v);
+		else
+			/* overflow / too-long int: keep full span as double for fidelity */
+			json_emit_double_span(c, s, i);
+	}
+	c->pos += i;
+	return 0;
+}
+
+/*
+ * Parse a JSON object body: ctx->pos is just past '{'. Appends ".<key>" to the
+ * dotted path for each member, recurses into the value, then truncates back.
+ */
+static int
+json_parse_object(ln_json_ctx_t *c, int depth)
+{
+	size_t saved_len = c->key_len;
+
+	json_skip_ws(c);
+	if (c->pos < c->len && c->buf[c->pos] == '}') { c->pos++; return 0; }
+
+	for (;;) {
+		const char *kstr; size_t klen;
+
+		json_skip_ws(c);
+		if (c->pos >= c->len || c->buf[c->pos] != '"') return -1;
+		c->pos++;                                   /* opening quote */
+		if (json_scan_string(c, &kstr, &klen) != 0) return -1;
+
+		/* append ".<key>" to dotted path; fail (backtrack the line) on
+		 * overflow rather than silently dropping the segment, which would
+		 * mislabel this leaf under the parent/root key = silent corruption. */
+		c->key_len = saved_len;
+		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF)
+			return -1;   /* klen is input-derived: reject it alone first so the
+			              * sum below cannot size_t-wrap past the bound */
+		if (saved_len > 0) c->key[c->key_len++] = '.';
+		memcpy(c->key + c->key_len, kstr, klen);
+		c->key_len += klen;
+
+		json_skip_ws(c);
+		if (c->pos >= c->len || c->buf[c->pos] != ':') return -1;
+		c->pos++;                                   /* ':' */
+
+		if (json_parse_value(c, depth + 1) != 0) return -1;
+
+		c->key_len = saved_len;                     /* pop member key */
+
+		json_skip_ws(c);
+		if (c->pos >= c->len) return -1;
+		if (c->buf[c->pos] == ',') { c->pos++; continue; }
+		if (c->buf[c->pos] == '}') { c->pos++; return 0; }
+		return -1;
+	}
+}
+
+/*
+ * Parse a JSON array. Arrays are uncommon in flat log JSON, so we keep this
+ * minimal: scalar elements get an index-suffix key.N; object/array elements are
+ * structurally skipped (consumed but not flattened). This keeps the span
+ * consumption correct for v1 parity without object-array flattening.
+ */
+static int
+json_parse_array(ln_json_ctx_t *c, int depth)
+{
+	size_t saved_len = c->key_len;
+	int idx = 0;
+
+	json_skip_ws(c);
+	if (c->pos < c->len && c->buf[c->pos] == ']') { c->pos++; return 0; }
+
+	for (;;) {
+		char ib[24];
+		int n;
+
+		json_skip_ws(c);
+		if (c->pos >= c->len) return -1;
+
+		/* index-suffix key for scalar elements; fail (backtrack the line)
+		 * on overflow rather than silently mislabelling the element. */
+		c->key_len = saved_len;
+		n = snprintf(ib, sizeof(ib), ".%d", idx);
+		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) return -1;
+		memcpy(c->key + c->key_len, ib, (size_t)n);
+		c->key_len += (size_t)n;
+
+		if (json_parse_value(c, depth + 1) != 0) return -1;
+		c->key_len = saved_len;
+
+		json_skip_ws(c);
+		if (c->pos >= c->len) return -1;
+		if (c->buf[c->pos] == ',') { c->pos++; idx++; continue; }
+		if (c->buf[c->pos] == ']') { c->pos++; return 0; }
+		return -1;
+	}
+}
+
+static int
+json_parse_value(ln_json_ctx_t *c, int depth)
+{
+	if (depth > LN_JSON_MAX_DEPTH) return -1;
+	json_skip_ws(c);
+	if (c->pos >= c->len) return -1;
+
+	switch (c->buf[c->pos]) {
+	case '{':
+		c->pos++;
+		return json_parse_object(c, depth);
+	case '[':
+		c->pos++;
+		return json_parse_array(c, depth);
+	case '"': {
+		const char *s; size_t sl;
+		c->pos++;
+		if (json_scan_string(c, &s, &sl) != 0) return -1;
+		json_emit_string(c, s, sl);
+		return 0;
+	}
+	case 't':
+		if (c->len - c->pos >= 4 && memcmp(c->buf + c->pos, "true", 4) == 0) {
+			json_emit_bool(c, true); c->pos += 4; return 0;
+		}
+		return -1;
+	case 'f':
+		if (c->len - c->pos >= 5 && memcmp(c->buf + c->pos, "false", 5) == 0) {
+			json_emit_bool(c, false); c->pos += 5; return 0;
+		}
+		return -1;
+	case 'n':
+		if (c->len - c->pos >= 4 && memcmp(c->buf + c->pos, "null", 4) == 0) {
+			c->pos += 4; return 0;        /* null -> skip (no field) */
+		}
+		return -1;
+	default:
+		return json_parse_number(c);     /* number or invalid */
+	}
+}
+
+/*
+ * Top-level JSON flatten entry. Parses one JSON value (object or array) at buf,
+ * flattens leaves under field_name into vm->result, and reports the consumed
+ * byte span. Returns 0 on success (valid JSON), -1 on parse error.
+ *
+ * The flat keys are "<field_name>.<dotted.path>" so the serializer re-nests
+ * them under field_name -- matching the v1 parser's nested output.
+ */
+static int
+vm_json_flatten(ln_vm_t *vm, const char *field_name,
+		const char *buf, size_t len, size_t *out_consumed)
+{
+	ln_json_ctx_t c;
+	uint16_t fn_len;
+	const char *full_name;
+
+	if (len == 0) return -1;
+
+	/* peek first significant byte: must be object or array */
+	{
+		size_t lead = ln_simd_skip_space(buf, len);
+		if (lead >= len) return -1;
+		if (buf[lead] != '{' && buf[lead] != '[') return -1;
+	}
+
+	memset(&c, 0, sizeof(c));
+	c.vm  = vm;
+	c.buf = buf;
+	c.len = len;
+	c.pos = 0;
+
+	/* Seed the dotted prefix with the (context-resolved) field name so the
+	 * flattened leaves nest under it, exactly like vm_add_string_field. */
+	full_name = vm_build_field_name(vm, field_name, &fn_len);
+	if (full_name && full_name[0]) {
+		/* Fail (backtrack the line) if the seed prefix alone overflows the
+		 * key buffer rather than emitting every leaf under a truncated /
+		 * empty root = silent corruption. */
+		if (fn_len >= LN_JSON_KEYBUF) return -1;
+		memcpy(c.key, full_name, fn_len);
+		c.key_len = fn_len;
+	}
+
+	if (json_parse_value(&c, 0) != 0) return -1;
+
+	/* trailing insignificant whitespace inside the consumed span is fine */
+	*out_consumed = c.pos;
+	return 0;
+}
+
 static inline int
 parse_mac48(const char *buf, size_t len, size_t *out_len)
 {
@@ -910,6 +1445,8 @@ vm_exec_instr(ln_vm_t *vm)
 
 	case OP_LITERAL: {
 		uint16_t len = inst->aux;
+		/* Bound inline compare to the 60-byte union (security audit #6b). */
+		if (len > LN_INSTR_MAX_INLINE) return -1;
 		if (remaining < len) return -1;
 		if (memcmp(vm->ip, inst->data.str, len) != 0) return -1;
 		vm->ip += len;
@@ -919,6 +1456,8 @@ vm_exec_instr(ln_vm_t *vm)
 
 	case OP_LITERAL_CI: {
 		uint16_t len = inst->aux;
+		/* Bound inline compare to the 60-byte union (security audit #6b). */
+		if (len > LN_INSTR_MAX_INLINE) return -1;
 		if (remaining < len) return -1;
 		for (uint16_t i = 0; i < len; i++) {
 			if (tolower((unsigned char)vm->ip[i]) !=
@@ -1100,9 +1639,10 @@ vm_exec_instr(ln_vm_t *vm)
 		const char *name = inst->data.str;
 		size_t len;
 
-		if (parse_json(vm->ip, remaining, &len) != 0) return -1;
+		/* SIMD-flatten nested JSON into dotted flat keys. */
+		if (vm_json_flatten(vm, name, vm->ip, remaining, &len) != 0)
+			return -1;
 
-		vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1138,6 +1678,7 @@ vm_exec_instr(ln_vm_t *vm)
 		const char sep = (char)inst->data.char_to.delim;  /* 0 = whitespace */
 		const char ass = (char)inst->data.char_to.ass;     /* 0 = '=' */
 		const char ass_char = ass ? ass : '=';
+		const int ignore_ws = inst->data.char_to.ignore_ws;
 		const char *p;
 		const char *end;
 		int n_pairs;
@@ -1154,12 +1695,20 @@ vm_exec_instr(ln_vm_t *vm)
 
 		while (p < end) {
 			/* --- Parse name --- */
-			const char *name_start = p;
-			size_t name_end_off;
-			size_t name_len;
+			const char *name_start;
+			size_t name_end_off; /* raw distance to assignator */
+			size_t name_len;     /* stored name length (may be trimmed) */
 			const char *val_start;
 			size_t val_len;
 			char *arena_name;
+
+			/* ignore_whitespaces: skip leading whitespace before the name
+			 * (SIMD-accelerated; same whitespace class as isspace). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+				if (p >= end) break;
+			}
+			name_start = p;
 
 			/* Scan for assignator char using SIMD find_char */
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
@@ -1172,23 +1721,36 @@ vm_exec_instr(ln_vm_t *vm)
 			name_len = name_end_off;
 			if (name_len == 0) break;
 
-			/* Validate name characters: alnum, '.', '_', '-' */
 			if (ass == 0) {
-				/* Default mode: strict name validation */
+				/* Default mode: name must be a contiguous run of valid
+				 * chars immediately followed by '=' (matches the
+				 * standard parser; no trailing-whitespace trim here). */
 				int valid = 1;
 				size_t k;
 				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
+					unsigned char c = (unsigned char)name_start[k];
 					if (!(isalnum(c) || c == '.' || c == '_' || c == '-')) {
 						valid = 0;
 						break;
 					}
 				}
 				if (!valid) break;
+			} else if (ignore_ws) {
+				/* Custom assignator: name is anything before ass; trim its
+				 * trailing whitespace to match the standard parser. */
+				while (name_len > 0
+					&& isspace((unsigned char)name_start[name_len - 1]))
+					name_len--;
+				if (name_len == 0) break;
 			}
-			/* else: custom assignator mode — name is anything before ass */
 
-			p += name_len + 1; /* skip name + assignator */
+			p += name_end_off + 1; /* skip name span + assignator */
+
+			/* ignore_whitespaces: skip whitespace between assignator and
+			 * value (SIMD-accelerated). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
 
 			/* --- Parse value --- */
 			if (p < end && (*p == '"' || *p == '\'')) {
@@ -1225,6 +1787,13 @@ vm_exec_instr(ln_vm_t *vm)
 						val_len++;
 				}
 				p += val_len;
+				/* ignore_whitespaces: trim trailing whitespace from an
+				 * unquoted value (quoted values are kept verbatim). */
+				if (ignore_ws) {
+					while (val_len > 0
+						&& isspace((unsigned char)val_start[val_len - 1]))
+						val_len--;
+				}
 			}
 
 			/* --- Store the field --- */
@@ -1237,7 +1806,17 @@ vm_exec_instr(ln_vm_t *vm)
 			vm_add_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
-			/* --- Skip separator(s) --- */
+			/* --- Advance to the next pair ---
+			 * Matches the standard parser: with ignore_whitespaces and a
+			 * custom separator, skip whitespace before the separator; then
+			 * a separator (whitespace when sep == 0) must follow, otherwise
+			 * stop. Finally consume the separator run. */
+			if (ignore_ws && sep) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
+			if (p < end
+				&& !(sep ? (*p == sep) : isspace((unsigned char)*p)))
+				break;
 			if (sep) {
 				while (p < end && *p == sep) p++;
 			} else {
@@ -1889,6 +2468,27 @@ ln_vm_continue(ln_vm_t *vm)
 	#define INST()       (&prog->code[pc])
 	#define WRITEBACK()  do { vm->pc = pc; vm->ip = ip; } while(0)
 
+	/*
+	 * VALIDATE_TARGET (security audit #5): compute a control-flow target
+	 * (jump/fork/call/ret) in int64_t and range-check it against
+	 * [0, code_len) BEFORE it is used or pushed. This prevents a crafted
+	 * relative offset from wrapping uint32_t arithmetic back into a
+	 * valid-looking-but-wrong pc. The DISPATCH bounds guard is the
+	 * backstop; this yields a clean error at the offending site.
+	 * `_t64` is the int64_t target expression; on success `_dst` (a
+	 * uint32_t lvalue) receives the validated value.
+	 */
+	#define VALIDATE_TARGET(_dst, _t64) \
+		do { \
+			int64_t _tt = (_t64); \
+			if (UNLIKELY(_tt < 0 || (uint64_t)_tt >= prog->code_len)) { \
+				vm->error = "control-flow target out of bounds"; \
+				WRITEBACK(); \
+				return LN_VM_ERROR; \
+			} \
+			(_dst) = (uint32_t)_tt; \
+		} while (0)
+
 	/* Start dispatch */
 	DISPATCH();
 
@@ -1912,16 +2512,14 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(jump) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
-		pc += inst->data.jump.offset;
+		VALIDATE_TARGET(pc, (int64_t)pc + inst->data.jump.offset);
 		DISPATCH();
 	}
 
 	CASE(fork) {
 		const ln_instr_t *inst = INST();
 		uint32_t alt_pc;
-		vm->instr_count++;
-		alt_pc = pc + inst->data.jump.offset;
+		VALIDATE_TARGET(alt_pc, (int64_t)pc + inst->data.jump.offset);
 		vm->pc = pc; vm->ip = ip; /* push_fork reads vm state */
 		if (UNLIKELY(!vm_push_fork(vm, alt_pc))) {
 			WRITEBACK();
@@ -1937,26 +2535,30 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(call) {
 		const ln_instr_t *inst;
-		vm->instr_count++;
+		uint32_t ret_pc, target_pc;
 		if (UNLIKELY(vm->call_sp >= LN_VM_MAX_CALLS)) {
 			vm->error = "call stack overflow";
 			WRITEBACK();
 			BACKTRACK();
 		}
 		inst = INST();
-		vm->calls[vm->call_sp++] = pc + 1;
-		pc += inst->data.jump.offset;
+		/* Validate both the return addr (pc+1) and the call target
+		 * before mutating the call stack (security audit #5). */
+		VALIDATE_TARGET(ret_pc, (int64_t)pc + 1);
+		VALIDATE_TARGET(target_pc, (int64_t)pc + inst->data.jump.offset);
+		vm->calls[vm->call_sp++] = ret_pc;
+		pc = target_pc;
 		DISPATCH();
 	}
 
 	CASE(ret) {
-		vm->instr_count++;
 		if (UNLIKELY(vm->call_sp == 0)) {
 			vm->error = "call stack underflow";
 			WRITEBACK();
 			BACKTRACK();
 		}
-		pc = vm->calls[--vm->call_sp];
+		/* Validate the popped return target (security audit #5). */
+		VALIDATE_TARGET(pc, (int64_t)vm->calls[--vm->call_sp]);
 		DISPATCH();
 	}
 
@@ -1966,7 +2568,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_push) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, false))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -1975,7 +2576,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(ctx_pop) {
-		vm->instr_count++;
 		if (UNLIKELY(!vm_pop_field_ctx(vm))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -1986,7 +2586,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_nest) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, true))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -1996,7 +2595,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(ctx_unnest) {
-		vm->instr_count++;
 		if (UNLIKELY(!vm_pop_field_ctx(vm))) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2012,8 +2610,13 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(literal) {
 		const ln_instr_t *inst = INST();
 		uint16_t len;
-		vm->instr_count++;
 		len = inst->aux;
+		/* Inline literals live in the 60-byte union; a malformed aux must
+		 * not let memcmp over-read past data.str (security audit #6b). */
+		if (UNLIKELY(len > LN_INSTR_MAX_INLINE)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		if (UNLIKELY(REMAINING() < len)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2037,8 +2640,12 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(literal_ci) {
 		const ln_instr_t *inst = INST();
 		uint16_t len;
-		vm->instr_count++;
 		len = inst->aux;
+		/* Bound the inline compare to the 60-byte union (security audit #6b). */
+		if (UNLIKELY(len > LN_INSTR_MAX_INLINE)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		if (UNLIKELY(REMAINING() < len)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2056,7 +2663,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(char) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2071,7 +2677,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(any) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2094,7 +2699,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_word) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_word(ip, REMAINING(), &span) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2110,7 +2714,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_number(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2126,7 +2729,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_number(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2145,7 +2747,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_float) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_float(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2160,7 +2761,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_ipv4) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_ipv4(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2175,7 +2775,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_ipv6) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_ipv6(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2191,7 +2790,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		int64_t value;
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_hex(ip, REMAINING(), &value, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2206,7 +2804,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_quoted) {
 		const ln_instr_t *inst = INST();
 		size_t start, len, consumed;
-		vm->instr_count++;
 		if (UNLIKELY(parse_op_quoted(ip, REMAINING(), &start, &len, &consumed) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2222,7 +2819,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		ln_span_t span;
-		vm->instr_count++;
 		delim = (char)inst->data.char_to.delim;
 		if (UNLIKELY(ln_simd_char_to(ip, REMAINING(), delim, &span) != LN_SIMD_OK)) {
 			WRITEBACK();
@@ -2239,7 +2835,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		size_t len;
-		vm->instr_count++;
 		delim = (char)inst->data.char_to.delim;
 		if (UNLIKELY(parse_char_to(ip, REMAINING(), delim, &len) != 0)) {
 			WRITEBACK();
@@ -2255,7 +2850,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_rest) {
 		const ln_instr_t *inst = INST();
 		size_t rem;
-		vm->instr_count++;
 		rem = REMAINING();
 		vm->ip = ip;
 		vm_add_string_field(vm, inst->data.str, ip, rem);
@@ -2267,13 +2861,15 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_json) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
-		if (UNLIKELY(parse_json(ip, REMAINING(), &len) != 0)) {
+		vm->ip = ip;
+		/* SIMD stage-1 structural scan + scalar stage-2 flatten.
+		 * On parse failure BACKTRACK restores result->n_fields from the
+		 * fork snapshot, rolling back any partially-emitted leaves. */
+		if (UNLIKELY(vm_json_flatten(vm, inst->data.str, ip,
+					     REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
-		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2282,7 +2878,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_mac) {
 		const ln_instr_t *inst = INST();
 		size_t len;
-		vm->instr_count++;
 		if (UNLIKELY(parse_mac48(ip, REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2297,7 +2892,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_date) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2329,9 +2923,9 @@ ln_vm_continue(ln_vm_t *vm)
 		char sep;
 		char ass;
 		char ass_char;
+		int ignore_ws;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -2339,6 +2933,7 @@ ln_vm_continue(ln_vm_t *vm)
 		sep = (char)inst->data.char_to.delim;
 		ass = (char)inst->data.char_to.ass;
 		ass_char = ass ? ass : '=';
+		ignore_ws = inst->data.char_to.ignore_ws;
 
 		if (ctx_name[0]) {
 			vm_push_field_ctx(vm, ctx_name, false);
@@ -2349,12 +2944,20 @@ ln_vm_continue(ln_vm_t *vm)
 		n_pairs = 0;
 
 		while (p < end) {
-			const char *name_start = p;
-			size_t name_end_off;
-			size_t name_len;
+			const char *name_start;
+			size_t name_end_off; /* raw distance to assignator */
+			size_t name_len;     /* stored name length (may be trimmed) */
 			const char *val_start;
 			size_t val_len;
 			char *arena_name;
+
+			/* ignore_whitespaces: skip leading whitespace before the name
+			 * (SIMD-accelerated; same whitespace class as isspace). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+				if (p >= end) break;
+			}
+			name_start = p;
 
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
 			if (name_end_off >= (size_t)(end - p)) break;
@@ -2363,19 +2966,33 @@ ln_vm_continue(ln_vm_t *vm)
 			if (name_len == 0) break;
 
 			if (ass == 0) {
+				/* Default mode: contiguous valid-char name followed by '='
+				 * (matches the standard parser; no trailing-ws trim). */
 				int valid = 1;
 				size_t k;
 				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
+					unsigned char c = (unsigned char)name_start[k];
 					if (!(isalnum(c) || c == '.' || c == '_' || c == '-')) {
 						valid = 0;
 						break;
 					}
 				}
 				if (!valid) break;
+			} else if (ignore_ws) {
+				/* Custom assignator: trim the name's trailing whitespace. */
+				while (name_len > 0
+					&& isspace((unsigned char)name_start[name_len - 1]))
+					name_len--;
+				if (name_len == 0) break;
 			}
 
-			p += name_len + 1;
+			p += name_end_off + 1; /* skip name span + assignator */
+
+			/* ignore_whitespaces: skip whitespace between assignator and
+			 * value (SIMD-accelerated). */
+			if (ignore_ws) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
 
 			if (p < end && (*p == '"' || *p == '\'')) {
 				char quote = *p;
@@ -2405,6 +3022,12 @@ ln_vm_continue(ln_vm_t *vm)
 						val_len++;
 				}
 				p += val_len;
+				/* ignore_whitespaces: trim trailing ws from unquoted value */
+				if (ignore_ws) {
+					while (val_len > 0
+						&& isspace((unsigned char)val_start[val_len - 1]))
+						val_len--;
+				}
 			}
 
 			/* Arena-allocate name so it outlives this stack frame */
@@ -2415,6 +3038,13 @@ ln_vm_continue(ln_vm_t *vm)
 			vm_add_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
+			/* Advance to the next pair (see scalar handler for rationale). */
+			if (ignore_ws && sep) {
+				p += ln_simd_skip_space(p, (size_t)(end - p));
+			}
+			if (p < end
+				&& !(sep ? (*p == sep) : isspace((unsigned char)*p)))
+				break;
 			if (sep) {
 				while (p < end && *p == sep) p++;
 			} else {
@@ -2441,7 +3071,6 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(skip_space) {
-		vm->instr_count++;
 		ip += ln_simd_skip_space(ip, REMAINING());
 		pc++;
 		DISPATCH();
@@ -2450,7 +3079,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_space1) {
 		size_t rem;
 		size_t skipped;
-		vm->instr_count++;
 		rem = REMAINING();
 		if (UNLIKELY(rem == 0 || !isspace((unsigned char)ip[0]))) {
 			WRITEBACK();
@@ -2467,7 +3095,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_n) {
 		const ln_instr_t *inst = INST();
 		uint16_t n;
-		vm->instr_count++;
 		n = inst->aux;
 		if (UNLIKELY(REMAINING() < n)) {
 			WRITEBACK();
@@ -2483,7 +3110,6 @@ ln_vm_continue(ln_vm_t *vm)
 		char c;
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		c = inst->data.str[0];
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, c);
@@ -2501,7 +3127,6 @@ ln_vm_continue(ln_vm_t *vm)
 		char c;
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		c = inst->data.str[0];
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, c);
@@ -2517,7 +3142,6 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(skip_line) {
 		size_t rem;
 		size_t pos;
-		vm->instr_count++;
 		rem = REMAINING();
 		pos = ln_simd_find_char(ip, rem, '\n');
 		ip += (pos < rem) ? pos + 1 : rem;
@@ -2531,7 +3155,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(tag) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.str[0]) {
 			ln_fast_add_tag(vm->result, inst->data.str);
 		}
@@ -2541,7 +3164,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(rule_id) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.str[0]) {
 			ln_fast_set_rule_id(vm->result, inst->data.str);
 		}
@@ -2551,7 +3173,6 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(static_field) {
 		const ln_instr_t *inst = INST();
-		vm->instr_count++;
 		if (vm->result && inst->data.kv.key[0]) {
 			uint16_t klen = inst->aux;
 			size_t vlen = strlen(inst->data.kv.val);
@@ -2568,7 +3189,6 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(assert_char) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() < 1 || *ip != INST()->data.str[0])) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2578,7 +3198,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(assert_end) {
-		vm->instr_count++;
 		if (UNLIKELY(REMAINING() > 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2588,7 +3207,6 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(assert_start) {
-		vm->instr_count++;
 		if (UNLIKELY(ip != vm->input)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2606,7 +3224,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		uint32_t pri;
 		int digits;
-		vm->instr_count++;
 		rem = REMAINING();
 		if (UNLIKELY(rem < 3 || ip[0] != '<')) {
 			WRITEBACK();
@@ -2638,7 +3255,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
 		const char *name;
-		vm->instr_count++;
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2667,7 +3283,6 @@ ln_vm_continue(ln_vm_t *vm)
 			"SignatureID", "Name", "Severity"
 		};
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -2806,7 +3421,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -2929,7 +3543,6 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t rem;
 		size_t json_len;
 
-		vm->instr_count++;
 
 		fname = inst->data.str;
 		rem = REMAINING();
@@ -2955,20 +3568,20 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 
-		/* Parse JSON body */
-		if (UNLIKELY(parse_json(p, rem, &json_len) != 0)) {
+		/* SIMD-flatten the CEE JSON body into dotted flat keys. */
+		vm->ip = ip;
+		if (UNLIKELY(vm_json_flatten(vm, fname, p, rem, &json_len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 
-		/* JSON must consume rest of input */
+		/* JSON must consume rest of input (trailing whitespace allowed). */
+		json_len += ln_simd_skip_space(p + json_len, rem - json_len);
 		if (UNLIKELY(json_len != rem)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 
-		vm->ip = ip;
-		vm_add_string_field(vm, fname, p, json_len);
 		ip = p + json_len;
 		pc++;
 		DISPATCH();
@@ -2985,7 +3598,6 @@ ln_vm_continue(ln_vm_t *vm)
 		const char *p;
 		int n_pairs;
 
-		vm->instr_count++;
 		vm->ip = ip;
 		vm->pc = pc;
 
@@ -3070,13 +3682,11 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(nop) {
-		vm->instr_count++;
 		pc++;
 		DISPATCH();
 	}
 
 	CASE(debug) {
-		vm->instr_count++;
 		WRITEBACK();
 		fprintf(stderr, "[DEBUG] pc=%u ip=%zu ctx_sp=%u\n",
 				pc, (size_t)(ip - vm->input), vm->field_ctx_sp);
@@ -3114,6 +3724,7 @@ backtrack:
 	#undef REMAINING
 	#undef INST
 	#undef WRITEBACK
+	#undef VALIDATE_TARGET
 }
 
 #else /* !LN_VM_COMPUTED_GOTO — switch-based fallback */

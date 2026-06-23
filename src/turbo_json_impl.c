@@ -437,16 +437,19 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
 		if (!f->name) continue;
 
 		/* Each dot in name generates an extra object: "key":{ ... }
-		 * Worst case: each component needs "name":{  = name_len + 4
-		 * Plus closing braces. Generous estimate: name_len * 2 + 8 */
-		est += f->name_len * 2 + 8;
+		 * Worst-case JSON escaping expands ONE byte to six ("\uXXXX"),
+		 * and each dot expands to a nested-object wrapper. Budget
+		 * name_len * 6 (full \uXXXX expansion) + 8 structural slack
+		 * (quotes, colon, brace) so the buffer is always large enough. */
+		est += f->name_len * 6 + 8;
 
 		switch (f->type) {
 		case LN_FTYPE_STRING:
-			est += f->v.str.len * 2 + 2;  /* Worst case escaping */
+			/* Worst case: every byte -> "\uXXXX" (6) + 2 quotes */
+			est += f->v.str.len * 6 + 2;
 			break;
 		case LN_FTYPE_STRING_INLINE:
-			est += LN_FAST_INLINE_SIZE * 2 + 2;
+			est += LN_FAST_INLINE_SIZE * 6 + 2;
 			break;
 		case LN_FTYPE_INT:
 			est += 21;
@@ -465,7 +468,9 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
 		est += 20;  /* "event":{"tags":[ or "tags":[ + closing */
 		for (uint8_t i = 0; i < r->n_tags; i++) {
 			if (r->tags[i].tag)
-				est += strlen(r->tags[i].tag) + 3;
+				/* Tags also go through write_escaped_string:
+				 * every byte may expand to "\uXXXX" (6) + quotes/comma. */
+				est += strlen(r->tags[i].tag) * 6 + 3;
 		}
 	}
 

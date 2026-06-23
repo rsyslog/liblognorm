@@ -218,6 +218,25 @@ void ln_arena_destroy(ln_arena_t *arena);
 void *ln_arena_alloc(ln_arena_t *arena, size_t size);
 
 /**
+ * @brief Allocate an array of `nmemb` elements of `elem` bytes from the arena.
+ *
+ * Computes the total allocation size as `nmemb * elem` with a checked
+ * multiply. If the product would overflow size_t (CWE-190), returns NULL
+ * instead of allocating an undersized region. This is the safe primitive
+ * behind the LN_ARENA_ARRAY() macro and must be used whenever the element
+ * count may be derived from untrusted input.
+ *
+ * @param[in] arena  Arena to allocate from (must not be NULL)
+ * @param[in] nmemb  Number of elements
+ * @param[in] elem   Size of each element in bytes
+ * @return Pointer to allocated memory, or NULL on overflow or exhaustion
+ *
+ * @note Returned pointer is valid until arena is reset or destroyed.
+ * @note The memory is NOT initialized.
+ */
+void *ln_arena_alloc_array(ln_arena_t *arena, size_t nmemb, size_t elem);
+
+/**
  * @brief Allocate aligned memory from the arena.
  *
  * Returns a pointer to at least `size` bytes of memory, aligned to
@@ -442,7 +461,7 @@ void ln_arena_get_stats(const ln_arena_t *arena, ln_arena_stats_t *stats);
  * @endcode
  */
 #define LN_ARENA_ARRAY(arena, type, count) \
-	((type *)ln_arena_alloc((arena), sizeof(type) * (count)))
+	((type *)ln_arena_alloc_array((arena), (count), sizeof(type)))
 
 /**
  * @brief Allocate an aligned typed object from the arena.

@@ -71,13 +71,34 @@ build_char_class(const char *chars, uint8_t table[256])
 
 #if defined(LN_SIMD_SSE42)
 
-/* @brief  Optimized SSE4.2 char set loader */
+/*
+ * @brief  Optimized SSE4.2 char set loader.
+ *
+ * Loads up to 16 characters of the set into an XMM register and, via
+ * @p set_len, reports the true number of set characters loaded (clamped
+ * to the 16-byte SSE operand width). The reported length is what feeds
+ * PCMPESTRI's explicit set-operand length so embedded NULs inside the
+ * data chunk no longer truncate the comparison (the implicit-length
+ * PCMPISTRI bug). A set with a NUL byte is itself terminated at that
+ * NUL here, matching the strchr()/lookup-table tail which also treats
+ * @p chars as a C string.
+ *
+ * Note: PCMPESTRI's set operand is 16 bytes wide, so we lift the former
+ * 15-char strncpy truncation to a full 16-char cap.
+ */
 static inline __m128i
-ln_simd_load_chars(const char *chars)
+ln_simd_load_chars(const char *chars, int *set_len)
 {
 	uint8_t padded[16] = {0};
+	size_t n = 0;
 	if (chars) {
-		strncpy((char*)padded, chars, 15);
+		while (n < 16 && chars[n] != '\0') {
+			padded[n] = (uint8_t)chars[n];
+			n++;
+		}
+	}
+	if (set_len) {
+		*set_len = (int)n;
 	}
 	return _mm_loadu_si128((const __m128i *)(const void *)padded);
 }
@@ -127,16 +148,24 @@ size_t
 ln_simd_find_char_set(const char *buf, size_t len, const char *chars)
 {
 	__m128i set;
+	int set_len;
 	size_t i;
 
 	if (!buf || len == 0 || !chars || !*chars) return len;
 
-	set = ln_simd_load_chars(chars);
+	set = ln_simd_load_chars(chars, &set_len);
 	i = 0;
 
 	while (i + 16 <= len) {
 		 __m128i chunk = _mm_loadu_si128((const __m128i *)(const void *)(buf + i));
-		 int index = _mm_cmpistri(set, chunk, _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY);
+		 /*
+		  * Explicit-length PCMPESTRI: honour the true data length (16 here,
+		  * a full chunk) and set length so an embedded NUL inside the chunk
+		  * no longer terminates the comparison early. Implicit-length
+		  * PCMPISTRI would have ignored every byte past the first NUL.
+		  */
+		 int index = _mm_cmpestri(set, set_len, chunk, 16,
+			 _SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY);
 		 if (index < 16) return i + index;
 		 i += 16;
 	}
@@ -153,18 +182,22 @@ ln_simd_find_char_set(const char *buf, size_t len, const char *chars)
 size_t
 ln_simd_find_not_char_set(const char *buf, size_t len, const char *chars)
 {
-	uint8_t padded_set[16] = {0};
 	__m128i set;
+	int set_len;
 	size_t i;
 
 	if (!buf || len == 0 || !chars) return 0;
-	strncpy((char*)padded_set, chars, 15);
-	set = _mm_loadu_si128((const __m128i *)(const void *)padded_set);
+	set = ln_simd_load_chars(chars, &set_len);
 	i = 0;
 	while (i + 16 <= len) {
 		__m128i chunk = _mm_loadu_si128((const __m128i *)(const void *)(buf + i));
-		/* Negative Polarity finds the first char that is NOT in the 'chars' set */
-		int index = _mm_cmpistri(set, chunk,
+		/*
+		 * Negative Polarity finds the first char that is NOT in the 'chars'
+		 * set. Explicit-length PCMPESTRI honours the full 16-byte data
+		 * length so an embedded NUL in the chunk is treated as a normal
+		 * (not-in-set) byte rather than terminating the scan early.
+		 */
+		int index = _mm_cmpestri(set, set_len, chunk, 16,
 			_SIDD_UBYTE_OPS | _SIDD_CMP_EQUAL_ANY | _SIDD_NEGATIVE_POLARITY);
 		if (index < 16) return i + index;
 		i += 16;
@@ -184,13 +217,22 @@ ln_simd_skip_space(const char *buf, size_t len)
 
 	if (!buf || len == 0) return 0;
 
-	/* Ranges: 0x09-0x0D (TAB, LF, VT, FF, CR) and 0x20 (SPACE) */
+	/*
+	 * Ranges: 0x09-0x0D (TAB, LF, VT, FF, CR) and 0x20 (SPACE).
+	 * Two ranges = 4 boundary bytes, so the explicit set length is 4.
+	 */
 	ranges = _mm_setr_epi8(0x09, 0x0D, 0x20, 0x20, 0,0,0,0,0,0,0,0,0,0,0,0);
 	i = 0;
 	while (i + 16 <= len) {
 		__m128i chunk = _mm_loadu_si128((const __m128i *)(const void *)(buf + i));
-		/* Find first character NOT in the whitespace range */
-		int index = _mm_cmpistri(ranges, chunk, _SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_NEGATIVE_POLARITY);
+		/*
+		 * Find first character NOT in the whitespace range. Explicit-length
+		 * PCMPESTRI honours the full 16-byte data length: a NUL byte (0x00)
+		 * is outside the whitespace ranges, so it correctly terminates the
+		 * skip rather than being ignored by implicit-length scanning.
+		 */
+		int index = _mm_cmpestri(ranges, 4, chunk, 16,
+			_SIDD_UBYTE_OPS | _SIDD_CMP_RANGES | _SIDD_NEGATIVE_POLARITY);
 		if (index < 16) return i + index;
 		i += 16;
 	}

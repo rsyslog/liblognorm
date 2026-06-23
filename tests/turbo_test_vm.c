@@ -72,8 +72,9 @@ static void setup_vm(ln_vm_t *vm, ln_arena_t *arena, ln_fast_result_t *result)
 }
 
 /** Common test teardown */
-static void teardown_vm(ln_arena_t *arena)
+static void teardown_vm(ln_vm_t *vm, ln_arena_t *arena)
 {
+    ln_vm_destroy(vm);
     ln_arena_destroy(arena);
 }
 
@@ -123,7 +124,7 @@ static int test_vm_init(void)
     TEST_ASSERT_EQ(vm.field_ctx_sp, 0, "field_ctx_sp should be 0");
     TEST_ASSERT(vm.matched_rule == NULL, "no match yet");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -162,7 +163,7 @@ static int test_vm_reset(void)
     /* Reset NULL should not crash */
     ln_vm_reset(NULL);
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -219,10 +220,15 @@ static int test_instruction_builders(void)
     TEST_ASSERT(strncmp(i.data.char_to.name, "msg", 3) == 0, "field name");
 
     /* FIELD_NAME_VALUE */
-    i = ln_i_field_name_value("pairs", ' ', '=');
+    i = ln_i_field_name_value("pairs", ' ', '=', 0);
     TEST_ASSERT_EQ(i.op, OP_FIELD_NAME_VALUE, "field_name_value opcode");
     TEST_ASSERT_EQ(i.data.char_to.delim, ' ', "separator");
     TEST_ASSERT_EQ(i.data.char_to.ass, '=', "assignator");
+    TEST_ASSERT_EQ(i.data.char_to.ignore_ws, 0, "ignore_ws default");
+
+    /* FIELD_NAME_VALUE with ignore_whitespaces */
+    i = ln_i_field_name_value("pairs", ',', ':', 1);
+    TEST_ASSERT_EQ(i.data.char_to.ignore_ws, 1, "ignore_ws set");
 
     /* SKIP_SPACE */
     i = ln_i_skip_space();
@@ -279,7 +285,7 @@ static int test_vm_halt(void)
     TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "halt = no match");
     TEST_ASSERT(!ln_vm_matched(&vm), "not matched");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -304,7 +310,7 @@ static int test_vm_literal_match(void)
     TEST_ASSERT_EQ(ln_vm_consumed(&vm), 5, "consumed all input");
     TEST_ASSERT_EQ(ln_vm_remaining(&vm), 0, "no remaining");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -326,7 +332,7 @@ static int test_vm_literal_no_match(void)
     TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "should not match");
     TEST_ASSERT(!ln_vm_matched(&vm), "not matched");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -352,7 +358,7 @@ static int test_vm_char_match(void)
     r = ln_vm_exec(&vm, &prog, "B", 1, &result);
     TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "should not match");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -374,7 +380,7 @@ static int test_vm_nop(void)
     int r = ln_vm_exec(&vm, &prog, "", 0, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "NOPs don't block");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -400,7 +406,7 @@ static int test_vm_jump(void)
     int r = ln_vm_exec(&vm, &prog, "", 0, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "jump should skip halt");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -426,7 +432,7 @@ static int test_vm_fork_first_path(void)
     TEST_ASSERT_EQ(r, LN_VM_OK, "should match first path");
     TEST_ASSERT(strcmp(vm.matched_rule, "rule_hello") == 0, "first path rule");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -452,7 +458,7 @@ static int test_vm_fork_second_path(void)
     TEST_ASSERT(strcmp(vm.matched_rule, "rule_world") == 0, "second path rule");
     TEST_ASSERT(vm.backtrack_count > 0, "backtrack happened");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -476,7 +482,7 @@ static int test_vm_fork_neither(void)
     int r = ln_vm_exec(&vm, &prog, "xxxxx", 5, &result);
     TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "neither path matches");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -501,7 +507,7 @@ static int test_vm_fail_opcode(void)
     TEST_ASSERT_EQ(r, LN_VM_OK, "should take alt path");
     TEST_ASSERT(strcmp(vm.matched_rule, "alt") == 0, "alt rule matched");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -528,7 +534,7 @@ static int test_vm_skip_space(void)
     int r = ln_vm_exec(&vm, &prog, "hello   world", 13, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "skip space match");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -550,7 +556,7 @@ static int test_vm_skip_n(void)
     int r = ln_vm_exec(&vm, &prog, "123world", 8, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "skip N match");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -584,7 +590,7 @@ static int test_vm_field_word(void)
     TEST_ASSERT_EQ(vlen, 6, "value length");
     TEST_ASSERT(memcmp(val, "myhost", 6) == 0, "value content");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -610,7 +616,7 @@ static int test_vm_field_int(void)
     TEST_ASSERT_EQ(f->type, LN_FTYPE_INT, "type is INT");
     TEST_ASSERT_EQ(f->v.i, -42, "value is -42");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -640,7 +646,7 @@ static int test_vm_field_rest(void)
     TEST_ASSERT_EQ(vlen, 15, "rest length");
     TEST_ASSERT(memcmp(val, "everything else", 15) == 0, "rest content");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -674,7 +680,7 @@ static int test_vm_field_char_to(void)
     val = field_str(fv, &vlen);
     TEST_ASSERT(memcmp(val, "myvalue", 7) == 0, "val value");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -702,7 +708,7 @@ static int test_vm_field_ipv4(void)
     TEST_ASSERT(val != NULL, "value not null");
     TEST_ASSERT(memcmp(val, "192.168.1.1", 11) == 0, "ipv4 value");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -726,7 +732,7 @@ static int test_vm_field_quoted(void)
     const ln_fast_field_t *f = find_field(&result, "msg");
     TEST_ASSERT(f != NULL, "field found");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -754,7 +760,7 @@ static int test_vm_tag(void)
     TEST_ASSERT(ln_fast_has_tag(&result, "syslog"), "tag 'syslog' present");
     TEST_ASSERT(!ln_fast_has_tag(&result, "other"), "tag 'other' absent");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -784,7 +790,163 @@ static int test_vm_call_ret(void)
     int r = ln_vm_exec(&vm, &prog, "hello world", 11, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "call/ret should match");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/*============================================================================
+ * Security Regression Tests (audit #4 #5 #6 #7)
+ *============================================================================*/
+
+/* #5/#4: a JUMP whose target lands outside [0, code_len) is rejected
+ * cleanly with LN_VM_ERROR rather than reading off the end of code. */
+static int test_vm_jump_out_of_range(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_jump(1000),    /* [0] target far past end of program */
+        ln_i_match("rule1"),/* [1] */
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_jump_oob");
+
+    int r = ln_vm_exec(&vm, &prog, "", 0, &result);
+    TEST_ASSERT_EQ(r, LN_VM_ERROR, "out-of-range jump must error");
+    TEST_ASSERT(vm.error != NULL, "error message set");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* #5: a negative JUMP offset that would wrap uint32 arithmetic is caught
+ * by the int64 range check (lands < 0 -> LN_VM_ERROR). */
+static int test_vm_jump_negative_wrap(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_jump(-100),    /* [0] target = -100, below 0 */
+        ln_i_match("rule1"),/* [1] */
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_jump_neg");
+
+    int r = ln_vm_exec(&vm, &prog, "", 0, &result);
+    TEST_ASSERT_EQ(r, LN_VM_ERROR, "negative jump target must error");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* #4: a program with no terminating HALT/MATCH (PC runs off the end via
+ * NOP fall-through) is caught by the DISPATCH bounds guard, not an OOB
+ * read + wild indirect jump. */
+static int test_vm_pc_runs_off_end(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_nop(),         /* [0] */
+        ln_i_nop(),         /* [1] -> pc advances to 2 == code_len */
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_runoff");
+
+    int r = ln_vm_exec(&vm, &prog, "x", 1, &result);
+    TEST_ASSERT_EQ(r, LN_VM_ERROR, "PC off-end must error, not crash");
+    TEST_ASSERT(vm.error != NULL, "error message set");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* #7: an always-succeeding self-loop (JUMP offset=0) must hit the
+ * instruction limit and return LN_VM_LIMIT instead of spinning forever. */
+static int test_vm_self_loop_instruction_limit(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_jump(0),       /* [0] jump to self forever */
+    };
+    ln_program_t prog = ln_program_make(code, 1, "test_self_loop");
+
+    int r = ln_vm_exec(&vm, &prog, "", 0, &result);
+    TEST_ASSERT_EQ(r, LN_VM_LIMIT, "self-loop must hit instruction limit");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* #6b: a LITERAL whose aux length exceeds the inline buffer must not
+ * over-read data.str. With no input it simply fails to match (NOMATCH),
+ * and crucially performs no out-of-bounds compare. */
+static int test_vm_literal_oversized_aux(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t lit = ln_i_literal("hello", 5);
+    lit.aux = 60000; /* malformed: far beyond LN_INSTR_MAX_INLINE */
+    ln_instr_t code[] = {
+        lit,                 /* [0] */
+        ln_i_match("rule1"), /* [1] */
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_lit_oversized");
+
+    /* Provide a long input so the REMAINING() check alone would pass;
+     * the len<=inline guard is what must reject the over-read. */
+    static const char big[100] = {0};
+    int r = ln_vm_exec(&vm, &prog, big, sizeof(big), &result);
+    TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "oversized literal must not match/over-read");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* #6a: an inline literal builder must clamp aux to the inline capacity so
+ * it can never describe more bytes than were actually stored. */
+static int test_inline_literal_len_clamped(void)
+{
+    char huge[200];
+    memset(huge, 'A', sizeof(huge));
+    ln_instr_t i = ln_i_literal(huge, 200);
+    TEST_ASSERT(i.aux <= LN_INSTR_MAX_INLINE, "literal aux clamped to inline size");
+    return 1;
+}
+
+/* #6a: name-based builders must leave a NUL terminator even for a
+ * maximally long name (no strlen over-read). */
+static int test_inline_name_nul_terminated(void)
+{
+    char huge[200];
+    memset(huge, 'B', sizeof(huge));
+    huge[sizeof(huge) - 1] = '\0';
+
+    ln_instr_t f = ln_i_field(OP_FIELD_WORD, huge);
+    TEST_ASSERT(f.data.str[LN_INSTR_MAX_INLINE - 1] == '\0',
+                "field name reserves NUL terminator");
+
+    ln_instr_t c = ln_i_field_char_to(huge, ',');
+    TEST_ASSERT(c.data.char_to.name[55] == '\0',
+                "char_to name reserves NUL terminator");
     return 1;
 }
 
@@ -817,7 +979,7 @@ static int test_vm_field_context(void)
     const ln_fast_field_t *f = find_field(&result, "src_ip");
     TEST_ASSERT(f != NULL, "field 'src_ip' found (resolved from '..')");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -986,7 +1148,7 @@ static int test_vm_syslog_like(void)
     TEST_ASSERT(strcmp(result.rule_id, "syslog_rule") == 0, "rule id");
     TEST_ASSERT(result.flags & LN_FRESULT_MATCHED, "matched flag");
 
-    teardown_vm(&arena);
+    teardown_vm(&vm, &arena);
     return 1;
 }
 
@@ -1045,6 +1207,16 @@ int main(void)
 
     printf("Call/ret tests:\n");
     RUN_TEST(test_vm_call_ret);
+    printf("\n");
+
+    printf("Security regression tests:\n");
+    RUN_TEST(test_vm_jump_out_of_range);
+    RUN_TEST(test_vm_jump_negative_wrap);
+    RUN_TEST(test_vm_pc_runs_off_end);
+    RUN_TEST(test_vm_self_loop_instruction_limit);
+    RUN_TEST(test_vm_literal_oversized_aux);
+    RUN_TEST(test_inline_literal_len_clamped);
+    RUN_TEST(test_inline_name_nul_terminated);
     printf("\n");
 
     printf("Field context tests:\n");

@@ -821,6 +821,72 @@ static int test_mixed_field_types(void)
 }
 
 /*============================================================================
+ * JSON Estimate Robustness (control-char escaping must not undercount)
+ *============================================================================*/
+
+/*
+ * Regression for the serialization-estimate undercount (FINDING #3):
+ * a value/name/tag dominated by control bytes (0x01) escapes to "\uXXXX"
+ * (6 output bytes per input byte). The old estimate budgeted only ~2x, so
+ * ln_fast_to_json returned -1 and the line was SILENTLY DROPPED. With the
+ * 6x worst-case estimate the buffer is always large enough.
+ */
+static int test_json_estimate_control_chars(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    char json[8192];
+    size_t out_len = 0;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* 47-byte all-0x01 inline value: true output ~= 47*6 + quotes ~= 284 B,
+     * which the old `len*2+2` estimate could not cover. */
+    char ctrl_val[47];
+    memset(ctrl_val, 0x01, sizeof(ctrl_val));
+    ln_fast_add_string_static(&result, "payload", 7, ctrl_val, sizeof(ctrl_val));
+
+    /* A field name full of control chars (also escaped via write_escaped). */
+    char ctrl_name[16];
+    memset(ctrl_name, 0x01, sizeof(ctrl_name) - 1);
+    ctrl_name[sizeof(ctrl_name) - 1] = '\0';
+    ln_fast_add_string_static(&result, ctrl_name, sizeof(ctrl_name) - 1, "v", 1);
+
+    /* A tag full of control chars (tags also go through write_escaped). */
+    char ctrl_tag[24];
+    memset(ctrl_tag, 0x01, sizeof(ctrl_tag) - 1);
+    ctrl_tag[sizeof(ctrl_tag) - 1] = '\0';
+    ln_fast_add_tag(&result, ctrl_tag);
+
+    /* The estimate must cover the true worst-case output. */
+    size_t est = ln_fast_json_estimate(&result);
+    TEST_ASSERT(est >= 282, "estimate must cover ~282B control-char value output");
+
+    /* Serialize must SUCCEED (no -1 / no silent drop) and fit our buffer. */
+    int r = ln_fast_to_json(&result, json, sizeof(json), &out_len);
+    TEST_ASSERT_EQ(r, 0, "control-char result must serialize without drop");
+    TEST_ASSERT(out_len > 0, "serialized length must be non-zero");
+    TEST_ASSERT(out_len <= est, "actual output must fit within the estimate");
+
+    /* Round-trip evidence: each 0x01 byte became a 6-byte unicode
+     * escape sequence in the serialized output. */
+    TEST_ASSERT(strstr(json, "\\u0001") != NULL,
+                "control byte must serialize as \\u0001 escape");
+
+    /* And the allocating path (which reuses the same estimate) must agree. */
+    char *jstr = NULL;
+    size_t jlen = 0;
+    int ra = ln_fast_to_json_alloc(&result, &jstr, &jlen);
+    TEST_ASSERT_EQ(ra, 0, "alloc path must serialize control-char result");
+    TEST_ASSERT(jstr != NULL && jlen > 0, "alloc path must yield output");
+    free(jstr);
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+/*============================================================================
  * Snapshot Tests
  *============================================================================*/
 
@@ -893,6 +959,70 @@ static int test_snapshot_survives_arena_reset(void)
         TEST_ASSERT(memcmp(sr->fields[0].v.str.ptr, "this-is-an-arena-allocated-value-that-is-long-enough-to-be-external", 66) == 0,
                     "rebased pointer should have correct data");
     }
+
+    ln_fast_result_snapshot_free(snap);
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_snapshot_self_contained_external_value(void)
+{
+    /* Regression: long (>= 48B) field VALUES are stored by
+     * ln_fast_add_string_static as non-owning pointers straight into the
+     * input line (LN_FFIELD_STATIC_VAL, type LN_FTYPE_STRING) — they are NOT
+     * in the arena, so the old snapshot copied the raw input-line pointer
+     * verbatim. After the input line is freed/overwritten that pointer
+     * dangles (use-after-free). The snapshot must copy such values into its
+     * own backing buffer.  Under ASan, the pre-fix code reads freed memory. */
+    ln_arena_t arena;
+    ln_fast_result_t result;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* Heap-allocated input line (so ASan tracks the free precisely). */
+    static const char payload[] =
+        "this-external-value-is-well-over-forty-eight-bytes-and-lives-in-the-input-line";
+    const size_t plen = sizeof(payload) - 1;   /* 78 bytes, >= 48 -> external */
+    char *input = malloc(plen + 1);
+    TEST_ASSERT(input != NULL, "input alloc");
+    memcpy(input, payload, plen + 1);
+
+    /* External string VALUE that points into the input buffer. */
+    ln_fast_add_string_static(&result, "long_field", 10, input, (uint32_t)plen);
+    TEST_ASSERT_EQ(result.fields[0].type, LN_FTYPE_STRING,
+                   "value should be external (>= 48B)");
+    TEST_ASSERT(result.fields[0].v.str.ptr == input,
+                "pre-snapshot pointer references the input line");
+
+    /* original also points into the input line. */
+    ln_fast_set_original(&result, input, (uint32_t)plen);
+
+    /* Snapshot — empty arena, value/original are NOT arena-backed. */
+    ln_fast_result_snapshot_t *snap = ln_fast_result_snapshot_create(&result, &arena);
+    TEST_ASSERT(snap != NULL, "snapshot should be created");
+
+    /* The snapshot value pointer must NOT alias the input line anymore. */
+    const ln_fast_result_t *sr = ln_fast_result_snapshot_get(snap);
+    TEST_ASSERT(sr->fields[0].v.str.ptr != input,
+                "snapshot value must not alias the input line");
+
+    /* Scribble + free the input line: any dangling pointer now reads garbage
+     * (or freed memory under ASan). */
+    memset(input, 'Z', plen);
+    free(input);
+
+    /* Snapshot must still return the original bytes. */
+    TEST_ASSERT_EQ(sr->fields[0].v.str.len, (uint32_t)plen, "value length preserved");
+    TEST_ASSERT(memcmp(sr->fields[0].v.str.ptr, payload, plen) == 0,
+                "snapshot value survives input-line free/overwrite");
+    TEST_ASSERT_EQ(sr->fields[0].v.str.ptr[plen], '\0',
+                "snapshot value is NUL-terminated");
+
+    /* original must also be self-contained. */
+    TEST_ASSERT(sr->original != NULL, "original preserved");
+    TEST_ASSERT(memcmp(sr->original, payload, plen) == 0,
+                "snapshot original survives input-line free/overwrite");
 
     ln_fast_result_snapshot_free(snap);
     ln_arena_destroy(&arena);
@@ -1024,10 +1154,16 @@ int main(void)
     RUN_TEST(test_mixed_field_types);
     printf("\n");
 
+    /* JSON estimate robustness tests */
+    printf("JSON estimate robustness tests:\n");
+    RUN_TEST(test_json_estimate_control_chars);
+    printf("\n");
+
     /* Snapshot tests */
     printf("Snapshot tests:\n");
     RUN_TEST(test_snapshot_create_basic);
     RUN_TEST(test_snapshot_survives_arena_reset);
+    RUN_TEST(test_snapshot_self_contained_external_value);
     RUN_TEST(test_snapshot_null_safety);
     RUN_TEST(test_snapshot_no_arena);
     printf("\n");

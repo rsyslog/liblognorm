@@ -757,6 +757,34 @@ static int test_macros(void)
     return 1;
 }
 
+static int test_alloc_array_overflow(void)
+{
+    ln_arena_t arena;
+    ln_arena_init(&arena);
+
+    /* Hostile element count: (SIZE_MAX/2 + 1) * 4 wraps a size_t multiply.
+     * The checked allocator must reject it rather than return a tiny slot. */
+    void *wrapped = ln_arena_alloc_array(&arena, SIZE_MAX / 2 + 1, 4);
+    TEST_ASSERT(wrapped == NULL, "overflowing array alloc should return NULL");
+
+    /* A normal allocation must still succeed and be a valid, distinct slot. */
+    int *ok1 = (int *)ln_arena_alloc_array(&arena, 10, sizeof(int));
+    TEST_ASSERT(ok1 != NULL, "valid array alloc should succeed");
+    for (int i = 0; i < 10; i++) ok1[i] = i;
+    TEST_ASSERT_EQ(ok1[9], 9, "array data should be writable/intact");
+
+    int *ok2 = (int *)ln_arena_alloc_array(&arena, 10, sizeof(int));
+    TEST_ASSERT(ok2 != NULL, "second valid array alloc should succeed");
+    TEST_ASSERT(ok2 != ok1, "array allocations should be distinct");
+
+    /* elem == 0 must not divide-by-zero; it is a benign zero-size request. */
+    void *zero_elem = ln_arena_alloc_array(&arena, SIZE_MAX, 0);
+    TEST_ASSERT(zero_elem != NULL, "zero element size should be a valid alloc");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
 /*============================================================================
  * Error Code Tests
  *============================================================================*/
@@ -881,6 +909,7 @@ int main(void)
     /* Macro tests */
     printf("Macro tests:\n");
     RUN_TEST(test_macros);
+    RUN_TEST(test_alloc_array_overflow);
     printf("\n");
 
     /* Usage pattern tests */

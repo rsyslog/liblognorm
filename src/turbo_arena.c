@@ -212,6 +212,19 @@ ln_arena_alloc(ln_arena_t *arena, size_t size)
 }
 
 void *
+ln_arena_alloc_array(ln_arena_t *arena, size_t nmemb, size_t elem)
+{
+	/* Checked multiply: reject nmemb * elem that would wrap (CWE-190).
+	 * ln_arena_alloc() sees only the (already-wrapped) product and cannot
+	 * detect the overflow itself, so the guard must live here. */
+	if (elem != 0 && nmemb > SIZE_MAX / elem) {
+		return NULL;
+	}
+
+	return ln_arena_alloc(arena, nmemb * elem);
+}
+
+void *
 ln_arena_alloc_aligned(ln_arena_t *arena, size_t size, size_t alignment)
 {
 	size_t current;

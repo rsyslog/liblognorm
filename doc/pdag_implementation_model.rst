@@ -96,6 +96,7 @@ Given a node ``n`` and suffix ``s``:
 
 1. If ``s`` is empty: succeed only if ``n`` is terminal.
 2. Otherwise, iterate over ``n``'s outgoing edges **in priority order**:
+
    - If an edge matches a prefix of ``s``, recurse into its destination with the
      remaining suffix. Extraction happens only if the recursive call succeeds.
    - On failure, discard any partial extraction from that attempt and continue

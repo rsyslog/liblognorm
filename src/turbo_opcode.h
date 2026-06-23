@@ -141,7 +141,8 @@ typedef struct {
 			char     name[56]; /**< Field name */
 			uint8_t  delim;    /**< Delimiter char */
 			uint8_t  ass;      /**< Assignator char (for name-value-list) */
-			uint8_t  _pad[2];
+			uint8_t  ignore_ws;/**< name-value-list: trim surrounding whitespace */
+			uint8_t  _pad[1];
 		} char_to;
 
 		/* Static key-value pair (for OP_STATIC_FIELD) */
@@ -180,7 +181,9 @@ static inline ln_instr_t ln_i_match(const char *rule) {
 	ln_instr_t i = {0};
 	i.op = OP_MATCH;
 	if (rule) {
-		for (int j = 0; j < LN_INSTR_MAX_INLINE && rule[j]; j++)
+		/* Reserve a NUL terminator: copy at most size-1 bytes so the
+		 * inline string is always NUL-terminated (security audit #6). */
+		for (int j = 0; j < LN_INSTR_MAX_INLINE - 1 && rule[j]; j++)
 			i.data.str[j] = rule[j];
 	}
 	return i;
@@ -190,6 +193,11 @@ static inline ln_instr_t ln_i_match(const char *rule) {
 static inline ln_instr_t ln_i_literal(const char *lit, uint16_t len) {
 	ln_instr_t i = {0};
 	i.op = OP_LITERAL;
+	/* Clamp the inline copy to the buffer; aux carries the match length
+	 * the VM compares, so it must never exceed what we actually stored
+	 * inline (security audit #6 — VM also re-validates len <= inline size). */
+	if (len > LN_INSTR_MAX_INLINE)
+		len = LN_INSTR_MAX_INLINE;
 	i.aux = len;
 	for (uint16_t j = 0; j < len && j < LN_INSTR_MAX_INLINE; j++)
 		i.data.str[j] = lit[j];
@@ -233,7 +241,8 @@ static inline ln_instr_t ln_i_field(ln_opcode_t op, const char *name) {
 	i.op = op;
 	i.flags = LN_INSTR_F_STORE;
 	if (name) {
-		for (int j = 0; j < LN_INSTR_MAX_INLINE && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). */
+		for (int j = 0; j < LN_INSTR_MAX_INLINE - 1 && name[j]; j++)
 			i.data.str[j] = name[j];
 	}
 	return i;
@@ -246,21 +255,25 @@ static inline ln_instr_t ln_i_field_char_to(const char *name, char delim) {
 	i.flags = LN_INSTR_F_STORE;
 	i.data.char_to.delim = (uint8_t)delim;
 	if (name) {
-		for (int j = 0; j < 56 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). name[56]. */
+		for (int j = 0; j < 56 - 1 && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;
 }
 
 /** Create FIELD_NAME_VALUE instruction */
-static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char ass) {
+static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char ass,
+											   uint8_t ignore_ws) {
 	ln_instr_t i = {0};
 	i.op = OP_FIELD_NAME_VALUE;
 	i.flags = LN_INSTR_F_STORE;
 	i.data.char_to.delim = (uint8_t)sep;
 	i.data.char_to.ass   = (uint8_t)ass;
+	i.data.char_to.ignore_ws = ignore_ws;
 	if (name) {
-		for (int j = 0; j < 56 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). name[56]. */
+		for (int j = 0; j < 56 - 1 && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;
@@ -286,7 +299,8 @@ static inline ln_instr_t ln_i_tag(const char *tag) {
 	ln_instr_t i = {0};
 	i.op = OP_TAG;
 	if (tag) {
-		for (int j = 0; j < LN_INSTR_MAX_INLINE && tag[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). */
+		for (int j = 0; j < LN_INSTR_MAX_INLINE - 1 && tag[j]; j++)
 			i.data.str[j] = tag[j];
 	}
 	return i;
@@ -297,7 +311,8 @@ static inline ln_instr_t ln_i_ctx_push(const char *name) {
 	ln_instr_t i = {0};
 	i.op = OP_CTX_PUSH;
 	if (name) {
-		for (int j = 0; j < LN_INSTR_MAX_INLINE && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). */
+		for (int j = 0; j < LN_INSTR_MAX_INLINE - 1 && name[j]; j++)
 			i.data.str[j] = name[j];
 	}
 	return i;

@@ -15,6 +15,11 @@
 #include <stddef.h>
 #include <string.h>
 
+/* Public, opaque API: the ln_fast_result_t typedef, the ln_ftype_t field-type
+ * enum and the LN_FFIELD_NESTED flag are defined there. This header completes
+ * the (otherwise opaque) struct and adds the internal-only builders. */
+#include "lognorm-turbo.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,19 +39,6 @@ extern "C" {
 
 /** Tag hash table size (power of 2) */
 #define LN_FAST_TAG_HASH_SIZE 32
-
-/*============================================================================
- * Field Types
- *============================================================================*/
-
-typedef enum {
-	LN_FTYPE_NULL = 0,
-	LN_FTYPE_STRING,       /* External string (ptr + len) */
-	LN_FTYPE_STRING_INLINE,/* Inline string (no alloc) */
-	LN_FTYPE_INT,
-	LN_FTYPE_DOUBLE,
-	LN_FTYPE_BOOL,
-} ln_ftype_t;
 
 /*============================================================================
  * Field Structure (64 bytes - cache line aligned)
@@ -73,10 +65,9 @@ typedef struct {
 
 _Static_assert(sizeof(ln_fast_field_t) == 64, "Field must be 64 bytes");
 
-/* Field flags */
+/* Field flags (LN_FFIELD_NESTED 0x04 is public, see lognorm-turbo.h) */
 #define LN_FFIELD_STATIC_NAME 0x01  /* Name is static (don't free) */
 #define LN_FFIELD_STATIC_VAL  0x02  /* Value is static (don't free) */
-#define LN_FFIELD_NESTED      0x04  /* Part of nested object (name has dots) */
 
 /**
  * @brief Check if a field name contains a dot (indicating nested object).
@@ -104,7 +95,8 @@ typedef struct {
  * Fast Result Structure
  *============================================================================*/
 
-typedef struct ln_fast_result_s {
+/* Completes the opaque ln_fast_result_t declared in lognorm-turbo.h. */
+struct ln_fast_result_s {
 	/* Fields array */
 	ln_fast_field_t fields[LN_FAST_MAX_FIELDS];
 	uint8_t         n_fields;
@@ -124,7 +116,7 @@ typedef struct ln_fast_result_s {
 	
 	/* Arena for any overflow allocations */
 	void           *arena;
-} ln_fast_result_t;
+};
 
 /* Result flags */
 #define LN_FRESULT_MATCHED   0x01

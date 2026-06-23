@@ -56,10 +56,14 @@ liblognorm_la_LIBADD = $(rt_libs) $(JSON_C_LIBS) $(LIBESTR_LIBS) $(PCRE_LIBS) -l
 # info on version-info:
 # http://www.gnu.org/software/libtool/manual/html_node/Updating-version-info.html
 # Note: v2 now starts at version 5, as v1 previously also had 4
-liblognorm_la_LDFLAGS = -version-info 6:0:1
+# 2.1.0: +1 current/+age for the new public Turbo API (lognorm-turbo.h);
+# soname stays liblognorm.so.5 (current-age), interface revision bumped.
+liblognorm_la_LDFLAGS = -version-info 7:0:2
 
-# Public API
-include_HEADERS = liblognorm.h lognorm-features.h
+# Public API.  lognorm-turbo.h is installed unconditionally — it provides no-op
+# stubs when Turbo is disabled, so consumers can include it against any build.
+# Only the implementation sources stay behind ENABLE_TURBO (below).
+include_HEADERS = liblognorm.h lognorm-features.h lognorm-turbo.h
 
 # TurboVM bytecode engine (optional, SIMD-accelerated log parsing)
 if ENABLE_TURBO
@@ -85,6 +89,4 @@ liblognorm_la_SOURCES += \
 	turbo_snapshot.c \
 	turbo_snapshot.h
 liblognorm_la_CPPFLAGS += $(TURBO_CFLAGS)
-include_HEADERS += turbo.h turbo_result.h turbo_result_fast.h \
-	turbo_arena.h turbo_snapshot.h turbo_opcode.h
 endif
