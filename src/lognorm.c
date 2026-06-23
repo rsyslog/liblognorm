@@ -38,8 +38,7 @@ rs_strerror_r(const int errnum, char *const buf, const size_t buflen) {
 #	ifdef STRERROR_R_CHAR_P
 		char *p = strerror_r(errnum, buf, buflen);
 		if (p != buf) {
-			strncpy(buf, p, buflen);
-			buf[buflen - 1] = '\0';
+			snprintf(buf, buflen, "%s", p);
 		}
 #	else
 		strerror_r(errnum, buf, buflen);
