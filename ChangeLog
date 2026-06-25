@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------
-Version 2.1.0, 2026-06-23
+Version 2.1.0, 2026-06-25
 - add TurboVM bytecode engine for high-performance log parsing
   Compiles rulebases into optimized bytecode executed by a linear VM
   with SIMD-accelerated parsing primitives (SSE4.2 on x86-64, NEON
@@ -21,23 +21,27 @@ Version 2.1.0, 2026-06-23
   Enabled via: ./configure --enable-turbo
   Contributed by Jérémie Jourdin / Advens.
 - pcre2 used instead of pcre (which is no longer supported)
+- packaging: install only curated public headers. The Turbo public API is
+  provided by lognorm-turbo.h; internal Turbo implementation headers are
+  not installed.
+- lognormalizer: add -oturbo to enable the TurboVM fast path for JSON
+  string output when built with --enable-turbo.
+- lognormalizer: return exit status 0 for -V / version output.
 - add a parameter skipempty to the json field type.
   If skipempty is set as follows, empty json objects are dropped from
   the parsed result.
     %field_name:json:skipempty%
+  This removes empty strings, empty arrays and empty objects from parsed
+  JSON content before it is attached to the result tree.
   If any parameter other than "skipempty" is given ("bogus" in this
   example), an error message "invalid flag for JSON parser: bogus"
   is issued.
-  Thanks to Noriko Hosoi for the patch.
-- json parser: add optional "skipempty" flag
-  This removes empty strings, empty arrays and empty objects from parsed
-  JSON content before it is attached to the result tree.
-  Thanks to Noriko Hosoi for the original patch. Follow-up work to rebase,
-  document, and align validation tests was done by Adiscon.
   NOTE: This is a potential backward-compatibility change for malformed
   rulebases that used extra json parser flags such as
   "%field:json:bogus%". Such invalid flags were previously ignored and are
   now rejected during rule loading.
+  Thanks to Noriko Hosoi for the original patch. Follow-up work to rebase,
+  document, and align validation tests was done by Adiscon.
 - Op-quoted-string : Add support for escaped characters
   Thanks to Kevin Guillemot for the patch. Some follow up work
   was done by Adiscon.
@@ -45,8 +49,11 @@ Version 2.1.0, 2026-06-23
   quote characters.
 - parser(name-value-list): add ignore_whitespaces option and accept trailing
   empty trimmed values.
+- parser(string): add dashIsEmpty option to treat a dash value as empty.
+- parser(Checkpoint LEA): improve quoted-string and terminator handling.
 - parser(repeat): allow one named dot among unnamed parsers.
 - fixed error callback cookie - the wrong one was provided
+- fixed compat strndup implementation.
 - hardening: fix empty-tag rulebase crash, repeat while validation crash,
   parser EOF handling, and harden GitHub Actions security.
 - improved CI with additional checks, including sanitizers and
