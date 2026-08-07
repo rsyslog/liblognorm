@@ -1314,7 +1314,8 @@ addRuleMetadata(npb_t *const __restrict__ npb,
  * add unparsed string to event.
  */
 static inline int
-addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct json_object *json)
+addUnparsedField(ln_ctx ctx, const char *str, const size_t strLen, const size_t offs,
+		struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
@@ -1326,6 +1327,7 @@ addUnparsedField(const char *str, const size_t strLen, const size_t offs, struct
 		goto done;
 	}
 	json_object_object_add(json, UNPARSED_DATA_KEY, value);
+	CHKR(ln_addUnparsedDataBinaryField(ctx, str + offs, strLen - offs, json));
 
 	r = 0;
 done:
@@ -1811,7 +1813,7 @@ ln_normalize(ln_ctx ctx, const char *str, const size_t strLen, struct json_objec
 		addRuleMetadata(&npb, *json_p, endNode);
 		r = 0;
 	} else {
-		addUnparsedField(str, strLen, npb.longestParsedTo, *json_p);
+		addUnparsedField(ctx, str, strLen, npb.longestParsedTo, *json_p);
 	}
 
 	if(ctx->opts & LN_CTXOPT_ADD_RULE) {

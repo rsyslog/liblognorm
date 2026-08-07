@@ -1,5 +1,8 @@
 ----------------------------------------------------------------------
 Version 2.1.0, 2026-06-25
+- add unparsed-data-binary for failed parses containing ASCII control bytes;
+  the field contains the complete unparsed byte span as lowercase hexadecimal
+  and can be disabled with LN_CTXOPT_NO_UNPARSED_DATA_BINARY.
 - add TurboVM bytecode engine for high-performance log parsing
   Compiles rulebases into optimized bytecode executed by a linear VM
   with SIMD-accelerated parsing primitives (SSE4.2 on x86-64, NEON
