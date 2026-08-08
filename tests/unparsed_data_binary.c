@@ -66,29 +66,26 @@ main(void)
 		"rule=:prefix%value:number%\n";
 	static const char v1_rulebase[] =
 		"rule=:prefix%value:number%\n";
-	static const char control_message[] =
-		{'p', 'r', 'e', 'f', 'i', 'x', '\x01', 't', 'a', 'i', 'l'};
-	static const char printable_message[] =
-		{'p', 'r', 'e', 'f', 'i', 'x', ' ', 't', 'a', 'i', 'l'};
-	static const char utf8_message[] =
-		{'p', 'r', 'e', 'f', 'i', 'x', ' ', '\xc3', '\xa4'};
+	static const char control_message[] = "prefix\x01tail";
+	static const char printable_message[] = "prefix tail";
+	static const char utf8_message[] = "prefix \xc3\xa4";
 	int ret = 1;
 
-	if(run_case(v2_rulebase, 0, control_message, sizeof(control_message),
-			control_message + 6, sizeof(control_message) - 6, "017461696c", 10) != 0)
+	if(run_case(v2_rulebase, 0, control_message, sizeof(control_message) - 1,
+			control_message + 6, sizeof(control_message) - 7, "017461696c", 10) != 0)
 		goto done;
-	if(run_case(v1_rulebase, 0, control_message, sizeof(control_message),
-			control_message + 6, sizeof(control_message) - 6, "017461696c", 10) != 0)
+	if(run_case(v1_rulebase, 0, control_message, sizeof(control_message) - 1,
+			control_message + 6, sizeof(control_message) - 7, "017461696c", 10) != 0)
 		goto done;
-	if(run_case(v2_rulebase, 0, printable_message, sizeof(printable_message),
-			printable_message + 6, sizeof(printable_message) - 6, NULL, 0) != 0)
+	if(run_case(v2_rulebase, 0, printable_message, sizeof(printable_message) - 1,
+			printable_message + 6, sizeof(printable_message) - 7, NULL, 0) != 0)
 		goto done;
-	if(run_case(v2_rulebase, 0, utf8_message, sizeof(utf8_message),
-			utf8_message + 6, sizeof(utf8_message) - 6, NULL, 0) != 0)
+	if(run_case(v2_rulebase, 0, utf8_message, sizeof(utf8_message) - 1,
+			utf8_message + 6, sizeof(utf8_message) - 7, NULL, 0) != 0)
 		goto done;
 	if(run_case(v2_rulebase, LN_CTXOPT_NO_UNPARSED_DATA_BINARY, control_message,
-			sizeof(control_message), control_message + 6,
-			sizeof(control_message) - 6, NULL, 0) != 0)
+			sizeof(control_message) - 1, control_message + 6,
+			sizeof(control_message) - 7, NULL, 0) != 0)
 		goto done;
 
 	ret = 0;
