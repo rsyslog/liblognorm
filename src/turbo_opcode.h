@@ -164,6 +164,11 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 #define LN_INSTR_F_GREEDY    0x02  /**< Greedy matching */
 #define LN_INSTR_F_STORE     0x04  /**< Store extracted field */
 #define LN_INSTR_F_CASE_INS  0x08  /**< Case-insensitive */
+#define LN_INSTR_F_NAME_POOL 0x10  /**< Field/context name lives in the program
+									  string pool: the opcode's inline name buffer
+									  holds a uint32 pool offset instead of the
+									  name. Lets turbo carry names longer than the
+									  inline buffer, matching the v1 parser. */
 
 /*============================================================================
  * Instruction Builders

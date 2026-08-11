@@ -64,6 +64,12 @@ struct ln_turbo_ctx_s {
 	uint32_t        code_len;
 	uint32_t        code_cap;
 
+	/* String pool for field/context names too long to inline in an opcode.
+	 * Instructions flagged LN_INSTR_F_NAME_POOL store a byte offset here. */
+	char           *strpool;
+	uint32_t        strpool_len;
+	uint32_t        strpool_cap;
+
 	/* Arena for overflow allocations */
 	ln_arena_t      arena;
 
@@ -203,12 +209,53 @@ emit(compiler_t *comp, ln_instr_t *instr)
 	return idx;
 }
 
+/* Intern a NUL-terminated copy of s[0..len) into the ctx string pool and return
+ * its byte offset, or UINT32_MAX on allocation failure. Long field/context
+ * names live here instead of the fixed inline opcode buffers, so turbo has no
+ * stricter name-length limit than the v1 parser. */
+static uint32_t
+strpool_intern(compiler_t *comp, const char *s, size_t len)
+{
+	ln_turbo_ctx_t *turbo = comp->turbo;
+	if ((uint64_t)turbo->strpool_len + len + 1 > turbo->strpool_cap) {
+		uint32_t new_cap = turbo->strpool_cap ? turbo->strpool_cap : 256;
+		while ((uint64_t)turbo->strpool_len + len + 1 > new_cap) new_cap *= 2;
+		char *np = realloc(turbo->strpool, new_cap);
+		if (!np) return UINT32_MAX;
+		turbo->strpool = np;
+		turbo->strpool_cap = new_cap;
+	}
+	uint32_t off = turbo->strpool_len;
+	memcpy(turbo->strpool + off, s, len);
+	turbo->strpool[off + len] = '\0';
+	turbo->strpool_len += (uint32_t)len + 1;
+	return off;
+}
+
+/* Store a field/context name into an instruction's inline buffer, or, when it
+ * does not fit, into the string pool with the byte offset written into the
+ * buffer and LN_INSTR_F_NAME_POOL set. Returns 0 on success, -1 on OOM. */
+static int
+store_field_name(compiler_t *comp, ln_instr_t *instr, char *buf, size_t bufsz,
+		 const char *name, size_t nlen)
+{
+	if (nlen < bufsz) {
+		memcpy(buf, name, nlen);
+		return 0;
+	}
+	uint32_t off = strpool_intern(comp, name, nlen);
+	if (off == UINT32_MAX) return -1;
+	instr->flags |= LN_INSTR_F_NAME_POOL;
+	memcpy(buf, &off, sizeof(off));
+	return 0;
+}
+
 static uint32_t
 emit_literal(compiler_t *comp, const char *lit, size_t len)
 {
 	ln_instr_t instr = {0};
 	instr.op = OP_LITERAL;
-	if (len >= sizeof(instr.data.str)) return 0;  /* too long for inline — fall back to v1 */
+	if (len >= sizeof(instr.data.str)) return UINT32_MAX;  /* too long for inline: fall back to v1 */
 	instr.aux = (uint16_t)len;
 	memcpy(instr.data.str, lit, len);
 	return emit(comp, &instr);
@@ -223,19 +270,13 @@ emit_field(compiler_t *comp, ln_opcode_t op, const char *name, char delim)
 
 	if (op == OP_FIELD_CHAR_TO || op == OP_FIELD_STR_TO) {
 		instr.data.char_to.delim = (uint8_t)delim;
-		if (name) {
-			size_t nlen = strlen(name);
-			if (nlen >= sizeof(instr.data.char_to.name))
-				return 0;  /* field name too long — fall back to v1 */
-			memcpy(instr.data.char_to.name, name, nlen);
-		}
+		if (name && store_field_name(comp, &instr, instr.data.char_to.name,
+					     sizeof(instr.data.char_to.name), name, strlen(name)) != 0)
+			return UINT32_MAX;
 	} else {
-		if (name) {
-			size_t nlen = strlen(name);
-			if (nlen >= sizeof(instr.data.str))
-				return 0;  /* field name too long — fall back to v1 */
-			memcpy(instr.data.str, name, nlen);
-		}
+		if (name && store_field_name(comp, &instr, instr.data.str,
+					     sizeof(instr.data.str), name, strlen(name)) != 0)
+			return UINT32_MAX;
 	}
 
 	return emit(comp, &instr);
@@ -326,14 +367,14 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 
 			size_t klen = strlen(name_cstr);
 			if (klen >= sizeof(instr.data.kv.key))
-				klen = sizeof(instr.data.kv.key) - 1;
+				return -1;  /* annotation field name too long: fall back to v1 */
 			memcpy(instr.data.kv.key, name_cstr, klen);
 			instr.aux = (uint16_t)klen;
 
 			if (val_cstr) {
 				size_t vlen = strlen(val_cstr);
 				if (vlen >= sizeof(instr.data.kv.val))
-					vlen = sizeof(instr.data.kv.val) - 1;
+					return -1;  /* annotation field value too long: fall back to v1 */
 				memcpy(instr.data.kv.val, val_cstr, vlen);
 			}
 
@@ -399,12 +440,9 @@ emit_ctx_push(compiler_t *comp, const char *name)
 {
 	ln_instr_t instr = {0};
 	instr.op = OP_CTX_PUSH;
-	if (name) {
-		size_t nlen = strlen(name);
-		if (nlen >= sizeof(instr.data.str))
-			return 0;  /* context name too long — fall back to v1 */
-		memcpy(instr.data.str, name, nlen);
-	}
+	if (name && store_field_name(comp, &instr, instr.data.str,
+				     sizeof(instr.data.str), name, strlen(name)) != 0)
+		return UINT32_MAX;
 	return emit(comp, &instr);
 }
 
@@ -526,12 +564,12 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				sf.op = OP_STATIC_FIELD;
 				size_t klen = strlen(prs->name);
 				if (klen >= sizeof(sf.data.kv.key))
-					klen = sizeof(sf.data.kv.key) - 1;
+					return -1;  /* static field name too long: fall back to v1 */
 				memcpy(sf.data.kv.key, prs->name, klen);
 				sf.aux = (uint16_t)klen;
 				size_t vlen = strlen(litstr);
 				if (vlen >= sizeof(sf.data.kv.val))
-					vlen = sizeof(sf.data.kv.val) - 1;
+					return -1;  /* static field value too long: fall back to v1 */
 				memcpy(sf.data.kv.val, litstr, vlen);
 				if (emit(comp, &sf) == UINT32_MAX) return -1;
 			}
@@ -560,12 +598,9 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		instr.data.char_to.delim = (uint8_t)sep;
 		instr.data.char_to.ass   = (uint8_t)ass;
 		instr.data.char_to.ignore_ws = ignore_ws;
-		if (prs->name) {
-			size_t nlen = strlen(prs->name);
-			if (nlen >= sizeof(instr.data.char_to.name))
-				return -1;  /* field name too long — fall back to v1 */
-			memcpy(instr.data.char_to.name, prs->name, nlen);
-		}
+		if (prs->name && store_field_name(comp, &instr, instr.data.char_to.name,
+						  sizeof(instr.data.char_to.name), prs->name, strlen(prs->name)) != 0)
+			return -1;
 		pc = emit(comp, &instr);
 	} else if (op == OP_FIELD_CHAR_TO || op == OP_FIELD_STR_TO) {
 		char delim = ' ';  /* Default to space */
@@ -599,12 +634,9 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				(struct data_CheckpointLEA *)prs->parser_data;
 			instr.data.char_to.delim = (uint8_t)cpdata->terminator;
 		}
-		if (prs->name) {
-			size_t nlen = strlen(prs->name);
-			if (nlen >= sizeof(instr.data.char_to.name))
-				return -1;  /* field name too long — fall back to v1 */
-			memcpy(instr.data.char_to.name, prs->name, nlen);
-		}
+		if (prs->name && store_field_name(comp, &instr, instr.data.char_to.name,
+						  sizeof(instr.data.char_to.name), prs->name, strlen(prs->name)) != 0)
+			return -1;
 		pc = emit(comp, &instr);
 	} else {
 		pc = emit_field(comp, op, prs->name, ' ');
@@ -797,6 +829,9 @@ ln_turbo_ctx_free(ln_turbo_ctx_t *turbo)
 		free(turbo->code);
 		turbo->code = NULL;
 	}
+	free(turbo->strpool);
+	turbo->strpool = NULL;
+	turbo->strpool_len = turbo->strpool_cap = 0;
 	if (turbo->json_buf) {
 		free(turbo->json_buf);
 		turbo->json_buf = NULL;
@@ -827,6 +862,10 @@ ln_turbo_compile(ln_ctx ctx)
 	turbo->code = NULL;
 	turbo->code_len = 0;
 	turbo->code_cap = 0;
+	free(turbo->strpool);
+	turbo->strpool = NULL;
+	turbo->strpool_len = 0;
+	turbo->strpool_cap = 0;
 
 	compiler_t comp = {0};
 	comp.turbo = turbo;
@@ -887,7 +926,8 @@ ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
 	ln_program_t prog = {
 		.code = turbo->code,
 		.code_len = turbo->code_len,
-		.name = "turbo"
+		.name = "turbo",
+		.strpool = turbo->strpool
 	};
 
 	/* Execute VM with fast result */
@@ -1001,7 +1041,8 @@ ln_turbo_normalize_raw(ln_ctx ctx, const char *str, size_t strLen,
 	ln_program_t prog = {
 		.code = turbo->code,
 		.code_len = turbo->code_len,
-		.name = "turbo"
+		.name = "turbo",
+		.strpool = turbo->strpool
 	};
 
 	/* Execute VM */
@@ -1210,6 +1251,7 @@ ln_turbo_disasm(ln_ctx ctx, FILE *fp, const char *label)
 
 	ln_program_t p = ln_program_make(turbo->code, turbo->code_len,
 									 label ? label : "turbo");
+	p.strpool = turbo->strpool;
 	ln_program_disasm(&p, fp);
 #else
 	(void)ctx; (void)fp; (void)label;

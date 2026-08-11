@@ -426,6 +426,24 @@ vm_pop_fork(ln_vm_t *vm)
  * produces "foo.bar". For ".." produces just "foo".
  * Uses arena for allocation.
  */
+/* Resolve a field/context name for an instruction: the inline opcode buffer, or
+ * the program string pool when the name was too long to inline
+ * (LN_INSTR_F_NAME_POOL). inline_buf is the opcode's inline name buffer, which
+ * holds a uint32 pool offset in the pooled case. Names in the pool are
+ * NUL-terminated, so callers use the returned pointer as a plain C string. */
+static inline const char *
+turbo_iname(const ln_vm_t *vm, const ln_instr_t *inst, const char *inline_buf)
+{
+	/* Pooling is the rare case (names that fit inline dominate), so keep the
+	 * common path a straight fall-through. */
+	if (UNLIKELY(inst->flags & LN_INSTR_F_NAME_POOL)) {
+		uint32_t off;
+		memcpy(&off, inline_buf, sizeof(off));
+		return vm->prog->strpool + off;
+	}
+	return inline_buf;
+}
+
 static inline const char *
 vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 {
@@ -1431,7 +1449,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Field Context ===*/
 
 	case OP_CTX_PUSH: {
-		if (!vm_push_field_ctx(vm, inst->data.str, false)) return -1;
+		if (!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), false)) return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -1443,7 +1461,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_CTX_NEST: {
-		if (!vm_push_field_ctx(vm, inst->data.str, true)) return -1;
+		if (!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), true)) return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -1501,7 +1519,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Fields ===*/
 
 	case OP_FIELD_WORD: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		ln_span_t span;
 
 		if (ln_simd_word(vm->ip, remaining, &span) != LN_SIMD_OK) return -1;
@@ -1513,7 +1531,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_INT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
@@ -1526,7 +1544,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_UINT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
@@ -1540,7 +1558,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_FLOAT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_float(vm->ip, remaining, &len) != 0) return -1;
@@ -1552,7 +1570,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_IPV4: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_ipv4(vm->ip, remaining, &len) != 0) return -1;
@@ -1564,7 +1582,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_IPV6: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_ipv6(vm->ip, remaining, &len) != 0) return -1;
@@ -1576,7 +1594,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_HEX: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
@@ -1589,7 +1607,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_QUOTED: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t start, len, consumed;
 
 		if (parse_op_quoted(vm->ip, remaining, &start, &len, &consumed) != 0) return -1;
@@ -1601,7 +1619,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_CHAR_TO: {
-		const char *name = inst->data.char_to.name;
+		const char *name = turbo_iname(vm, inst, inst->data.char_to.name);
 		char delim = (char)inst->data.char_to.delim;
 		ln_span_t span;
 
@@ -1615,7 +1633,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_STR_TO: {
-		const char *name = inst->data.char_to.name;
+		const char *name = turbo_iname(vm, inst, inst->data.char_to.name);
 		char delim = (char)inst->data.char_to.delim;
 		size_t len;
 
@@ -1628,7 +1646,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_REST: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		vm_add_string_field(vm, name, vm->ip, remaining);
 		vm->ip += remaining;
 		vm->pc++;
@@ -1636,7 +1654,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_DATE: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		ln_span_t span;
 
 		int rc = ln_simd_timestamp(vm->ip, remaining, &span, NULL);
@@ -1649,7 +1667,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_JSON: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		/* SIMD-flatten nested JSON into dotted flat keys. */
@@ -1662,7 +1680,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_MAC: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_mac48(vm->ip, remaining, &len) != 0) return -1;
@@ -1687,7 +1705,7 @@ vm_exec_instr(ln_vm_t *vm)
 		 *
 		 * Uses SIMD primitives for scanning where possible.
 		 */
-		const char *ctx_name = inst->data.char_to.name;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		const char sep = (char)inst->data.char_to.delim;  /* 0 = whitespace */
 		const char ass = (char)inst->data.char_to.ass;     /* 0 = '=' */
 		const char ass_char = ass ? ass : '=';
@@ -2003,7 +2021,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== iptables name=value ===*/
 
 	case OP_V2_IPTABLES: {
-		const char *ctx_name = inst->data.str;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.str);
 		const char *p = vm->ip;
 		const char *end = vm->input_end;
 		int n_pairs = 0;
@@ -2114,7 +2132,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== CEE-syslog ===*/
 
 	case OP_CEE_SYSLOG: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		const char *p = vm->ip;
 		size_t rem = remaining;
 		size_t json_len;
@@ -2149,7 +2167,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Checkpoint LEA ===*/
 
 	case OP_CHECKPOINT_LEA: {
-		const char *ctx_name = inst->data.char_to.name;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		const char term = (char)inst->data.char_to.delim;
 		const char *p = vm->ip;
 		const char *end = vm->input_end;
@@ -2224,7 +2242,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== CEF header ===*/
 
 	case OP_CEF_HDR: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		const char *p = vm->ip;
 		const char *end = vm->input_end;
 		size_t rem = remaining;
@@ -2581,7 +2599,7 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_push) {
 		const ln_instr_t *inst = INST();
-		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, false))) {
+		if (UNLIKELY(!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), false))) {
 			WRITEBACK();
 			BACKTRACK();
 		}
@@ -2599,7 +2617,7 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_nest) {
 		const ln_instr_t *inst = INST();
-		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, true))) {
+		if (UNLIKELY(!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), true))) {
 			WRITEBACK();
 			BACKTRACK();
 		}
@@ -2717,7 +2735,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip; /* vm_add reads vm->ip */
-		vm_add_string_field(vm, inst->data.str, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2732,7 +2750,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2751,7 +2769,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2765,7 +2783,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2779,7 +2797,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2793,7 +2811,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2808,7 +2826,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2822,7 +2840,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip + start, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip + start, len);
 		ip += consumed;
 		pc++;
 		DISPATCH();
@@ -2838,7 +2856,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.char_to.name, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.char_to.name), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2854,7 +2872,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.char_to.name, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.char_to.name), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2865,7 +2883,7 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t rem;
 		rem = REMAINING();
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, rem);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, rem);
 		ip += rem;
 		pc++;
 		DISPATCH();
@@ -2878,7 +2896,7 @@ ln_vm_continue(ln_vm_t *vm)
 		/* SIMD stage-1 structural scan + scalar stage-2 flatten.
 		 * On parse failure BACKTRACK restores result->n_fields from the
 		 * fork snapshot, rolling back any partially-emitted leaves. */
-		if (UNLIKELY(vm_json_flatten(vm, inst->data.str, ip,
+		if (UNLIKELY(vm_json_flatten(vm, turbo_iname(vm, inst, inst->data.str), ip,
 					     REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2896,7 +2914,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2910,7 +2928,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2942,7 +2960,7 @@ ln_vm_continue(ln_vm_t *vm)
 		vm->ip = ip;
 		vm->pc = pc;
 
-		ctx_name = inst->data.char_to.name;
+		ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		sep = (char)inst->data.char_to.delim;
 		ass = (char)inst->data.char_to.ass;
 		ass_char = ass ? ass : '=';
@@ -3437,7 +3455,7 @@ ln_vm_continue(ln_vm_t *vm)
 		vm->ip = ip;
 		vm->pc = pc;
 
-		ctx_name = inst->data.str;
+		ctx_name = turbo_iname(vm, inst, inst->data.str);
 
 		if (ctx_name[0]) {
 			vm_push_field_ctx(vm, ctx_name, false);
@@ -3557,7 +3575,7 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t json_len;
 
 
-		fname = inst->data.str;
+		fname = turbo_iname(vm, inst, inst->data.str);
 		rem = REMAINING();
 
 		/* Must start with "@cee:" (5 chars) + at least '{' */
@@ -3614,7 +3632,7 @@ ln_vm_continue(ln_vm_t *vm)
 		vm->ip = ip;
 		vm->pc = pc;
 
-		ctx_name = inst->data.char_to.name;
+		ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		term = (char)inst->data.char_to.delim;
 
 		if (ctx_name[0]) {
