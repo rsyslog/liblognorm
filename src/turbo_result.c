@@ -1,5 +1,5 @@
 /*
- * turbo_result.c -- Compatibility wrapper for result types
+ * turbo_result.c: Compatibility wrapper for result types
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *

@@ -42,7 +42,7 @@ struct ln_ctx_s;
 
 /* size_t / int64_t appear in the public signatures (the real prototypes and the
  * no-op stubs alike), so the standard headers are needed no matter which branch
- * compiles.  Standard headers only -- never config.h (see the note above). */
+ * compiles.  Standard headers only, never config.h (see the note above). */
 #include <stddef.h>
 #include <stdint.h>
 

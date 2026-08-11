@@ -1,5 +1,5 @@
 /*
- * turbo_json_fast.c -- Fast JSON serialization declarations
+ * turbo_json_fast.c: Fast JSON serialization declarations
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *

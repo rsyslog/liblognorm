@@ -1,5 +1,5 @@
 /*
- * turbo_vm.c -- Virtual machine for executing TurboVM bytecode
+ * turbo_vm.c: Virtual machine for executing TurboVM bytecode
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -827,17 +827,17 @@ parse_json(const char *buf, size_t len, size_t *out_len)
  *
  * OP_FIELD_JSON flattens a nested JSON object into the flat result store using
  * dotted keys (e.g. {"alert":{"severity":3}} -> "alert.severity"=3). The
- * dotted keys integrate with the existing flat result-tree key convention --
- * the JSON serializer re-nests them on output -- and reuse the same separator
+ * dotted keys integrate with the existing flat result-tree key convention
+ * (the JSON serializer re-nests them on output) and reuse the same separator
  * the other nested turbo fields use (vm_build_field_name '.').
  *
  * Design: a length-gated hybrid scan that REUSES the VM's existing SIMD
- * primitives (ln_simd_find_char / ln_simd_skip_space -- SSE4.2 + NEON + scalar
+ * primitives (ln_simd_find_char / ln_simd_skip_space, SSE4.2 + NEON + scalar
  * backends) rather than inventing new vector machinery, so OP_FIELD_JSON
  * inherits the dual-arch + scalar fallback contract for free.
  *
  *   - Structural walk (scalar recursive descent): typical log JSON is
- *     structurally DENSE -- structural bytes sit only a few bytes apart -- so a
+ *     structurally DENSE (structural bytes sit only a few bytes apart) so a
  *     16-wide vector structural-set scan loses its per-chunk setup cost against
  *     a tight scalar dispatch on the next byte. A pure-SIMD structural-set scan
  *     measured slower than the scalar walk on representative log corpora, so we
@@ -874,7 +874,7 @@ typedef struct {
 	char          key[LN_JSON_KEYBUF];  /* current dotted prefix */
 	size_t        key_len;      /* bytes used in key[] */
 	int           n_emitted;    /* leaves added to the flat store */
-	bool          full;         /* hit LN_FAST_MAX_FIELDS -- stop adding */
+	bool          full;         /* hit LN_FAST_MAX_FIELDS: stop adding */
 	bool          validate_only;/* when set, the parser only checks that the JSON
 	                             * is well-formed and measures its byte span; it
 	                             * stores no fields */
@@ -953,7 +953,7 @@ json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
 		 * string bodies, structural bytes a few bytes apart) so a 16-wide
 		 * vector scan loses its per-chunk setup cost against a tight scalar
 		 * loop on short bodies. We only pay for SIMD once a long body
-		 * (>= 2 vector widths) is plausible -- that captures the long values
+		 * (>= 2 vector widths) is plausible: that captures the long values
 		 * (URLs, long identifiers) where the leap actually pays off. Net:
 		 * scalar-or-better on dense JSON, SIMD win on long values, zero
 		 * regression elsewhere. */
@@ -1002,7 +1002,7 @@ json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
 		if (dup) *out_len = n;
 		return dup;
 	}
-	/* n is an input-derived length; guard n+1 against size_t wrap -- n ==
+	/* n is an input-derived length; guard n+1 against size_t wrap: n ==
 	 * SIZE_MAX would make ln_arena_alloc see 0 and round it up to a 1-byte
 	 * buffer, which the unescape loop below would then overflow. */
 	if (n == SIZE_MAX) return NULL;
@@ -1127,7 +1127,7 @@ json_emit_double(ln_json_ctx_t *c, double v)
  * in full via the VM arena, because truncating to the stack buffer could cut a
  * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
  * through the VM's private C locale (strtod_l), so the decimal point is always
- * '.' regardless of the process LC_NUMERIC -- matching the locale-independent v1
+ * '.' regardless of the process LC_NUMERIC, matching the locale-independent v1
  * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
  * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
  * the turbo context is never built and the v1 path is used instead.
@@ -1444,7 +1444,7 @@ parse_mac48(const char *buf, size_t len, size_t *out_len)
 }
 
 /*============================================================================
- * Instruction Execution (legacy switch-based — kept for reference/fallback)
+ * Instruction Execution (legacy switch-based, kept for reference/fallback)
  *============================================================================
  *
  * NOTE: The primary execution path is now ln_vm_continue() below, which
@@ -1821,7 +1821,7 @@ vm_exec_instr(ln_vm_t *vm)
 			/* Scan for assignator char using SIMD find_char */
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
 			if (name_end_off >= (size_t)(end - p)) {
-				/* No more assignator found — done */
+				/* No more assignator found: done */
 				break;
 			}
 
@@ -1878,7 +1878,7 @@ vm_exec_instr(ln_vm_t *vm)
 				if (p < end && *p == quote) {
 					p++; /* skip closing quote */
 				} else {
-					/* Unterminated quote — fail */
+					/* Unterminated quote: fail */
 					break;
 				}
 			} else {
@@ -1889,7 +1889,7 @@ vm_exec_instr(ln_vm_t *vm)
 					size_t off = ln_simd_find_char(p, (size_t)(end - p), sep);
 					val_len = (off < (size_t)(end - p)) ? off : (size_t)(end - p);
 				} else {
-					/* Whitespace separator — scan to first whitespace */
+					/* Whitespace separator: scan to first whitespace */
 					val_len = 0;
 					while (p + val_len < end && !isspace((unsigned char)p[val_len]))
 						val_len++;
@@ -2129,7 +2129,7 @@ vm_exec_instr(ln_vm_t *vm)
 				size_t sp_off;
 				sp_off = ln_simd_find_char(p, (size_t)(end - p), ' ');
 				if (sp_off < eq_off) {
-					/* Flag: name without '=' — store as null */
+					/* Flag: name without '=', store as null */
 					name_len = sp_off;
 					if (name_len == 0) break;
 					if (name_len > 63) name_len = 63;
@@ -2144,7 +2144,7 @@ vm_exec_instr(ln_vm_t *vm)
 			}
 
 			if (eq_off >= (size_t)(end - p)) {
-				/* No '=' found — check if rest is a flag */
+				/* No '=' found: check if rest is a flag */
 				name_len = (size_t)(end - p);
 				if (name_len == 0) break;
 				if (name_len > 63) name_len = 63;
@@ -2288,7 +2288,7 @@ vm_exec_instr(ln_vm_t *vm)
 			val_start = p;
 			semi_off = ln_simd_find_char(p, (size_t)(end - p), ';');
 			if (semi_off >= (size_t)(end - p)) {
-				/* No semicolon — take rest as value */
+				/* No semicolon: take rest as value */
 				val_len = (size_t)(end - p);
 				p = end;
 			} else {
@@ -2406,7 +2406,7 @@ vm_exec_instr(ln_vm_t *vm)
 
 				p += key_len + 1; /* skip key + '=' */
 
-				/* Value: greedy — take everything until next key=
+				/* Value: greedy, take everything until next key=
 				 * Scan backwards from next '=' to find the space
 				 * before the next key. */
 				val_start = p;
@@ -2491,7 +2491,7 @@ vm_exec_instr(ln_vm_t *vm)
  *
  * 1. COMPUTED GOTO (GCC/Clang): Flat dispatch loop with direct jumps
  *    between opcode handlers. Each handler ends with NEXT() which
- *    increments pc and jumps directly to the next handler — no loop
+ *    increments pc and jumps directly to the next handler, no loop
  *    overhead, no switch bounds check. Failed handlers jump to
  *    backtrack: which pops the fork stack or returns NOMATCH.
  *
@@ -2739,7 +2739,7 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(literal_ext) {
-		/* External literal — same as LITERAL but data is a pointer.
+		/* External literal: same as LITERAL but data is a pointer.
 		 * Currently unused in compiled programs, but reserved. */
 		WRITEBACK();
 		BACKTRACK();
@@ -2795,7 +2795,7 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(charset) {
-		/* External charset bitmap — reserved but not yet used */
+		/* External charset bitmap: reserved but not yet used */
 		WRITEBACK();
 		BACKTRACK();
 	}
@@ -3359,7 +3359,7 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(syslog_ts) {
-		/* OP_SYSLOG_TS: parse syslog timestamp — delegates to SIMD */
+		/* OP_SYSLOG_TS: parse syslog timestamp; delegates to SIMD */
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
 		const char *name;
@@ -3576,7 +3576,7 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 
 			if (eq_off >= (size_t)(input_end - p)) {
-				/* No '=' — rest is a flag */
+				/* No '=': rest is a flag */
 				name_len = (size_t)(input_end - p);
 				if (name_len == 0) break;
 				if (name_len > 63) name_len = 63;
@@ -3835,7 +3835,7 @@ backtrack:
 	#undef VALIDATE_TARGET
 }
 
-#else /* !LN_VM_COMPUTED_GOTO — switch-based fallback */
+#else /* !LN_VM_COMPUTED_GOTO: switch-based fallback */
 
 int
 ln_vm_continue(ln_vm_t *vm)

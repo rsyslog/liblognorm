@@ -1,5 +1,5 @@
 /*
- * turbo.c -- liblognorm integration for TurboVM bytecode engine
+ * turbo.c: liblognorm integration for TurboVM bytecode engine
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -311,7 +311,7 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
 		instr.op = OP_TAG;
 		size_t len = strlen(tagStr);
 		if (len >= sizeof(instr.data.str))
-			return -1;  /* tag name too long — fall back to v1 */
+			return -1;  /* tag name too long: fall back to v1 */
 		memcpy(instr.data.str, tagStr, len);
 
 		if (emit(comp, &instr) == UINT32_MAX)
@@ -329,7 +329,7 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
  *
  * This eliminates the need for runtime annotation resolution entirely.
  * The annotation values (like event.kind="event") become part of the
- * compiled instruction stream — zero per-message overhead.
+ * compiled instruction stream: zero per-message overhead.
  */
 static int
 emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
@@ -390,7 +390,7 @@ emit_match(compiler_t *comp, struct ln_pdag *node)
 {
 	/* A top-level rule matches only when it has consumed the ENTIRE input:
 	 * the recursive normalizer accepts a terminal for normalization only at
-	 * end-of-input.  Assert that first so turbo agrees — otherwise a rule
+	 * end-of-input.  Assert that first so turbo agrees, otherwise a rule
 	 * whose last parser stops before EOL, or a strict-prefix rule reached via
 	 * the fallback fork, would falsely match a longer line on its trailing
 	 * bytes.  (Custom-type sub-matches end in OP_RET, not here, so they are
@@ -401,7 +401,7 @@ emit_match(compiler_t *comp, struct ln_pdag *node)
 	if (entry == UINT32_MAX)
 		return UINT32_MAX;
 
-	/* Emit tags first — these populate result.tags[] */
+	/* Emit tags first: these populate result.tags[] */
 	if (emit_tags(comp, node) != 0)
 		return UINT32_MAX;
 
@@ -422,7 +422,7 @@ emit_match(compiler_t *comp, struct ln_pdag *node)
 	comp->n_rules++;
 	if (emit(comp, &instr) == UINT32_MAX)
 		return UINT32_MAX;
-	/* Entry is the ASSERT_END — every path into this terminal (sequential,
+	/* Entry is the ASSERT_END: every path into this terminal (sequential,
 	 * fallback fork, or a sibling-branch fork) goes through the EOL gate. */
 	return entry;
 }
@@ -470,7 +470,7 @@ struct data_NameValue {
 
 /* Mirrors the layout-prefix of parser.c's private data_CharTo /
  * data_CharSeparated (no shared header). Both start with the same two fields;
- * types must match parser.c exactly -- n_term_chars is size_t, not int (an int
+ * types must match parser.c exactly: n_term_chars is size_t, not int (an int
  * mirror only happens to work on little-endian LP64). Keep in lockstep. */
 struct data_CharSeparated {
 	char  *term_chars;
@@ -609,7 +609,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		 * data_CharSeparated which mirrors the first two fields of the
 		 * upstream data_CharTo struct (ABI-safe).
 		 *
-		 * NOTE: Do NOT use ln_DataForDisplayCharTo() here — it returns
+		 * NOTE: Do NOT use ln_DataForDisplayCharTo() here: it returns
 		 * the display string "char-to{X}", not the raw delimiter char. */
 		if (prs->parser_data &&
 			(prs->prsid == PRSID_CHARTO || prs->prsid == PRSID_CHARSEP)) {
@@ -692,7 +692,7 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 		 * match here and backtracks).  Emit OP_FAIL so the VM does the
 		 * same instead of aborting the whole compilation. */
 		LN_DBGPRINTF(comp->ctx, "turbo: non-terminal dead-end node %p "
-					 "(nparsers=0, depth=%d) — emitting OP_FAIL",
+					 "(nparsers=0, depth=%d), emitting OP_FAIL",
 					 (void *)node, comp->depth);
 		ln_instr_t fail_instr = {0};
 		fail_instr.op = OP_FAIL;
@@ -849,7 +849,7 @@ ln_turbo_compile(ln_ctx ctx)
 	if (!ctx || !ctx->turbo) return -1;
 	if (!ctx->pdag) return -1;
 
-	LN_DBGPRINTF(ctx, "turbo: compile entry — version=%d pdag=%p "
+	LN_DBGPRINTF(ctx, "turbo: compile entry: version=%d pdag=%p "
 				 "nparsers=%d isTerminal=%d nNodes=%d",
 				 ctx->version, (void *)ctx->pdag,
 				 ctx->pdag->nparsers,

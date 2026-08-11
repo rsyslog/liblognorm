@@ -1,5 +1,5 @@
 /*
- * turbo_snapshot.c -- Deep-copy snapshot of turbo parse results
+ * turbo_snapshot.c: Deep-copy snapshot of turbo parse results
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -62,7 +62,7 @@ rebase_ptr(const char *ptr, const uint8_t *old_base, const char *new_base)
  *
  * A pointer needs copying iff it is non-NULL and does NOT already live in the
  * arena region (those are handled by the cheap rebase path). The byte count
- * uses the stored length — values carry an explicit length and may contain
+ * uses the stored length: values carry an explicit length and may contain
  * embedded NULs; names are length-prefixed too. We always append a trailing
  * NUL so the snapshot strings stay C-string compatible like the originals.
  */
@@ -104,7 +104,7 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 
 	if (!src) return NULL;
 
-	/* Determine arena copy size — may be 0 if no arena or no overflow strings */
+	/* Determine arena copy size: may be 0 if no arena or no overflow strings */
 	if (arena && arena->base && arena->used > 0) {
 		arena_used = arena->used;
 		arena_base = arena->base;
@@ -112,7 +112,7 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 
 	/* Pass 1: size the extra space needed for every pointer that does NOT
 	 * live in the arena and therefore cannot be rebased. "Not in arena" does
-	 * NOT imply "long-lived/static" — OP_FIELD_REST/WORD/STR_TO/CHAR_TO/QUOTED
+	 * NOT imply "long-lived/static": OP_FIELD_REST/WORD/STR_TO/CHAR_TO/QUOTED
 	 * store long (>= LN_FAST_INLINE_SIZE) values as raw pointers straight into
 	 * the input line. Those, plus non-static names and the original message,
 	 * must be copied so the snapshot can outlive the input line. */
@@ -147,7 +147,7 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 		memcpy(backing, arena_base, arena_used);
 	}
 
-	/* Detach from original arena — snapshot is self-contained */
+	/* Detach from original arena; snapshot is self-contained */
 	snap->result.arena = NULL;
 
 	/* Pass 2: rebase arena pointers; copy-and-repoint non-arena ones. The
@@ -218,7 +218,7 @@ ln_fast_result_snapshot_get(const ln_fast_result_snapshot_t *snap)
 void
 ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap)
 {
-	/* Single allocation — single free */
+	/* Single allocation, single free */
 	free(snap);
 }
 

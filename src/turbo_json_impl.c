@@ -1,5 +1,5 @@
 /*
- * turbo_json_impl.c -- Ultra-fast JSON serialization with nested object support
+ * turbo_json_impl.c: Ultra-fast JSON serialization with nested object support
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -32,7 +32,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* JSON escaping needs only SSE2/NEON, not SSE4.2 — separate from LN_SIMD_* in simd.h */
+/* JSON escaping needs only SSE2/NEON, not SSE4.2; separate from LN_SIMD_* in simd.h */
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 #define HAS_SIMD 1
@@ -182,8 +182,8 @@ find_escape_needed(const char *s, size_t len)
 	__m128i v_bslash = _mm_set1_epi8('\\');
 
 	while (i + 16 <= len) {
-		/* _mm_loadu_si128 is the unaligned load intrinsic
-		 *  — it explicitly does NOT require 16-byte alignment.
+		/* _mm_loadu_si128 is the unaligned load intrinsic:
+		 * it explicitly does NOT require 16-byte alignment.
 		 * The cast to const __m128i * is just how Intel's intrinsic API is designed;
 		 * clang's -Wcast-align doesn't understand this semantic.
 		 * So we cast through const void * to break the alignment chain */
@@ -633,7 +633,7 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	}
 	open_depth = 0;
 
-	/* Tags array — emit as "tags":[...] at root level (ECS standard) */
+	/* Tags array: emit as "tags":[...] at root level (ECS standard) */
 	if (r->n_tags > 0) {
 		int tag_first = 1;
 		uint8_t ti;

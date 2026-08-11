@@ -1,5 +1,5 @@
 /*
- * turbo_arena.c -- High-performance arena allocator
+ * turbo_arena.c: High-performance arena allocator
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *

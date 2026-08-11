@@ -44,7 +44,7 @@
 
 /*
  * OP_COUNT must cover the full opcode byte range (0x00-0xFF).
- * Sparse opcodes are fine — unused slots point to op_invalid.
+ * Sparse opcodes are fine: unused slots point to op_invalid.
  * 256 × 8 bytes = 2KB table, fits in L1d cache.
  */
 #define OP_COUNT 256

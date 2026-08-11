@@ -200,7 +200,7 @@ static inline ln_instr_t ln_i_literal(const char *lit, uint16_t len) {
 	i.op = OP_LITERAL;
 	/* Clamp the inline copy to the buffer; aux carries the match length
 	 * the VM compares, so it must never exceed what we actually stored
-	 * inline (security audit #6 — VM also re-validates len <= inline size). */
+	 * inline (security audit #6; VM also re-validates len <= inline size). */
 	if (len > LN_INSTR_MAX_INLINE)
 		len = LN_INSTR_MAX_INLINE;
 	i.aux = len;

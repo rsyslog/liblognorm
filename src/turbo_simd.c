@@ -1,5 +1,5 @@
 /*
- * turbo_simd.c -- SIMD-accelerated parsing primitives
+ * turbo_simd.c: SIMD-accelerated parsing primitives
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -623,7 +623,7 @@ ln_simd_skip_space(const char *buf, size_t len)
 #elif defined(_MSC_VER)
 #define THREAD_LOCAL __declspec(thread)
 #else
-#define THREAD_LOCAL /* nothing — falls back to rebuild every time */
+#define THREAD_LOCAL /* nothing: falls back to rebuild every time */
 #endif
 
 static THREAD_LOCAL const char *s_cached_chars = NULL;
@@ -639,7 +639,7 @@ static inline const uint8_t *
 get_char_class(const char *chars)
 {
 	if (chars == s_cached_chars && s_cached_chars != NULL) {
-		return s_cached_table;  /* Cache hit — same pointer, same data */
+		return s_cached_table;  /* Cache hit: same pointer, same data */
 	}
 	/* Cache miss: build and cache */
 	build_char_class(chars, s_cached_table);
