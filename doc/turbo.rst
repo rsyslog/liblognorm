@@ -20,8 +20,9 @@ fields are extracted. TurboVM replaces this with:
   arena (~16 KB), fitting in L1 cache. Zero malloc/free per message.
 - **SIMD parsing**: character scanning, delimiter search, whitespace skipping,
   and IP address parsing use SSE4.2 or NEON intrinsics when available.
-- **Typed field output**: extracted fields carry their native type (string,
-  integer, double, boolean) instead of converting everything to JSON strings.
+- **Output parity**: field values match the standard engine, so a rulebase
+  produces the same JSON on either engine (numeric fields are emitted as
+  strings by default, as in the standard parser).
 - **Nested JSON**: dotted field names (e.g. ``source.ip``) produce properly
   nested JSON objects (``{"source":{"ip":"..."}}``), enabling direct ECS
   (Elastic Common Schema) output.
@@ -54,7 +55,7 @@ In turbo mode:
 
 - Normalization uses the TurboVM bytecode engine
 - Output is compact JSON with nested objects for dotted field names
-- Numeric fields are emitted as native JSON numbers (not strings)
+- Field values match the standard engine (numeric fields are strings by default)
 - The ``getline()`` system call is used for input (more efficient than
   ``fgets()`` for large-scale processing)
 
@@ -137,15 +138,26 @@ The following parsers are compiled to bytecode:
   ``time-24hr``, ``time-12hr``, ``duration``, ``kernel-timestamp``
 - **Structured**: ``json``, ``cee-syslog``, ``cef``, ``v2-iptables``,
   ``checkpoint-lea``, ``name-value-list``
-- **Special**: ``whitespace`` (as skip), ``cisco-interface-spec``
+- **Special**: ``whitespace``, ``cisco-interface-spec``
 
-The following parser type falls back to the legacy recursive engine:
+The following parser type falls back to the standard engine:
 
 - **repeat**: requires recursive sub-rule invocation, which is outside
   the scope of the single-pass VM instruction set.
 
-The fallback is automatic and transparent — rulebases using ``repeat``
+The fallback is automatic and transparent: rulebases using ``repeat``
 will still work correctly via the standard engine.
+
+Known differences from the standard engine
+-------------------------------------------
+
+A few parsers behave slightly differently under TurboVM:
+
+- The ``number``, ``float`` and ``hexnumber`` ``format="number"`` parameter is
+  not honored. TurboVM always emits these fields as strings (the default
+  format). Use the standard engine when native numeric output is required.
+- ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
+  as a plain word match, so they may accept input the standard parser rejects.
 
 Performance Notes
 -----------------
