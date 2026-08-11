@@ -571,6 +571,25 @@ vm_add_int_field(ln_vm_t *vm, const char *name, int64_t val)
 	return ln_fast_add_int_static(vm->result, full_name, name_len, val) == 0;
 }
 
+/**
+ * @brief Add a raw JSON value (emitted verbatim, without quotes) using fast
+ * result. Used for float format="number", where the matched text is already a
+ * valid JSON number and is emitted as-is to preserve its serialization.
+ */
+static inline bool
+vm_add_rawjson_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
+{
+	uint16_t name_len;
+	const char *full_name;
+
+	if (!vm->result) return true;
+
+	full_name = vm_build_field_name(vm, name, &name_len);
+	if (!full_name || !full_name[0]) return true;
+
+	return ln_fast_add_rawjson_static(vm->result, full_name, name_len, val, len) == 0;
+}
+
 /*============================================================================
  * Inline Parser Implementations
  *============================================================================*/
@@ -1614,9 +1633,11 @@ vm_exec_instr(ln_vm_t *vm)
 
 		if (parse_number(vm->ip, remaining, &value, &len) != 0) return -1;
 
-		/* Store the matched digits as a string, as the standard parser does. */
-		(void)value;
-		vm_add_string_field(vm, name, vm->ip, len);
+		/* Native JSON integer with format="number", the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, name, value);
+		else
+			vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1642,7 +1663,11 @@ vm_exec_instr(ln_vm_t *vm)
 
 		if (parse_float(vm->ip, remaining, &len) != 0) return -1;
 
-		vm_add_string_field(vm, name, vm->ip, len);
+		/* Native JSON number (verbatim) with format="number", string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_rawjson_field(vm, name, vm->ip, len);
+		else
+			vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1679,10 +1704,12 @@ vm_exec_instr(ln_vm_t *vm)
 
 		if (parse_hex(vm->ip, remaining, &value, &len) != 0) return -1;
 
-		/* Store the matched hex literal as a string, as the standard parser
-		 * does, rather than its decimal value. */
-		(void)value;
-		vm_add_string_field(vm, name, vm->ip, len);
+		/* Native JSON integer (decimal) with format="number", the matched hex
+		 * literal as a string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, name, value);
+		else
+			vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -2843,9 +2870,11 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		/* Store the matched digits as a string, as the standard parser does. */
-		(void)value;
-		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
+		/* Native JSON integer with format="number", the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
+		else
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2878,7 +2907,12 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
+		/* Native JSON number with format="number" (emitted verbatim to preserve
+		 * the serialization), the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_rawjson_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
+		else
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2921,10 +2955,12 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		/* Store the matched hex literal as a string, as the standard parser
-		 * does, rather than its decimal value. */
-		(void)value;
-		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
+		/* Native JSON integer (decimal) with format="number", the matched hex
+		 * literal as a string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
+		else
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();

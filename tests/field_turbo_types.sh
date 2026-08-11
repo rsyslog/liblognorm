@@ -27,6 +27,23 @@ add_rule 'rule=:%h:hexnumber% z'
 execute '0xff z'
 assert_output_json_eq '{ "h": "0xff" }'
 
+# format="number" is honored: number/hexnumber/float emit native JSON numbers.
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%{"name":"n","type":"number","format":"number"}% z'
+execute '12345 z'
+assert_output_json_eq '{ "n": 12345 }'
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%{"name":"h","type":"hexnumber","format":"number"}% z'
+execute '0xff z'
+assert_output_json_eq '{ "h": 255 }'
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%{"name":"f","type":"float","format":"number"}% z'
+execute '3.14159 z'
+assert_output_json_eq '{ "f": 3.14159 }'
+
 # whitespace: the matched run of spaces/tabs is stored, and at least one
 # whitespace character is required (no match otherwise).
 reset_rules

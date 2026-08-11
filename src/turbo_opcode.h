@@ -169,6 +169,9 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 									  holds a uint32 pool offset instead of the
 									  name. Lets turbo carry names longer than the
 									  inline buffer, matching the standard parser. */
+#define LN_INSTR_F_NUMERIC   0x20  /**< Numeric field parsed with format="number":
+									  emit a native JSON number instead of a string,
+									  matching the standard parser. */
 
 /*============================================================================
  * Instruction Builders

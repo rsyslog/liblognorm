@@ -477,6 +477,29 @@ struct data_CharSeparated {
 	size_t n_term_chars;
 };
 
+/* Mirrors parser.c's private enum FMT_MODE and the number/float/hexnumber data
+ * structs (no shared header). The number and hexnumber parsers store the format
+ * mode after an 8-byte maxval; the float parser stores it first. Keep in
+ * lockstep with parser.c. */
+#define TURBO_FMT_AS_NUMBER 1   /* enum FMT_MODE value FMT_AS_NUMBER */
+struct data_Number    { int64_t  maxval; int fmt_mode; };
+struct data_HexNumber { uint64_t maxval; int fmt_mode; };
+struct data_Float     { int fmt_mode; };
+
+/* Does this numeric parser request native-number output (format="number")? */
+static int
+turbo_numeric_wants_number(ln_opcode_t op, const void *pdata)
+{
+	if (pdata == NULL) return 0;
+	if (op == OP_FIELD_INT)
+		return ((const struct data_Number *)pdata)->fmt_mode == TURBO_FMT_AS_NUMBER;
+	if (op == OP_FIELD_HEX)
+		return ((const struct data_HexNumber *)pdata)->fmt_mode == TURBO_FMT_AS_NUMBER;
+	if (op == OP_FIELD_FLOAT)
+		return ((const struct data_Float *)pdata)->fmt_mode == TURBO_FMT_AS_NUMBER;
+	return 0;
+}
+
 /* Forward declaration for Checkpoint LEA parser data (defined in parser.c). */
 struct data_CheckpointLEA {
 	char terminator;
@@ -653,6 +676,12 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 
 	if (pc == UINT32_MAX) return -1;
 	*out_pc = pc;
+
+	/* number/float/hexnumber with format="number" emit a native JSON number
+	 * instead of the default string. */
+	if ((op == OP_FIELD_INT || op == OP_FIELD_HEX || op == OP_FIELD_FLOAT) &&
+	    turbo_numeric_wants_number(op, prs->parser_data))
+		comp->turbo->code[pc].flags |= LN_INSTR_F_NUMERIC;
 
 	if (prs->node) {
 		uint32_t cont_entry;

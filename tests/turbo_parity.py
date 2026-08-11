@@ -29,7 +29,7 @@ if os.path.isdir(LIBDIR):
 
 # Field types TurboVM approximates as a plain word match, so they can accept or
 # format differently from the standard parser. Documented, not a regression.
-KNOWN = {"cisco-interface-spec", "duration", "kernel-timestamp", "number-fmt"}
+KNOWN = {"cisco-interface-spec", "duration", "kernel-timestamp"}
 
 # (name, rule-body-after-':', input-line). Use \t / \n escapes in the input.
 CASES = [
@@ -37,6 +37,8 @@ CASES = [
     ("alpha",                 "%f:alpha%123",               "abc123"),
     ("number",                "%f:number% z",               "12345 z"),
     ("number-fmt",            '%{"name":"f","type":"number","format":"number"}% z', "42 z"),
+    ("hexnumber-fmt",         '%{"name":"f","type":"hexnumber","format":"number"}% z', "0xff z"),
+    ("float-fmt",             '%{"name":"f","type":"float","format":"number"}% z', "3.14159 z"),
     ("float",                 "%f:float% z",                "3.14 z"),
     ("hexnumber",             "%f:hexnumber% z",            "0xff z"),
     ("char-to",               "%f:char-to:,%,z",            "abc,z"),

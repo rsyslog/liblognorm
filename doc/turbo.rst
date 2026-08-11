@@ -55,7 +55,8 @@ In turbo mode:
 
 - Normalization uses the TurboVM bytecode engine
 - Output is compact JSON with nested objects for dotted field names
-- Field values match the standard engine (numeric fields are strings by default)
+- Field values match the standard engine (numeric fields are strings by
+  default, or native JSON numbers with ``format="number"``)
 - The ``getline()`` system call is used for input (more efficient than
   ``fgets()`` for large-scale processing)
 
@@ -153,9 +154,6 @@ Known differences from the standard engine
 
 A few parsers behave slightly differently under TurboVM:
 
-- The ``number``, ``float`` and ``hexnumber`` ``format="number"`` parameter is
-  not honored. TurboVM always emits these fields as strings (the default
-  format). Use the standard engine when native numeric output is required.
 - ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
   as a plain word match, so they may accept input the standard parser rejects.
 
