@@ -286,14 +286,16 @@ write_escaped_string(const char *s, size_t len, char *out, size_t outlen)
  * Multi-Depth Nested Object Serialization
  *============================================================================*/
 
-/**
- * Maximum nesting depth for ECS-style dotted field names.
- * ECS rarely exceeds 3 levels (e.g., user.group.name).
- * 8 levels provides generous headroom with minimal stack cost.
+/*
+ * Maximum nesting depth for ECS-style dotted field names (e.g.
+ * user.group.name). LN_JSON_MAX_DEPTH is defined in turbo_result_fast.h so the
+ * serializer here matches the VM flattener's ceiling; if they disagreed, the
+ * flattener could emit dotted names deeper than the serializer can render,
+ * silently collapsing or mis-keying the extra levels. The level_has_entry
+ * comma-tracking bitmask below is a uint64_t, so the ceiling must fit in it.
  */
-#define LN_JSON_MAX_DEPTH 8
-_Static_assert(LN_JSON_MAX_DEPTH <= 8,
-	"level_has_entry bitmask requires LN_JSON_MAX_DEPTH <= 8");
+_Static_assert(LN_JSON_MAX_DEPTH <= 64,
+	"level_has_entry bitmask (uint64_t) requires LN_JSON_MAX_DEPTH <= 64");
 
 /**
  * Path component for tracking open JSON objects.
@@ -516,7 +518,7 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	 * whether a comma is needed at that parent level. We use a bitmask:
 	 * bit i is set if level i has already emitted at least one entry.
 	 */
-	uint8_t level_has_entry = 0;  /* bitmask, bit 0 = root level */
+	uint64_t level_has_entry = 0;  /* bitmask, bit 0 = root level */
 	uint8_t si;
 
 	if (buflen < 3) return -1;
@@ -531,9 +533,9 @@ ln_fast_to_json(const ln_fast_result_t *r,
 
 	*p++ = '{';
 
-#define NEED_COMMA_AT(lvl)  (level_has_entry & (1u << (lvl)))
-#define SET_HAS_ENTRY(lvl)  (level_has_entry |= (1u << (lvl)))
-#define CLEAR_ENTRY_FROM(lvl) (level_has_entry &= (uint8_t)((1u << (lvl)) - 1))
+#define NEED_COMMA_AT(lvl)  (level_has_entry & (1ull << (lvl)))
+#define SET_HAS_ENTRY(lvl)  (level_has_entry |= (1ull << (lvl)))
+#define CLEAR_ENTRY_FROM(lvl) (level_has_entry &= (uint64_t)((1ull << (lvl)) - 1))
 
 	for (si = 0; si < n_valid; si++) {
 		const ln_fast_field_t *f = &r->fields[sorted[si]];

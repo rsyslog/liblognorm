@@ -839,7 +839,8 @@ parse_json(const char *buf, size_t len, size_t *out_len)
  * Keys are built in a small stack buffer then arena-duped.
  */
 
-#define LN_JSON_MAX_DEPTH  64           /* matches LN_FAST_MAX_FIELDS ceiling */
+/* LN_JSON_MAX_DEPTH is defined in turbo_result_fast.h so the flattener here and
+ * the JSON serializer in turbo_json_impl.c share one ceiling. */
 #define LN_JSON_KEYBUF     512          /* dotted-path scratch (stack) */
 
 typedef struct {
@@ -1001,7 +1002,11 @@ json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
 	const char *key;
 	const char *val;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	val = json_unescape_arena(c->vm, raw, raw_len, &vlen);
 	if (!key || !val) return;
@@ -1015,7 +1020,11 @@ json_emit_int(ln_json_ctx_t *c, int64_t v)
 {
 	const char *key;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	if (!key) return;
 	if (ln_fast_add_int_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
@@ -1027,7 +1036,11 @@ json_emit_double(ln_json_ctx_t *c, double v)
 {
 	const char *key;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	if (!key) return;
 	if (ln_fast_add_double_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)

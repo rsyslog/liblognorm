@@ -34,6 +34,11 @@ extern "C" {
 /** Maximum tags per result */
 #define LN_FAST_MAX_TAGS 16
 
+/** Maximum JSON object nesting depth for turbo output. Shared by the VM
+ * flattener (turbo_vm.c) and the JSON serializer (turbo_json_impl.c) so the
+ * two never disagree on how deep a dotted field name may nest. */
+#define LN_JSON_MAX_DEPTH 64
+
 /** Inline string size (fits in cache line with field metadata) */
 #define LN_FAST_INLINE_SIZE 48
 
@@ -122,6 +127,8 @@ struct ln_fast_result_s {
 #define LN_FRESULT_MATCHED   0x01
 #define LN_FRESULT_PARTIAL   0x02
 #define LN_FRESULT_HAS_ORIG  0x04
+#define LN_FRESULT_TRUNCATED 0x08  /* a field or tag was dropped: the result hit
+									  LN_FAST_MAX_FIELDS / LN_FAST_MAX_TAGS */
 
 /*============================================================================
  * Fast Hash Function (FNV-1a)
@@ -183,7 +190,7 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 						  const char *val, uint32_t val_len)
 {
 	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	f = &r->fields[r->n_fields++];
 	f->name = name;
@@ -214,7 +221,7 @@ ln_fast_add_int_static(ln_fast_result_t *r,
 					   int64_t val)
 {
 	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	f = &r->fields[r->n_fields++];
 	f->name = name;
@@ -236,7 +243,7 @@ ln_fast_add_double_static(ln_fast_result_t *r,
 						  double val)
 {
 	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	f = &r->fields[r->n_fields++];
 	f->name = name;
@@ -259,7 +266,7 @@ ln_fast_add_tag(ln_fast_result_t *r, const char *tag)
 {
 	uint32_t h;
 	uint8_t slot;
-	if (r->n_tags >= LN_FAST_MAX_TAGS) return -1;
+	if (r->n_tags >= LN_FAST_MAX_TAGS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	h = ln_fast_hash(tag);
 	slot = h & (LN_FAST_TAG_HASH_SIZE - 1);

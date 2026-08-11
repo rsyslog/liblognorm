@@ -27,6 +27,7 @@
 #include "turbo_result_fast.h"
 #include "turbo_arena.h"
 #include "turbo_snapshot.h"
+#include "lognorm-turbo.h"  /* ln_fast_result_is_truncated() */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -541,6 +542,7 @@ static int test_tag_overflow(void)
     int r = ln_fast_add_tag(&result, "overflow_tag");
     TEST_ASSERT_EQ(r, -1, "overflow should fail");
     TEST_ASSERT_EQ(result.n_tags, LN_FAST_MAX_TAGS, "count should stay at max");
+    TEST_ASSERT(ln_fast_result_is_truncated(&result), "truncated after tag overflow");
 
     ln_arena_destroy(&arena);
     return 1;
@@ -590,11 +592,67 @@ static int test_max_fields(void)
     }
 
     TEST_ASSERT_EQ(result.n_fields, LN_FAST_MAX_FIELDS, "should reach max");
+    /* At exactly the cap the result is NOT yet truncated. */
+    TEST_ASSERT(!ln_fast_result_is_truncated(&result), "not truncated at cap");
 
     /* One more should fail */
     int r = ln_fast_add_int_static(&result, "overflow", 8, 999);
     TEST_ASSERT_EQ(r, -1, "overflow should fail");
     TEST_ASSERT_EQ(result.n_fields, LN_FAST_MAX_FIELDS, "count should stay at max");
+    /* The dropped field must be signalled, not lost silently. */
+    TEST_ASSERT(ln_fast_result_is_truncated(&result), "truncated after overflow");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+/* Truncation flag lifecycle: clear when empty, clear under the cap, set once a
+ * field OR a tag is dropped, and cleared again by ln_fast_result_clear(). This
+ * is the signal mmenrich/mmnormalize surface via impstats so field/tag drops
+ * are observable instead of silent. */
+static int test_truncation_flag(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    char name[32];
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* Fresh result: not truncated, flag bit clear. */
+    TEST_ASSERT(!ln_fast_result_is_truncated(&result), "fresh result not truncated");
+    TEST_ASSERT_EQ(result.flags & LN_FRESULT_TRUNCATED, 0, "truncated bit clear on init");
+
+    /* A few fields, still under the cap: not truncated. */
+    for (int i = 0; i < 5; i++) {
+        snprintf(name, sizeof(name), "f%d", i);
+        ln_fast_add_string_static(&result, name, (uint16_t)strlen(name), "v", 1);
+    }
+    TEST_ASSERT(!ln_fast_result_is_truncated(&result), "under-cap result not truncated");
+
+    /* Fill past the field cap: the accessor and the flag bit both report it. */
+    for (int i = 5; i <= LN_FAST_MAX_FIELDS; i++) {
+        snprintf(name, sizeof(name), "f%d", i);
+        ln_fast_add_string_static(&result, name, (uint16_t)strlen(name), "v", 1);
+    }
+    TEST_ASSERT(ln_fast_result_is_truncated(&result), "field overflow sets truncation");
+    TEST_ASSERT(result.flags & LN_FRESULT_TRUNCATED, "truncated bit set on field overflow");
+    TEST_ASSERT_EQ(result.n_fields, LN_FAST_MAX_FIELDS, "field count clamped at cap");
+
+    /* clear() resets the flag along with the rest of the result. */
+    ln_fast_result_clear(&result);
+    TEST_ASSERT(!ln_fast_result_is_truncated(&result), "clear resets truncation");
+
+    /* Tag overflow raises the same flag. */
+    for (int i = 0; i <= LN_FAST_MAX_TAGS; i++) {
+        snprintf(name, sizeof(name), "tag%d", i);
+        ln_fast_add_tag(&result, name);
+    }
+    TEST_ASSERT(ln_fast_result_is_truncated(&result), "tag overflow sets truncation");
+    TEST_ASSERT_EQ(result.n_tags, LN_FAST_MAX_TAGS, "tag count clamped at cap");
+
+    /* NULL is safely reported as not truncated. */
+    TEST_ASSERT(!ln_fast_result_is_truncated(NULL), "NULL result not truncated");
 
     ln_arena_destroy(&arena);
     return 1;
@@ -1128,6 +1186,7 @@ int main(void)
     printf("Capacity tests:\n");
     RUN_TEST(test_max_fields);
     RUN_TEST(test_field_overflow_all_types);
+    RUN_TEST(test_truncation_flag);
     printf("\n");
 
     /* Metadata tests */

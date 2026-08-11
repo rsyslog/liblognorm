@@ -135,6 +135,17 @@ int ln_turbo_normalize_raw(struct ln_ctx_s *ctx, const char *str, size_t strLen,
 int ln_fast_result_field_count(const ln_fast_result_t *r);
 
 /**
+ * @return 1 if the result was truncated, 0 otherwise.
+ *
+ * Truncation means at least one parsed field or tag was dropped because the
+ * message exceeded the per-result capacity (LN_FAST_MAX_FIELDS /
+ * LN_FAST_MAX_TAGS). The fields that were captured are still valid; callers
+ * that need every field can treat a truncated turbo result as a signal to
+ * fall back to the full parser, or simply count the occurrence.
+ */
+int ln_fast_result_is_truncated(const ln_fast_result_t *r);
+
+/**
  * Get a field by index as a string.
  *
  * Non-string fields yield a NULL value with zero length; use

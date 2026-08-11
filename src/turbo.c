@@ -1033,6 +1033,12 @@ ln_fast_result_field_count(const ln_fast_result_t *r)
 }
 
 int
+ln_fast_result_is_truncated(const ln_fast_result_t *r)
+{
+	return r ? ((r->flags & LN_FRESULT_TRUNCATED) != 0) : 0;
+}
+
+int
 ln_fast_result_get_field(const ln_fast_result_t *r, int idx,
 						 const char **name, size_t *nlen,
 						 const char **value, size_t *vlen)

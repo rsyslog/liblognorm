@@ -2,7 +2,9 @@ check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary
 TESTS_TURBO_SHELLS = \
 	turbo_smoke.sh \
 	field_name_value_whitespace_turbo.sh \
-	field_json_turbo.sh
+	field_json_turbo.sh \
+	field_json_turbo_depth.sh \
+	field_json_turbo_fieldcap.sh
 
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
