@@ -252,7 +252,7 @@ ln_vm_init(ln_vm_t *vm, ln_arena_t *arena)
 	 * numbers always use '.' as the decimal point, but plain strtod() honours
 	 * LC_NUMERIC and would read "1.5" as 1.0 under a comma-decimal locale. "C"
 	 * needs no locale files, so newlocale only fails on OOM; on failure we fail
-	 * init, so the caller drops turbo and uses the locale-independent v1 path
+	 * init, so the caller drops turbo and uses the locale-independent standard path
 	 * rather than ever parsing a number under the wrong locale. Freed by
 	 * ln_vm_destroy. */
 	vm->c_locale = (void *)newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
@@ -1130,7 +1130,7 @@ json_emit_double(ln_json_ctx_t *c, double v)
  * '.' regardless of the process LC_NUMERIC, matching the locale-independent standard
  * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
  * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
- * the turbo context is never built and the v1 path is used instead.
+ * the turbo context is never built and the standard path is used instead.
  */
 static void
 json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)

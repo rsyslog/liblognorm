@@ -212,7 +212,7 @@ emit(compiler_t *comp, ln_instr_t *instr)
 /* Intern a NUL-terminated copy of s[0..len) into the ctx string pool and return
  * its byte offset, or UINT32_MAX on allocation failure. Long field/context
  * names live here instead of the fixed inline opcode buffers, so turbo has no
- * stricter name-length limit than the v1 parser. */
+ * stricter name-length limit than the standard parser. */
 static uint32_t
 strpool_intern(compiler_t *comp, const char *s, size_t len)
 {
@@ -255,7 +255,7 @@ emit_literal(compiler_t *comp, const char *lit, size_t len)
 {
 	ln_instr_t instr = {0};
 	instr.op = OP_LITERAL;
-	if (len >= sizeof(instr.data.str)) return UINT32_MAX;  /* too long for inline: fall back to v1 */
+	if (len >= sizeof(instr.data.str)) return UINT32_MAX;  /* too long for inline: fall back to the standard parser */
 	instr.aux = (uint16_t)len;
 	memcpy(instr.data.str, lit, len);
 	return emit(comp, &instr);
@@ -311,7 +311,7 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
 		instr.op = OP_TAG;
 		size_t len = strlen(tagStr);
 		if (len >= sizeof(instr.data.str))
-			return -1;  /* tag name too long: fall back to v1 */
+			return -1;  /* tag name too long: fall back to the standard parser */
 		memcpy(instr.data.str, tagStr, len);
 
 		if (emit(comp, &instr) == UINT32_MAX)
@@ -367,14 +367,14 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 
 			size_t klen = strlen(name_cstr);
 			if (klen >= sizeof(instr.data.kv.key))
-				return -1;  /* annotation field name too long: fall back to v1 */
+				return -1;  /* annotation field name too long: fall back to the standard parser */
 			memcpy(instr.data.kv.key, name_cstr, klen);
 			instr.aux = (uint16_t)klen;
 
 			if (val_cstr) {
 				size_t vlen = strlen(val_cstr);
 				if (vlen >= sizeof(instr.data.kv.val))
-					return -1;  /* annotation field value too long: fall back to v1 */
+					return -1;  /* annotation field value too long: fall back to the standard parser */
 				memcpy(instr.data.kv.val, val_cstr, vlen);
 			}
 
@@ -564,12 +564,12 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				sf.op = OP_STATIC_FIELD;
 				size_t klen = strlen(prs->name);
 				if (klen >= sizeof(sf.data.kv.key))
-					return -1;  /* static field name too long: fall back to v1 */
+					return -1;  /* static field name too long: fall back to the standard parser */
 				memcpy(sf.data.kv.key, prs->name, klen);
 				sf.aux = (uint16_t)klen;
 				size_t vlen = strlen(litstr);
 				if (vlen >= sizeof(sf.data.kv.val))
-					return -1;  /* static field value too long: fall back to v1 */
+					return -1;  /* static field value too long: fall back to the standard parser */
 				memcpy(sf.data.kv.val, litstr, vlen);
 				if (emit(comp, &sf) == UINT32_MAX) return -1;
 			}

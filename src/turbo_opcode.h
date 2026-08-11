@@ -168,7 +168,7 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 									  string pool: the opcode's inline name buffer
 									  holds a uint32 pool offset instead of the
 									  name. Lets turbo carry names longer than the
-									  inline buffer, matching the v1 parser. */
+									  inline buffer, matching the standard parser. */
 
 /*============================================================================
  * Instruction Builders
