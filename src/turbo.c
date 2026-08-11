@@ -579,8 +579,17 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			pc = emit(comp, &nop);
 		}
 	} else if (op == OP_SKIP_SPACE) {
+		/* whitespace field: matches one or more spaces/tabs. When named, the
+		 * matched run is stored as the field value (the standard parser does
+		 * the same). */
 		ln_instr_t instr = {0};
 		instr.op = OP_SKIP_SPACE;
+		if (prs->name && prs->name[0]) {
+			instr.flags = LN_INSTR_F_STORE;
+			if (store_field_name(comp, &instr, instr.data.str,
+					     sizeof(instr.data.str), prs->name, strlen(prs->name)) != 0)
+				return -1;
+		}
 		pc = emit(comp, &instr);
 	} else if (op == OP_FIELD_NAME_VALUE) {
 		/* name-value-list: extract sep/ass/ignore_whitespaces from parser_data */

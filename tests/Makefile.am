@@ -5,7 +5,8 @@ TESTS_TURBO_SHELLS = \
 	field_json_turbo.sh \
 	field_json_turbo_depth.sh \
 	field_json_turbo_fieldcap.sh \
-	field_turbo_long_name.sh
+	field_turbo_long_name.sh \
+	field_turbo_types.sh
 
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c

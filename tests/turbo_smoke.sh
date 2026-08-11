@@ -12,7 +12,7 @@ add_rule 'version=2'
 add_rule 'rule=:%source.ip:ipv4% count=%count:number% msg=%msg:word%'
 
 execute '192.0.2.5 count=42 msg=ready'
-assert_output_json_eq '{ "source": { "ip": "192.0.2.5" }, "count": 42, "msg": "ready" }'
+assert_output_json_eq '{ "source": { "ip": "192.0.2.5" }, "count": "42", "msg": "ready" }'
 
 
 cleanup_tmp_files

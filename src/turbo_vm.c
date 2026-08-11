@@ -863,7 +863,7 @@ parse_json(const char *buf, size_t len, size_t *out_len)
 
 /* Maximum object/array nesting accepted in a JSON field value. Matches json-c's
  * JSON_TOKENER_DEFAULT_DEPTH so a %field:json% value is accepted or rejected at
- * the same nesting as the v1 parser. */
+ * the same nesting as the standard parser. */
 #define LN_JSON_INPUT_MAX_DEPTH  32
 
 typedef struct {
@@ -1127,7 +1127,7 @@ json_emit_double(ln_json_ctx_t *c, double v)
  * in full via the VM arena, because truncating to the stack buffer could cut a
  * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
  * through the VM's private C locale (strtod_l), so the decimal point is always
- * '.' regardless of the process LC_NUMERIC, matching the locale-independent v1
+ * '.' regardless of the process LC_NUMERIC, matching the locale-independent standard
  * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
  * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
  * the turbo context is never built and the v1 path is used instead.
@@ -1614,7 +1614,9 @@ vm_exec_instr(ln_vm_t *vm)
 
 		if (parse_number(vm->ip, remaining, &value, &len) != 0) return -1;
 
-		vm_add_int_field(vm, name, value);
+		/* Store the matched digits as a string, as the standard parser does. */
+		(void)value;
+		vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1677,7 +1679,10 @@ vm_exec_instr(ln_vm_t *vm)
 
 		if (parse_hex(vm->ip, remaining, &value, &len) != 0) return -1;
 
-		vm_add_int_field(vm, name, value);
+		/* Store the matched hex literal as a string, as the standard parser
+		 * does, rather than its decimal value. */
+		(void)value;
+		vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1949,7 +1954,11 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Skipping ===*/
 
 	case OP_SKIP_SPACE: {
-		vm->ip += ln_simd_skip_space(vm->ip, remaining);
+		size_t ws = ln_simd_skip_space(vm->ip, remaining);
+		if (ws == 0) return -1;   /* whitespace field requires one or more */
+		if (inst->flags & LN_INSTR_F_STORE)
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), vm->ip, ws);
+		vm->ip += ws;
 		vm->pc++;
 		return 1;
 	}
@@ -2375,9 +2384,16 @@ vm_exec_instr(ln_vm_t *vm)
 		/* Parse extensions: key=value pairs separated by spaces.
 		 * Push "Extensions" sub-context. */
 		if (p < end) {
+			/* Extensions nest under the field, so compose "<field>.Extensions"
+			 * (the context stack tracks only the top level). */
+			char ext_buf[256];
 			const char *ext_ctx = "Extensions";
 			int n_ext;
 
+			if (name[0]) {
+				int en = snprintf(ext_buf, sizeof(ext_buf), "%s.Extensions", name);
+				if (en > 0 && en < (int)sizeof(ext_buf)) ext_ctx = ext_buf;
+			}
 			vm_push_field_ctx(vm, ext_ctx, false);
 			n_ext = 0;
 
@@ -2827,7 +2843,9 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
+		/* Store the matched digits as a string, as the standard parser does. */
+		(void)value;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2903,7 +2921,10 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
+		/* Store the matched hex literal as a string, as the standard parser
+		 * does, rather than its decimal value. */
+		(void)value;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -3179,7 +3200,17 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(skip_space) {
-		ip += ln_simd_skip_space(ip, REMAINING());
+		const ln_instr_t *inst = INST();
+		size_t ws = ln_simd_skip_space(ip, REMAINING());
+		if (UNLIKELY(ws == 0)) {   /* whitespace field requires one or more */
+			WRITEBACK();
+			BACKTRACK();
+		}
+		if (inst->flags & LN_INSTR_F_STORE) {
+			vm->ip = ip;
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, ws);
+		}
+		ip += ws;
 		pc++;
 		DISPATCH();
 	}
@@ -3439,9 +3470,16 @@ ln_vm_continue(ln_vm_t *vm)
 
 		/* Parse extensions: key=value pairs */
 		if (p < input_end) {
+			/* Extensions nest under the field, so compose "<field>.Extensions"
+			 * (the context stack tracks only the top level). */
+			char ext_buf[256];
 			const char *ext_ctx = "Extensions";
 			int n_ext = 0;
 
+			if (name[0]) {
+				int en = snprintf(ext_buf, sizeof(ext_buf), "%s.Extensions", name);
+				if (en > 0 && en < (int)sizeof(ext_buf)) ext_ctx = ext_buf;
+			}
 			vm_push_field_ctx(vm, ext_ctx, false);
 
 			while (p < input_end) {

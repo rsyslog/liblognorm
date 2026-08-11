@@ -613,8 +613,9 @@ static int test_vm_field_int(void)
 
     const ln_fast_field_t *f = find_field(&result, "pid");
     TEST_ASSERT(f != NULL, "field found");
-    TEST_ASSERT_EQ(f->type, LN_FTYPE_INT, "type is INT");
-    TEST_ASSERT_EQ(f->v.i, -42, "value is -42");
+    /* number is stored as the matched string, as the standard parser does */
+    TEST_ASSERT_EQ(f->type, LN_FTYPE_STRING_INLINE, "type is inline string");
+    TEST_ASSERT(strcmp(f->v.inl, "-42") == 0, "value is \"-42\"");
 
     teardown_vm(&vm, &arena);
     return 1;
@@ -1130,10 +1131,11 @@ static int test_vm_syslog_like(void)
     val = field_str(f, &vlen);
     TEST_ASSERT(memcmp(val, "sshd", 4) == 0, "program value");
 
-    /* Check PID */
+    /* Check PID (number is stored as the matched string) */
     f = find_field(&result, "pid");
     TEST_ASSERT(f != NULL, "pid found");
-    TEST_ASSERT_EQ(f->v.i, 1234, "pid value");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 4 && memcmp(val, "1234", 4) == 0, "pid value");
 
     /* Check msg */
     f = find_field(&result, "msg");
