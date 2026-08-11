@@ -73,6 +73,10 @@ _Static_assert(sizeof(ln_fast_field_t) == 64, "Field must be 64 bytes");
 /* Field flags (LN_FFIELD_NESTED 0x04 is public, see lognorm-turbo.h) */
 #define LN_FFIELD_STATIC_NAME 0x01  /* Name is static (don't free) */
 #define LN_FFIELD_STATIC_VAL  0x02  /* Value is static (don't free) */
+#define LN_FFIELD_RAW_JSON    0x08  /* String value is already well-formed JSON
+                                     * (object, array or scalar). The serializer
+                                     * emits it verbatim, with no quoting or
+                                     * escaping. */
 
 /**
  * @brief Check if a field name contains a dot (indicating nested object).
@@ -252,7 +256,25 @@ ln_fast_add_double_static(ln_fast_result_t *r,
 	f->flags = LN_FFIELD_STATIC_NAME
 			 | ln_ffield_detect_nested(name, name_len);
 	f->v.d = val;
-	
+
+	return 0;
+}
+
+/**
+ * @brief Add a raw JSON value with static name.
+ *
+ * The value is stored as a string and tagged LN_FFIELD_RAW_JSON so the
+ * serializer emits it verbatim (no quotes, no escaping). @p val must already be
+ * a well-formed JSON value; the caller is responsible for validating it.
+ */
+static inline int
+ln_fast_add_rawjson_static(ln_fast_result_t *r,
+						   const char *name, uint16_t name_len,
+						   const char *val, uint32_t val_len)
+{
+	if (ln_fast_add_string_static(r, name, name_len, val, val_len) != 0)
+		return -1;
+	r->fields[r->n_fields - 1].flags |= LN_FFIELD_RAW_JSON;
 	return 0;
 }
 

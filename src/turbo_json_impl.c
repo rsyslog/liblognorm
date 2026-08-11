@@ -389,12 +389,24 @@ write_field_value(const ln_fast_field_t *f, char *out, size_t outlen)
 
 	switch (f->type) {
 	case LN_FTYPE_STRING:
+		/* Value is already well-formed JSON: emit it verbatim so arrays,
+		 * booleans, nulls and numbers keep their JSON type. */
+		if (f->flags & LN_FFIELD_RAW_JSON) {
+			if ((size_t)(end - p) < (size_t)f->v.str.len) return -1;
+			memcpy(p, f->v.str.ptr, f->v.str.len);
+			return (int)f->v.str.len;
+		}
 		n = write_escaped_string(f->v.str.ptr, f->v.str.len, p, end - p);
 		if (n < 0) return -1;
 		return n;
 
 	case LN_FTYPE_STRING_INLINE: {
 		size_t len = strlen(f->v.inl);
+		if (f->flags & LN_FFIELD_RAW_JSON) {
+			if ((size_t)(end - p) < len) return -1;
+			memcpy(p, f->v.inl, len);
+			return (int)len;
+		}
 		n = write_escaped_string(f->v.inl, len, p, end - p);
 		if (n < 0) return -1;
 		return n;

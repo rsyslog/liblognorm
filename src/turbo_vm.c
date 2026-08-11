@@ -861,6 +861,11 @@ parse_json(const char *buf, size_t len, size_t *out_len)
  * the JSON serializer in turbo_json_impl.c share one ceiling. */
 #define LN_JSON_KEYBUF     512          /* dotted-path scratch (stack) */
 
+/* Maximum object/array nesting accepted in a JSON field value. Matches json-c's
+ * JSON_TOKENER_DEFAULT_DEPTH so a %field:json% value is accepted or rejected at
+ * the same nesting as the v1 parser. */
+#define LN_JSON_INPUT_MAX_DEPTH  32
+
 typedef struct {
 	ln_vm_t      *vm;
 	const char   *buf;          /* whole JSON span being parsed */
@@ -870,6 +875,9 @@ typedef struct {
 	size_t        key_len;      /* bytes used in key[] */
 	int           n_emitted;    /* leaves added to the flat store */
 	bool          full;         /* hit LN_FAST_MAX_FIELDS -- stop adding */
+	bool          validate_only;/* when set, the parser only checks that the JSON
+	                             * is well-formed and measures its byte span; it
+	                             * stores no fields */
 } ln_json_ctx_t;
 
 /*
@@ -884,11 +892,51 @@ json_skip_ws(ln_json_ctx_t *c)
 }
 
 /*
+ * Validate that every backslash escape in a JSON string body is well-formed:
+ * one of \" \\ \/ \b \f \n \r \t, or \u followed by four hex digits. Returns 0
+ * if all escapes are valid, -1 otherwise. The caller skips this pass for bodies
+ * with no backslash.
+ */
+static int
+json_validate_escapes(const char *s, size_t n)
+{
+	size_t i = 0;
+
+	while (i < n) {
+		if (s[i] != '\\') { i++; continue; }
+		if (n - i < 2) return -1;           /* trailing backslash */
+		switch (s[i + 1]) {
+		case '"': case '\\': case '/': case 'b':
+		case 'f': case 'n': case 'r': case 't':
+			i += 2;
+			break;
+		case 'u': {
+			size_t k;
+			if (n - i < 6) return -1;       /* need \uXXXX */
+			for (k = 2; k < 6; k++) {
+				char h = s[i + k];
+				if (!((h >= '0' && h <= '9') ||
+				      (h >= 'a' && h <= 'f') ||
+				      (h >= 'A' && h <= 'F')))
+					return -1;
+			}
+			i += 6;
+			break;
+		}
+		default:
+			return -1;                      /* unknown escape */
+		}
+	}
+	return 0;
+}
+
+/*
  * Stage-1 SIMD scan of a JSON string body starting just AFTER the opening
  * quote. Uses ln_simd_find_char() to leap to the next '"' and corrects for
  * backslash escapes scalarly (escapes are rare in typical log JSON, so the SIMD
  * leap dominates). On return str/slen describe the raw (still-escaped) body
- * and ctx->pos points just past the closing quote. Returns -1 if unterminated.
+ * and ctx->pos points just past the closing quote. Returns -1 if unterminated
+ * or if the body contains a malformed escape.
  */
 static int
 json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
@@ -924,6 +972,11 @@ json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
 			*str = c->buf + start;
 			*slen = p - start;
 			c->pos = p + 1;         /* consume closing quote */
+			/* A captured JSON value is emitted verbatim, so any escape it
+			 * contains must be well-formed for the output to stay valid. */
+			if (memchr(*str, '\\', *slen) &&
+			    json_validate_escapes(*str, *slen) != 0)
+				return -1;
 			return 0;
 		}
 		p++;                        /* escaped quote, keep scanning */
@@ -1019,6 +1072,7 @@ json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
 	size_t vlen;
 	const char *key;
 	const char *val;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
 	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
 		c->full = true;
@@ -1037,6 +1091,7 @@ static void
 json_emit_int(ln_json_ctx_t *c, int64_t v)
 {
 	const char *key;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
 	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
 		c->full = true;
@@ -1053,6 +1108,7 @@ static void
 json_emit_double(ln_json_ctx_t *c, double v)
 {
 	const char *key;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
 	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
 		c->full = true;
@@ -1183,12 +1239,17 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 		 * overflow rather than silently dropping the segment, which would
 		 * mislabel this leaf under the parent/root key = silent corruption. */
 		c->key_len = saved_len;
-		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF)
-			return -1;   /* klen is input-derived: reject it alone first so the
-			              * sum below cannot size_t-wrap past the bound */
-		if (saved_len > 0) c->key[c->key_len++] = '.';
-		memcpy(c->key + c->key_len, kstr, klen);
-		c->key_len += klen;
+		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF) {
+			/* klen is input-derived: reject it alone first so the sum below
+			 * cannot wrap past the bound. In validate-only mode the dotted key
+			 * is unused, so an over-long path is not a reason to reject
+			 * otherwise-valid JSON; the key is simply not built. */
+			if (!c->validate_only) return -1;
+		} else {
+			if (saved_len > 0) c->key[c->key_len++] = '.';
+			memcpy(c->key + c->key_len, kstr, klen);
+			c->key_len += klen;
+		}
 
 		json_skip_ws(c);
 		if (c->pos >= c->len || c->buf[c->pos] != ':') return -1;
@@ -1207,10 +1268,9 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 }
 
 /*
- * Parse a JSON array. Arrays are uncommon in flat log JSON, so we keep this
- * minimal: scalar elements get an index-suffix key.N; object/array elements are
- * structurally skipped (consumed but not flattened). This keeps the span
- * consumption correct for v1 parity without object-array flattening.
+ * Parse a JSON array body (pos is just past '['). Each element is parsed in
+ * turn to validate it and advance the cursor. In flatten mode scalar elements
+ * are keyed by their index (.0, .1, ...).
  */
 static int
 json_parse_array(ln_json_ctx_t *c, int depth)
@@ -1232,9 +1292,13 @@ json_parse_array(ln_json_ctx_t *c, int depth)
 		 * on overflow rather than silently mislabelling the element. */
 		c->key_len = saved_len;
 		n = snprintf(ib, sizeof(ib), ".%d", idx);
-		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) return -1;
-		memcpy(c->key + c->key_len, ib, (size_t)n);
-		c->key_len += (size_t)n;
+		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) {
+			/* validate-only: dotted key unused, over-long path is not fatal */
+			if (!c->validate_only) return -1;
+		} else {
+			memcpy(c->key + c->key_len, ib, (size_t)n);
+			c->key_len += (size_t)n;
+		}
 
 		if (json_parse_value(c, depth + 1) != 0) return -1;
 		c->key_len = saved_len;
@@ -1250,7 +1314,7 @@ json_parse_array(ln_json_ctx_t *c, int depth)
 static int
 json_parse_value(ln_json_ctx_t *c, int depth)
 {
-	if (depth > LN_JSON_MAX_DEPTH) return -1;
+	if (depth >= LN_JSON_INPUT_MAX_DEPTH) return -1;
 	json_skip_ws(c);
 	if (c->pos >= c->len) return -1;
 
@@ -1289,12 +1353,17 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 }
 
 /*
- * Top-level JSON flatten entry. Parses one JSON value (object or array) at buf,
- * flattens leaves under field_name into vm->result, and reports the consumed
- * byte span. Returns 0 on success (valid JSON), -1 on parse error.
+ * Handle a JSON field (%field:json%). Validates one JSON value (object or
+ * array) at buf and stores it verbatim under the context-resolved field name as
+ * a single LN_FFIELD_RAW_JSON field. Keeping the original bytes preserves
+ * arrays, booleans, nulls and full-precision numbers, and uses one result slot
+ * whatever the size of the value.
  *
- * The flat keys are "<field_name>.<dotted.path>" so the serializer re-nests
- * them under field_name -- matching the v1 parser's nested output.
+ * The value is fully validated before being stored, so malformed JSON makes the
+ * rule fail to match and the stored bytes are always safe to emit unescaped.
+ *
+ * Returns 0 on success, -1 on parse error. *out_consumed reports the number of
+ * bytes consumed from buf.
  */
 static int
 vm_json_flatten(ln_vm_t *vm, const char *field_name,
@@ -1302,39 +1371,47 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 {
 	ln_json_ctx_t c;
 	uint16_t fn_len;
-	const char *full_name;
+	const char *name;
+	const char *val;
+	size_t start, vlen;
 
 	if (len == 0) return -1;
-
-	/* peek first significant byte: must be object or array */
-	{
-		size_t lead = ln_simd_skip_space(buf, len);
-		if (lead >= len) return -1;
-		if (buf[lead] != '{' && buf[lead] != '[') return -1;
-	}
 
 	memset(&c, 0, sizeof(c));
 	c.vm  = vm;
 	c.buf = buf;
 	c.len = len;
 	c.pos = 0;
+	c.validate_only = true;
 
-	/* Seed the dotted prefix with the (context-resolved) field name so the
-	 * flattened leaves nest under it, exactly like vm_add_string_field. */
-	full_name = vm_build_field_name(vm, field_name, &fn_len);
-	if (full_name && full_name[0]) {
-		/* Fail (backtrack the line) if the seed prefix alone overflows the
-		 * key buffer rather than emitting every leaf under a truncated /
-		 * empty root = silent corruption. */
-		if (fn_len >= LN_JSON_KEYBUF) return -1;
-		memcpy(c.key, full_name, fn_len);
-		c.key_len = fn_len;
-	}
-
+	/* Skip leading whitespace, remember the value start, require a JSON
+	 * container, then validate the whole value (this also finds its end). */
+	json_skip_ws(&c);
+	start = c.pos;
+	if (start >= len || (buf[start] != '{' && buf[start] != '[')) return -1;
 	if (json_parse_value(&c, 0) != 0) return -1;
 
-	/* trailing insignificant whitespace inside the consumed span is fine */
 	*out_consumed = c.pos;
+	vlen = c.pos - start;
+
+	/* A missing result store or a full field table is not a parse failure. The
+	 * line still matched; the value just cannot be recorded. */
+	if (vm->result == NULL) return 0;
+	if (vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return 0;
+	}
+
+	name = vm_build_field_name(vm, field_name, &fn_len);
+	if (name == NULL || fn_len == 0) return 0;   /* no name -> nothing to store */
+
+	/* Name and value must outlive the transient input line (snapshot / MsgDup),
+	 * so copy both into the VM arena, mirroring json_emit_string. */
+	name = ln_arena_strndup(vm->arena, name, fn_len);
+	val  = ln_arena_strndup(vm->arena, buf + start, vlen);
+	if (name == NULL || val == NULL) return 0;   /* OOM: keep the matched line */
+
+	ln_fast_add_rawjson_static(vm->result, name, fn_len, val, (uint32_t)vlen);
 	return 0;
 }
 
