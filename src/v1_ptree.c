@@ -530,7 +530,7 @@ ln_genDotPTreeGraph(struct ln_ptree *tree, es_str_t **str)
  * add unparsed string to event.
  */
 static int
-addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *json)
+addUnparsedField(ln_ctx ctx, const char *str, size_t strLen, int offs, struct json_object *json)
 {
 	int r = 1;
 	struct json_object *value;
@@ -547,6 +547,7 @@ addUnparsedField(const char *str, size_t strLen, int offs, struct json_object *j
 		goto done;
 	}
 	json_object_object_add(json, UNPARSED_DATA_KEY, value);
+	CHKR(ln_addUnparsedDataBinaryField(ctx, str + offs, strLen - offs, json));
 
 	r = 0;
 done:
@@ -876,9 +877,9 @@ ln_v1_normalize(ln_ctx ctx, const char *str, size_t strLen, struct json_object *
 	if(left != 0 || !endNode->flags.isTerminal) {
 		/* we could not successfully parse, some unparsed items left */
 		if(left < 0) {
-			addUnparsedField(str, strLen, strLen, *json_p);
+			addUnparsedField(ctx, str, strLen, strLen, *json_p);
 		} else {
-			addUnparsedField(str, strLen, strLen - left, *json_p);
+			addUnparsedField(ctx, str, strLen, strLen - left, *json_p);
 		}
 	} else {
 		/* success, finalize event */

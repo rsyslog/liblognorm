@@ -25,6 +25,7 @@
  * A copy of the LGPL v2.1 can be found in the file "COPYING" in this distribution.
  */
 #include "config.h"
+#include <limits.h>
 #include <string.h>
 #include <errno.h>
 
@@ -34,6 +35,7 @@
 #include "samp.h"
 #include "v1_liblognorm.h"
 #include "v1_ptree.h"
+#include "internal.h"
 #ifdef ENABLE_TURBO
 #include "turbo.h"
 #endif
@@ -118,6 +120,47 @@ unsigned
 ln_getCtxOpts(ln_ctx ctx)
 {
 	return ctx->opts;
+}
+
+
+int
+ln_addUnparsedDataBinaryField(ln_ctx ctx, const char *str, const size_t strLen,
+		struct json_object *json)
+{
+	static const char hex[] = "0123456789abcdef";
+	struct json_object *value;
+	char *encoded;
+	size_t i;
+
+	if(ctx->opts & LN_CTXOPT_NO_UNPARSED_DATA_BINARY)
+		return 0;
+
+	for(i = 0 ; i < strLen ; ++i) {
+		const unsigned char c = (unsigned char) str[i];
+		if(c < 0x20 || c == 0x7f)
+			break;
+	}
+	if(i == strLen)
+		return 0;
+
+	if(strLen > (size_t) INT_MAX / 2)
+		return LN_OVER_SIZE_LIMIT;
+	if((encoded = malloc(strLen * 2 + 1)) == NULL)
+		return LN_NOMEM;
+
+	for(i = 0 ; i < strLen ; ++i) {
+		const unsigned char c = (unsigned char) str[i];
+		encoded[i * 2] = hex[c >> 4];
+		encoded[i * 2 + 1] = hex[c & 0x0f];
+	}
+	encoded[strLen * 2] = '\0';
+	value = json_object_new_string_len(encoded, strLen * 2);
+	free(encoded);
+	if(value == NULL)
+		return LN_NOMEM;
+	json_object_object_add(json, "unparsed-data-binary", value);
+
+	return 0;
 }
 
 
