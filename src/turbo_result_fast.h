@@ -70,13 +70,10 @@ typedef struct {
 
 _Static_assert(sizeof(ln_fast_field_t) == 64, "Field must be 64 bytes");
 
-/* Field flags (LN_FFIELD_NESTED 0x04 is public, see lognorm-turbo.h) */
+/* Field flags. LN_FFIELD_NESTED 0x04 and LN_FFIELD_RAW_JSON 0x08 are public
+ * (see lognorm-turbo.h, included above); only the STATIC_* bits are private. */
 #define LN_FFIELD_STATIC_NAME 0x01  /* Name is static (don't free) */
 #define LN_FFIELD_STATIC_VAL  0x02  /* Value is static (don't free) */
-#define LN_FFIELD_RAW_JSON    0x08  /* String value is already well-formed JSON
-                                     * (object, array or scalar). The serializer
-                                     * emits it verbatim, with no quoting or
-                                     * escaping. */
 
 /**
  * @brief Check if a field name contains a dot (indicating nested object).

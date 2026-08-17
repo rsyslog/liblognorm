@@ -81,8 +81,16 @@ typedef enum {
 } ln_ftype_t;
 
 /** Field flag: the field name is dotted and denotes a nested object
- *  (e.g. "a.b" -> {"a":{"b":...}}). Other flag bits are private. */
+ *  (e.g. "a.b" -> {"a":{"b":...}}). */
 #define LN_FFIELD_NESTED 0x04
+
+/** Field flag: the string value is already well-formed JSON (an object,
+ *  array or scalar) captured by a json-typed parser such as %name:json%.
+ *  A consumer materialising the fast result into a json_object must parse
+ *  the value instead of treating it as an opaque string; otherwise a nested
+ *  object is emitted as a quoted string (e.g. {"kc":"{...}"} rather than
+ *  {"kc":{...}}). Other flag bits are private. */
+#define LN_FFIELD_RAW_JSON 0x08
 
 /*============================================================================
  * Availability
@@ -255,6 +263,7 @@ typedef enum {
 } ln_ftype_t;
 
 #define LN_FFIELD_NESTED 0x04
+#define LN_FFIELD_RAW_JSON 0x08
 
 #ifdef __cplusplus
 extern "C" {

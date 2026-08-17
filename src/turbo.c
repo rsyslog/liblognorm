@@ -1156,7 +1156,7 @@ ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 	if (name)  *name  = f->name;
 	if (nlen)  *nlen  = f->name_len;
 	if (type)  *type  = (ln_ftype_t)f->type;
-	if (flags) *flags = (unsigned)(f->flags & LN_FFIELD_NESTED);
+	if (flags) *flags = (unsigned)(f->flags & (LN_FFIELD_NESTED | LN_FFIELD_RAW_JSON));
 	switch (f->type) {
 	case LN_FTYPE_STRING:
 		if (sval) *sval = f->v.str.ptr;
