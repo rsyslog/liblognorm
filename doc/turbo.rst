@@ -156,6 +156,14 @@ A few parsers behave slightly differently under TurboVM:
 
 - ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
   as a plain word match, so they may accept input the standard parser rejects.
+- ``json`` field names follow the same three contracts as the standard
+  parser (see configuration.rst "Special field names"): ``-`` is matched
+  and discarded; ``.`` inlines object keys at the current context; a
+  real name stores the value as one nested JSON object (verbatim bytes,
+  so arrays / booleans / nulls round-trip). The ``.`` inline path walks
+  the object into the turbo arena (dotted leaves, 64-leaf cap). Nested
+  arrays on that path become indexed keys (``.0``, ``.1``) rather than
+  JSON arrays. Named ``%field:json%`` keeps arrays as arrays.
 
 Performance Notes
 -----------------

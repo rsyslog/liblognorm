@@ -1372,17 +1372,19 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 }
 
 /*
- * Handle a JSON field (%field:json%). Validates one JSON value (object or
- * array) at buf and stores it verbatim under the context-resolved field name as
- * a single LN_FFIELD_RAW_JSON field. Keeping the original bytes preserves
- * arrays, booleans, nulls and full-precision numbers, and uses one result slot
- * whatever the size of the value.
+ * Handle a JSON field. Three name contracts, matching the standard parser
+ * (doc/configuration.rst "Special field names"):
  *
- * The value is fully validated before being stored, so malformed JSON makes the
- * rule fail to match and the stored bytes are always safe to emit unescaped.
+ *   "-" / empty  matched, not stored (same as any other discarded field).
+ *   "."          inline: object keys become leaves at the current context
+ *                (root at top level). This is the v1 merge for parsers that
+ *                return a set of fields. Turbo walks the object once into
+ *                the arena so mmenrich/mmwake can ln_fast_result_get_string.
+ *   other        store the value as one LN_FFIELD_RAW_JSON field so arrays,
+ *                booleans, nulls and full-precision numbers round-trip like v1.
  *
- * Returns 0 on success, -1 on parse error. *out_consumed reports the number of
- * bytes consumed from buf.
+ * Malformed JSON fails the rule. Returns 0 on success, -1 on parse error.
+ * *out_consumed is the byte span of the JSON value.
  */
 static int
 vm_json_flatten(ln_vm_t *vm, const char *field_name,
@@ -1393,28 +1395,46 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 	const char *name;
 	const char *val;
 	size_t start, vlen;
+	int discarded, inlined;
 
 	if (len == 0) return -1;
+
+	discarded = (field_name == NULL || field_name[0] == '\0'
+	    || (field_name[0] == '-' && field_name[1] == '\0'));
+	inlined = (field_name != NULL && field_name[0] == '.'
+	    && field_name[1] == '\0');
 
 	memset(&c, 0, sizeof(c));
 	c.vm  = vm;
 	c.buf = buf;
 	c.len = len;
 	c.pos = 0;
-	c.validate_only = true;
 
-	/* Skip leading whitespace, remember the value start, require a JSON
-	 * container, then validate the whole value (this also finds its end). */
 	json_skip_ws(&c);
 	start = c.pos;
 	if (start >= len || (buf[start] != '{' && buf[start] != '[')) return -1;
-	if (json_parse_value(&c, 0) != 0) return -1;
 
+	if (discarded) {
+		c.validate_only = true;
+		if (json_parse_value(&c, 0) != 0) return -1;
+		*out_consumed = c.pos;
+		return 0;
+	}
+
+	if (inlined) {
+		/* v1 "." : emit dotted leaves at the current context (root here). */
+		c.validate_only = false;
+		if (json_parse_value(&c, 0) != 0) return -1;
+		*out_consumed = c.pos;
+		return 0;
+	}
+
+	/* Named %field:json%: validate, then store as one RAW JSON field. */
+	c.validate_only = true;
+	if (json_parse_value(&c, 0) != 0) return -1;
 	*out_consumed = c.pos;
 	vlen = c.pos - start;
 
-	/* A missing result store or a full field table is not a parse failure. The
-	 * line still matched; the value just cannot be recorded. */
 	if (vm->result == NULL) return 0;
 	if (vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
 		vm->result->flags |= LN_FRESULT_TRUNCATED;
@@ -1422,13 +1442,11 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 	}
 
 	name = vm_build_field_name(vm, field_name, &fn_len);
-	if (name == NULL || fn_len == 0) return 0;   /* no name -> nothing to store */
+	if (name == NULL || fn_len == 0) return 0;
 
-	/* Name and value must outlive the transient input line (snapshot / MsgDup),
-	 * so copy both into the VM arena, mirroring json_emit_string. */
 	name = ln_arena_strndup(vm->arena, name, fn_len);
 	val  = ln_arena_strndup(vm->arena, buf + start, vlen);
-	if (name == NULL || val == NULL) return 0;   /* OOM: keep the matched line */
+	if (name == NULL || val == NULL) return 0;
 
 	ln_fast_add_rawjson_static(vm->result, name, fn_len, val, (uint32_t)vlen);
 	return 0;

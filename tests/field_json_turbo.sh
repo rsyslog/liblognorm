@@ -98,4 +98,20 @@ d32=$(python3 -c 'print("["*32 + "1" + "]"*32)')
 execute "$d32"
 assert_output_contains 'unparsed-data'
 
+# Special names, matching configuration.rst:
+#   "-"  matched, not stored
+#   "."  inlined at the current context (root here)
+#   name nested object (already covered above)
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%-:json%'
+execute '{"timestamp":"T","src_ip":"1.2.3.4"}'
+assert_output_json_eq '{ }'
+
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%.:json%'
+execute '{"timestamp":"2026-08-20T12:00:00.1+0000","src_ip":"1.2.3.4","alert":{"severity":1}}'
+assert_output_json_eq '{ "timestamp": "2026-08-20T12:00:00.1+0000", "src_ip": "1.2.3.4", "alert": { "severity": 1 } }'
+
 cleanup_tmp_files
