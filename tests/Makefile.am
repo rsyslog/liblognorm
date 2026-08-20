@@ -1,4 +1,4 @@
-check_PROGRAMS = json_eq err_callback_cookie
+check_PROGRAMS = json_eq err_callback_cookie literal_embedded_nul
 TESTS_TURBO_SHELLS = \
 	turbo_smoke.sh \
 	field_name_value_whitespace_turbo.sh \
@@ -15,6 +15,11 @@ err_callback_cookie_SOURCES = err_callback_cookie.c
 err_callback_cookie_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
 err_callback_cookie_LDADD = $(LIBLOGNORM_LIBS)
 err_callback_cookie_LDFLAGS = -no-install
+
+literal_embedded_nul_SOURCES = literal_embedded_nul.c
+literal_embedded_nul_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+literal_embedded_nul_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS)
+literal_embedded_nul_LDFLAGS = -no-install
 
 #user_test_SOURCES = user_test.c
 #user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
@@ -172,7 +177,8 @@ TESTS_SHELLSCRIPTS += \
 #re-add to TESTS if needed: user_test
 TESTS = \
         $(TESTS_SHELLSCRIPTS) \
-        err_callback_cookie.sh
+        err_callback_cookie.sh \
+        literal_embedded_nul
 
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
@@ -189,6 +195,7 @@ EXTRA_DIST = exec.sh \
 	$(REGEXP_TESTS) \
 	err_callback_cookie.sh \
 	$(json_eq_self_sources) \
+	literal_embedded_nul.c \
 	$(user_test_SOURCES)
 
 if ENABLE_REGEXP

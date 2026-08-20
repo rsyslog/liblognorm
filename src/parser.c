@@ -1431,7 +1431,7 @@ PARSER_Parse(Literal)
 	size_t i = *offs;
 	size_t j;
 
-	for(j = 0 ; i < npb->strLen ; ++j) {
+	for(j = 0 ; i < npb->strLen && lit[j] != '\0' ; ++j) {
 		if(lit[j] != npb->str[i])
 			break;
 		++i;
