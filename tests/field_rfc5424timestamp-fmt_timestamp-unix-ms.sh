@@ -25,6 +25,8 @@ execute 'here is a timestamp 2000-03-11T14:15:16.1234+01:00 in RFC5424 format'
 assert_output_json_eq '{ "num": 952780516123 }'
 execute 'here is a timestamp 2000-03-11T14:15:16.123456789+01:00 in RFC5424 format'
 assert_output_json_eq '{ "num": 952780516123 }'
+execute 'here is a timestamp 2000-03-11T14:15:16.12345678901234567890123456789012345+01:00 in RFC5424 format'
+assert_output_json_eq '{ "num": 952780516123 }'
 
 #check cases where parsing failure must occur
 execute 'here is a timestamp 2000-03-11T14:15:16+01:00in RFC5424 format'
