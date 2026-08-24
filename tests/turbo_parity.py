@@ -3,7 +3,7 @@
 #
 # This file is part of the liblognorm project, released under ASL 2.0.
 #
-# For each (rule, input) it runs lognormalizer twice, once with the standard
+# For each (rule, input) it runs the test binary twice, once with the standard
 # parser and once with TurboVM, and compares the parsed JSON semantically (so
 # key order and whitespace do not matter). It exits non-zero if any field type
 # produces different output on the two engines, except for the types listed in
@@ -32,7 +32,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BUILD = os.path.dirname(HERE)
-LN = os.environ.get("LN", os.path.join(BUILD, "src", ".libs", "lognormalizer"))
+LN = os.environ.get("LN", os.path.join(BUILD, "src", "ln_test"))
 LIBDIR = os.environ.get("LN_LIBDIR", os.path.join(BUILD, "src", ".libs"))
 if os.path.isdir(LIBDIR):
     env_lib = os.environ.get("LD_LIBRARY_PATH", "")

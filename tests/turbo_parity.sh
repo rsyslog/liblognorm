@@ -15,9 +15,14 @@ if ! command -v python3 >/dev/null 2>&1; then
     exit 77
 fi
 
-LN="${top_builddir}/src/lognormalizer"
+# ln_test rather than lognormalizer: both are built from the same sources, but
+# ln_test links with -no-install, so it binds the library in this build tree.
+# The lognormalizer libtool wrapper places the system library directory ahead
+# of src/.libs, so on a host that already carries an installed liblognorm the
+# audit compares that library against itself and reports its defects as ours.
+LN="${top_builddir}/src/ln_test"
 if [ ! -x "$LN" ]; then
-    echo "lognormalizer not built, skipping parity audit"
+    echo "ln_test not built, skipping parity audit"
     exit 77
 fi
 
