@@ -57,8 +57,9 @@ In turbo mode:
 - Output is compact JSON with nested objects for dotted field names
 - Field values match the standard engine (numeric fields are strings by
   default, or native JSON numbers with ``format="number"``)
-- Tags are emitted under the literal key ``event.tags``, the same key the
-  standard engine uses, and are always present (as with ``-T``)
+- Tags are emitted at the root as ``tags``, the ECS spelling, and only when
+  the matched rule carries any. The standard engine uses a flat
+  ``event.tags`` key instead; see "Known differences" below
 - The ``getline()`` system call is used for input (more efficient than
   ``fgets()`` for large-scale processing)
 

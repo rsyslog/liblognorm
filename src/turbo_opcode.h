@@ -69,8 +69,19 @@ typedef enum {
 	OP_FIELD_NAME_VALUE = 0x2F, /**< Parse name=value pairs (name-value-list) */
 	
 	/*=== Skipping (0x40-0x4F) ===*/
-	OP_SKIP_SPACE   = 0x40,  /**< Skip whitespace (0+) */
-	OP_SKIP_SPACE1  = 0x41,  /**< Skip whitespace (1+, fail if none) */
+	OP_SKIP_SPACE   = 0x40,  /**< Skip whitespace, 1+. This is what the
+							  *   %field:whitespace% parser compiles to and
+							  *   the standard parser requires at least one
+							  *   space there, so the VM fails on an empty
+							  *   run.  It is NOT a 0+ skip, whatever the
+							  *   name suggests. */
+	OP_SKIP_SPACE1  = 0x41,  /**< Skip whitespace, 1+, and never store it.
+							  *   That is the one difference from
+							  *   OP_SKIP_SPACE, which honours
+							  *   LN_INSTR_F_STORE and keeps the matched run
+							  *   as a field value.  The compiler does not
+							  *   emit this opcode; the dispatch table and
+							  *   disassembler still carry it. */
 	OP_SKIP_N       = 0x42,  /**< Skip N bytes */
 	OP_SKIP_TO      = 0x43,  /**< Skip to char (not including) */
 	OP_SKIP_PAST    = 0x44,  /**< Skip past char (including) */

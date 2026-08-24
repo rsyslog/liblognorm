@@ -949,6 +949,73 @@ ln_turbo_ctx_free(ln_turbo_ctx_t *turbo)
 	free(turbo);
 }
 
+/**
+ * @brief Validate every string-pool reference in the compiled program.
+ *
+ * The VM reads names, string-to delimiters and static key/value pairs straight
+ * out of the pool by byte offset, on the hot path, with no per-message bounds
+ * check (security audit #5 does that for control-flow targets, where the target
+ * can depend on input; these offsets cannot). That is only safe while the
+ * compiler is the sole writer of those offsets, so verify the whole program
+ * once here rather than paying for it on every field of every message.
+ *
+ * Each entry must start inside the pool and be NUL-terminated before the end of
+ * it, so the VM's strlen() and memcmp() stay in bounds.
+ *
+ * @return 0 if every reference is in bounds, -1 otherwise.
+ */
+static int
+validate_strpool_refs(compiler_t *comp)
+{
+	const ln_turbo_ctx_t *turbo = comp->turbo;
+	uint32_t i;
+
+	/* off must be inside the pool and reach a NUL before its end; len is the
+	 * span the VM reads without consulting the terminator. */
+	#define CHK_POOL(off, len, what) \
+		do { \
+			uint32_t _o = (off); \
+			uint64_t _l = (uint64_t)(len); \
+			if (_o >= turbo->strpool_len || _o + _l > turbo->strpool_len \
+			    || memchr(turbo->strpool + _o, '\0', \
+				      turbo->strpool_len - _o) == NULL) { \
+				LN_DBGPRINTF(comp->ctx, "turbo: %s at instruction %u " \
+					     "points outside the string pool", (what), i); \
+				return -1; \
+			} \
+		} while (0)
+
+	for (i = 0; i < turbo->code_len; i++) {
+		const ln_instr_t *in = &turbo->code[i];
+		uint32_t off;
+
+		if (turbo->strpool == NULL) {
+			/* No pool: no instruction may claim to reference one. */
+			if ((in->flags & (LN_INSTR_F_NAME_POOL | LN_INSTR_F_KV_POOL))
+			    || in->op == OP_FIELD_STR_TO)
+				return -1;
+			continue;
+		}
+
+		if (in->flags & LN_INSTR_F_NAME_POOL) {
+			/* Every opcode that pools a name keeps the offset in the
+			 * first payload bytes, whichever named buffer it uses. */
+			memcpy(&off, in->data.str, sizeof(off));
+			CHK_POOL(off, 0, "pooled field name");
+		}
+		if (in->flags & LN_INSTR_F_KV_POOL) {
+			CHK_POOL(in->data.kv_pool.key_off, in->aux, "static field key");
+			CHK_POOL(in->data.kv_pool.val_off, in->data.kv_pool.val_len,
+				 "static field value");
+		}
+		if (in->op == OP_FIELD_STR_TO)
+			CHK_POOL(in->data.str_to.delim_off, in->aux,
+				 "string-to delimiter");
+	}
+	#undef CHK_POOL
+	return 0;
+}
+
 int
 ln_turbo_compile(ln_ctx ctx)
 {
@@ -1009,6 +1076,20 @@ ln_turbo_compile(ln_ctx ctx)
 	 * cannot be emitted, discard the rest for the same reason as above. */
 	if (emit_halt(&comp) == UINT32_MAX) {
 		LN_DBGPRINTF(ctx, "turbo: could not emit the terminating HALT, "
+					 "discarding the program");
+		free(turbo->code);
+		turbo->code = NULL;
+		turbo->code_len = 0;
+		turbo->code_cap = 0;
+		free(turbo->strpool);
+		turbo->strpool = NULL;
+		turbo->strpool_len = 0;
+		turbo->strpool_cap = 0;
+		return -1;
+	}
+
+	if (validate_strpool_refs(&comp) != 0) {
+		LN_DBGPRINTF(ctx, "turbo: string-pool validation failed, "
 					 "discarding the program");
 		free(turbo->code);
 		turbo->code = NULL;

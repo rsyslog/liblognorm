@@ -1791,10 +1791,14 @@ vm_exec_instr(ln_vm_t *vm)
 
 	case OP_FIELD_STR_TO: {
 		const char *name = turbo_iname(vm, inst, inst->data.str_to.name);
-		const char *delim = vm->prog->strpool + inst->data.str_to.delim_off;
+		const char *delim;
 		size_t len;
 
+		/* Test the pool before indexing it: forming strpool + off on a
+		 * NULL pool is undefined even when the result is never read, and
+		 * lets a compiler drop the check that follows. */
 		if (!vm->prog->strpool) return -1;
+		delim = vm->prog->strpool + inst->data.str_to.delim_off;
 		if (parse_string_to(vm->ip, remaining, delim, inst->aux, &len) != 0)
 			return -1;
 

@@ -9,6 +9,12 @@
 # shared the first 8 levels overwrote each other. The flattener and serializer
 # now share one LN_JSON_MAX_DEPTH and a 64-bit bitmask; deep objects must
 # round-trip intact.
+#
+# The vehicle has to be "%.:json%". A NAMED "%field:json%" stores the object as
+# one raw-JSON field and copies it back verbatim, so it never walks the
+# flattener or the re-nesting serializer and would round-trip whatever the
+# ceiling is. Only the inline form turns each leaf into a dotted key that the
+# serializer has to rebuild.
 srcdir="${srcdir:-.}"
 # shellcheck disable=SC1091
 . "$srcdir"/exec.sh
@@ -17,18 +23,18 @@ export ln_opts='-oturbo'
 
 test_def "$0" "TurboVM JSON deep nesting (beyond the old depth-8 ceiling)"
 add_rule 'version=2'
-add_rule 'rule=:%field:json%'
+add_rule 'rule=:%.:json%'
 
 # 12 levels of nesting with short keys. The dotted key stays well under the
 # 512-byte key scratch buffer, so this exercises the depth ceiling and not the
 # key-length limit. Pre-fix the serializer collapsed everything past level 8.
 execute '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":{"k":{"l":"deep"}}}}}}}}}}}}'
-assert_output_json_eq '{ "field": {"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":{"k":{"l":"deep"}}}}}}}}}}}} }'
+assert_output_json_eq '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":{"k":{"l":"deep"}}}}}}}}}}}}'
 
 # Two leaves nested 9 deep that share the first 8 levels must both survive with
 # distinct values (the exact pre-fix collision: past level 8 they overwrote one
 # another). Leaves stay typed ints.
 execute '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"x":1,"y":2}}}}}}}}}'
-assert_output_json_eq '{ "field": {"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"x":1,"y":2}}}}}}}}} }'
+assert_output_json_eq '{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"x":1,"y":2}}}}}}}}}'
 
 cleanup_tmp_files
