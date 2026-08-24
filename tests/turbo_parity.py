@@ -4,10 +4,17 @@
 # This file is part of the liblognorm project, released under ASL 2.0.
 #
 # For each (rule, input) it runs lognormalizer twice, once with the standard
-# parser and once with -oturbo, and compares the parsed JSON semantically (so
+# parser and once with TurboVM, and compares the parsed JSON semantically (so
 # key order and whitespace do not matter). It exits non-zero if any field type
 # produces different output on the two engines, except for the types listed in
 # KNOWN, which TurboVM intentionally approximates.
+#
+# The turbo side runs -oturbostrict, NOT -oturbo. This matters: with -oturbo,
+# ln_normalize_to_str() silently falls back to the recursive walker whenever
+# TurboVM declines a message, so a broken turbo opcode still produces the
+# walker's (correct) output and every comparison passes. Strict mode reports
+# the failure instead, which is what makes a turbo defect visible here.
+# The standard side runs -T because turbo always emits event.tags.
 #
 # Run from a built tree:
 #     python3 tests/turbo_parity.py
@@ -27,11 +34,26 @@ if os.path.isdir(LIBDIR):
     env_lib = os.environ.get("LD_LIBRARY_PATH", "")
     os.environ["LD_LIBRARY_PATH"] = LIBDIR + (":" + env_lib if env_lib else "")
 
-# Field types TurboVM approximates as a plain word match, so they can accept or
-# format differently from the standard parser. Documented, not a regression.
-KNOWN = {"cisco-interface-spec", "duration", "kernel-timestamp"}
+# TurboVM maps several distinct parser types onto one generic opcode: alpha /
+# string / duration / kernel-timestamp / cisco-interface-spec all compile to
+# OP_FIELD_WORD, and every date and time parser compiles to OP_FIELD_DATE.
+# Where that generic form does not cover the standard parser's grammar, turbo
+# declines the message and the walker serves it, so the OUTPUT is still right
+# under -oturbo; what is lost is turbo coverage, not correctness. Strict mode
+# makes that visible, which is why these are listed rather than silently green.
+#
+#   alpha      OP_FIELD_WORD runs to whitespace, Alpha stops at the first
+#              non-alphabetic byte ("abc123" -> "abc").
+#   date-iso   a bare date with no time part is not matched.
+#   time-24hr  a bare time with no date part is not matched.
+#
+# Fixing these means giving OP_FIELD_WORD / OP_FIELD_DATE a parser-kind
+# discriminator (aux is free on both) instead of one grammar for all of them.
+KNOWN = {"cisco-interface-spec", "duration", "kernel-timestamp",
+         "alpha", "date-iso", "time-24hr"}
 
-# (name, rule-body-after-':', input-line). Use \t / \n escapes in the input.
+# (name, rule-body-after-':', input-line[, extra rulebase lines]).
+# Use \t / \n escapes in the input.
 CASES = [
     ("word",                  "%f:word% z",                 "hello z"),
     ("alpha",                 "%f:alpha%123",               "abc123"),
@@ -64,17 +86,55 @@ CASES = [
     ("string",                "%f:string% z",               "value z"),
     ("tokenized",             "%f:tokenized: :number%",     "1 2 3"),
     ("checkpoint-lea",        "%f:checkpoint-lea%",         "a=1; b=2;"),
+
+    # string-to: the delimiter is a STRING, not a character. The anchored
+    # shape below passes even when the delimiter is ignored, because the
+    # wrong parse then fails outright and the walker fallback hides it --
+    # which is exactly why the unanchored shape has to be here too.
+    ("string-to-anchored",    "%f:string-to:XY%XYtail",     "hello worldXYtail"),
+    ("string-to-open",        "%f:string-to:XY%%r:rest%",   "a bXYc"),
+    ("string-to-first-match", "%f:string-to:XY%%r:rest%",   "aXYbXYc"),
+    ("string-to-at-eol",      "%f:string-to:XY%XY",         "abcXY"),
+    ("string-to-no-match",    "%f:string-to:XY%%r:rest%",   "abc"),
+    ("string-to-at-offset-0", "%f:string-to:XY%%r:rest%",   "XYtail"),
+
+    # date-rfc3164 also accepts the variant that carries a year.
+    ("date-rfc3164-year",     "%f:date-rfc3164% z",         "Jun 26 2019 09:22:07 z"),
+
+    # Alternatives inside a custom type: both engines must commit to the
+    # same branch, and both must be able to back out of the first one.
+    ("custom-type-quoted",    "A,%f:@cell%%r:rest%",        'A,"hello, world",tail',
+     ['type=@cell:"%..:char-to:"%",', 'type=@cell:%..:char-sep:,%,']),
+    ("custom-type-plain",     "A,%f:@cell%%r:rest%",        "A,plain,tail",
+     ['type=@cell:"%..:char-to:"%",', 'type=@cell:%..:char-sep:,%,']),
+
+    # Annotation values are not limited to what fits in an opcode.
+    ("annot-long-value",      "A,%f:rest%",                 "A,x",
+     ['annotate=t:+long="0123456789012345678901234567890123456789"'],
+     "t"),
+    # Same for a literal parser that stores its own matched text.
+    ("named-literal-long",    '%{"name":"act","type":"literal",'
+                              '"text":"WildFire Communications Status Changed"}%,z',
+                              "WildFire Communications Status Changed,z"),
 ]
 
 
-def run(turbo, rule, line):
+def run(turbo, rule, line, preamble=(), tags=""):
     with tempfile.NamedTemporaryFile("w", suffix=".rb", delete=False) as fh:
-        fh.write("version=2\nrule=:" + rule + "\n")
+        fh.write("version=2\n")
+        for extra in preamble:
+            if not extra.startswith("annotate="):
+                fh.write(extra + "\n")
+        fh.write("rule=" + tags + ":" + rule + "\n")
+        for extra in preamble:
+            if extra.startswith("annotate="):
+                fh.write(extra + "\n")
         rb = fh.name
     try:
-        args = [LN, "-r", rb]
+        args = [LN, "-r", rb, "-T"]
         if turbo:
-            args.insert(1, "-oturbo")
+            # strict: no silent walker fallback, see the note at the top
+            args.insert(1, "-oturbostrict")
         p = subprocess.run(args, input=(line + "\n").encode(),
                            capture_output=True, timeout=15)
         out = p.stdout.decode(errors="replace").strip()
@@ -96,9 +156,13 @@ def strip(j):
 
 def main():
     fails = 0
-    for name, rule, raw in CASES:
+    for case in CASES:
+        name, rule, raw = case[0], case[1], case[2]
+        preamble = case[3] if len(case) > 3 else ()
+        tags = case[4] if len(case) > 4 else ""
         line = raw.encode().decode("unicode_escape")
-        std, tb = run(False, rule, line), run(True, rule, line)
+        std = run(False, rule, line, preamble, tags)
+        tb = run(True, rule, line, preamble, tags)
         sm, tm = matched(std), matched(tb)
         if sm != tm:
             status = "DIVERGE (match)"

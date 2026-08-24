@@ -145,11 +145,29 @@ typedef struct {
 			uint8_t  _pad[1];
 		} char_to;
 
+		/* Field with a multi-byte delimiter string (OP_FIELD_STR_TO).
+		 * The delimiter lives in the program string pool because it does
+		 * not fit next to the field name; aux carries its length. */
+		struct {
+			char     name[56]; /**< Field name */
+			uint32_t delim_off;/**< String-pool offset of the delimiter */
+		} str_to;
+
 		/* Static key-value pair (for OP_STATIC_FIELD) */
 		struct {
 			char     key[30];  /**< Field name, null-terminated */
 			char     val[30];  /**< Field value, null-terminated */
 		} kv;
+
+		/* Static key-value pair too long to store inline: both strings
+		 * live in the program string pool.  Selected by LN_INSTR_F_KV_POOL;
+		 * aux carries the key length, as in the inline form. */
+		struct {
+			uint32_t key_off;  /**< String-pool offset of the key */
+			uint32_t val_off;  /**< String-pool offset of the value */
+			uint32_t val_len;  /**< Value length */
+			uint8_t  _pad[48];
+		} kv_pool;
 	} data;
 } ln_instr_t;
 
@@ -172,6 +190,11 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 #define LN_INSTR_F_NUMERIC   0x20  /**< Numeric field parsed with format="number":
 									  emit a native JSON number instead of a string,
 									  matching the standard parser. */
+#define LN_INSTR_F_KV_POOL   0x40  /**< OP_STATIC_FIELD: the key and the value are
+									  too long for the inline buffers and live in
+									  the program string pool instead (data.kv_pool).
+									  Lets turbo carry annotation values of any
+									  length, matching the standard parser. */
 
 /*============================================================================
  * Instruction Builders

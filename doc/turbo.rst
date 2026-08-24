@@ -57,12 +57,27 @@ In turbo mode:
 - Output is compact JSON with nested objects for dotted field names
 - Field values match the standard engine (numeric fields are strings by
   default, or native JSON numbers with ``format="number"``)
+- Tags are emitted under the literal key ``event.tags``, the same key the
+  standard engine uses, and are always present (as with ``-T``)
 - The ``getline()`` system call is used for input (more efficient than
   ``fgets()`` for large-scale processing)
 
 If a rulebase cannot be compiled to bytecode (e.g. it uses unsupported
 parser types), lognormalizer falls back to standard normalization
-automatically.
+automatically. The same happens per message whenever the bytecode engine
+declines one.
+
+That fallback is what makes turbo safe to enable, and also what makes a
+turbo defect hard to see: the standard engine quietly produces the right
+answer, so comparing output tells you nothing about whether the bytecode
+engine did any work. ``-oturbostrict`` turns the fallback off and reports
+the failure instead::
+
+    $ lognormalizer -r rules.rb -oturbostrict < messages.log
+
+Use it when measuring turbo coverage or writing parity tests; a message
+reported unparsed under ``-oturbostrict`` but parsed under ``-oturbo`` is
+one the bytecode engine declined.
 
 Library API
 -----------
@@ -156,6 +171,13 @@ A few parsers behave slightly differently under TurboVM:
 
 - ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
   as a plain word match, so they may accept input the standard parser rejects.
+- ``char-to`` accepts a zero-length value where the standard parser requires
+  at least one byte before the delimiter, so ``"",`` yields an empty string
+  under TurboVM and the literal ``""`` under the standard parser.
+- ``string-to`` with a single-character delimiter never matches. That is the
+  standard parser's behaviour (its inner comparison loop cannot run for a
+  delimiter shorter than two bytes) and TurboVM replicates it deliberately
+  so a rulebase behaves the same on both engines.
 - ``json`` field names follow the same three contracts as the standard
   parser (see configuration.rst "Special field names"): ``-`` is matched
   and discarded; ``.`` inlines object keys at the current context; a
@@ -177,5 +199,32 @@ format. Typical observations:
   the highest throughput for applications that consume JSON as strings
 
 TurboVM adds no overhead when disabled (``--disable-turbo`` or default).
-When enabled but compilation fails for a specific rule, only that rule
-falls back to the recursive walker — other rules still use bytecode.
+Compilation is all-or-nothing per rulebase: the compiler walks one shared
+parse DAG, so a construct it cannot express means the whole rulebase runs
+on the recursive walker. When that happens the partially emitted program is
+discarded, ``ln_turbo_is_available()`` reports false, and no per-message
+work is wasted.
+
+Limits
+------
+
+Two fixed-size structures bound what a single message can carry:
+
+- ``LN_FAST_MAX_FIELDS`` (128) fields per result. Rulebases over CSV-shaped
+  sources reach this: a PAN-OS TRAFFIC record is 97 columns before
+  annotations. Exceeding it is not silent — ``ln_normalize_to_str()``
+  refuses the result and falls back to the recursive walker, which has no
+  field limit. Callers of ``ln_turbo_normalize_raw()`` get the partial
+  result plus ``ln_fast_result_is_truncated()`` and decide for themselves.
+- ``LN_FAST_MAX_TAGS`` (16) tags per result, with the same contract.
+
+A third limit is on the rulebase rather than the message: the compiler
+recurses once per parser and once per literal in a rule and gives up past a
+depth of 200, so a rule runs out of compile depth at roughly 100 sequential
+fields. Compilation is all-or-nothing, so one rule that long puts the whole
+rulebase on the recursive walker. ``-oturbostrict`` and the
+``turbo: compilation failed`` debug line are the way to notice.
+
+Field names, annotation values and literal texts are *not* limited by the
+size of the opcode buffers they normally live in: anything that does not fit
+inline is interned in the program string pool.

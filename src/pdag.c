@@ -1738,6 +1738,11 @@ ln_normalize_to_str(ln_ctx ctx, const char *str, const size_t strLen,
 		r = ln_turbo_normalize_to_str(ctx, str, strLen, json_str, json_len);
 		if(r == 0)
 			return 0;
+		if(ctx->opts & LN_CTXOPT_TURBO_STRICT) {
+			ln_dbgprintf(ctx, "turbo normalize_to_str failed and strict mode "
+				"is on, not falling back");
+			return r;
+		}
 		ln_dbgprintf(ctx, "turbo normalize_to_str failed, fallback to walker");
 	}
 #endif

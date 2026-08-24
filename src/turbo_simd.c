@@ -1234,6 +1234,21 @@ parse_rfc3164(const char *buf, size_t len, ln_span_t *span)
 	if (i >= len || buf[i] != ' ') return LN_SIMD_EFORMAT;
 	i++;
 
+	/* An optional year sits between the day and the time on Cisco-style
+	 * stamps ("Jun 26 2019 09:22:07").  The standard parser reads the field,
+	 * treats 1971..2099 as a year and then re-reads the hour behind it; do
+	 * the same so both engines accept the same inputs. */
+	{
+		size_t j = i;
+		unsigned v = 0;
+		while (j < len && j - i < 4 && ln_is_digit(buf[j])) {
+			v = v * 10 + (unsigned)(buf[j] - '0');
+			j++;
+		}
+		if (j - i == 4 && v > 1970 && v < 2100 && j < len && buf[j] == ' ')
+			i = j + 1;
+	}
+
 	/* Parse time HH:MM:SS */
 
 	/* Hours */

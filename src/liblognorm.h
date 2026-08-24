@@ -147,6 +147,12 @@ int ln_exitCtx(ln_ctx ctx);
 #define LN_CTXOPT_ADD_RULE_LOCATION	0x10 /**< add rule location (file, lineno) to metadata */
 #define LN_CTXOPT_TURBO			0x20 /**< enable TurboVM parsing */
 #define LN_CTXOPT_NO_UNPARSED_DATA_BINARY 0x40 /**< do not add hexadecimal unparsed data for control bytes */
+#define LN_CTXOPT_TURBO_STRICT		0x80 /**< do not fall back to the recursive
+					          walker when TurboVM declines a message,
+					          report the failure instead. Diagnostic
+					          aid: without it a turbo defect stays
+					          invisible, because the walker quietly
+					          produces the right answer. */
 /**
  * Set options on ctx.
  *

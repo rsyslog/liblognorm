@@ -268,7 +268,7 @@ emit_field(compiler_t *comp, ln_opcode_t op, const char *name, char delim)
 	instr.op = op;
 	instr.flags = LN_INSTR_F_STORE;
 
-	if (op == OP_FIELD_CHAR_TO || op == OP_FIELD_STR_TO) {
+	if (op == OP_FIELD_CHAR_TO) {
 		instr.data.char_to.delim = (uint8_t)delim;
 		if (name && store_field_name(comp, &instr, instr.data.char_to.name,
 					     sizeof(instr.data.char_to.name), name, strlen(name)) != 0)
@@ -278,6 +278,36 @@ emit_field(compiler_t *comp, ln_opcode_t op, const char *name, char delim)
 					     sizeof(instr.data.str), name, strlen(name)) != 0)
 			return UINT32_MAX;
 	}
+
+	return emit(comp, &instr);
+}
+
+/**
+ * @brief Emit OP_FIELD_STR_TO.
+ *
+ * string-to matches up to a delimiter *string*, so the delimiter cannot share
+ * the single byte char-to uses.  It is interned in the program string pool and
+ * addressed by offset; aux carries its length.
+ */
+static uint32_t
+emit_str_to(compiler_t *comp, const char *name, const char *delim, size_t dlen)
+{
+	ln_instr_t instr = {0};
+	uint32_t off;
+
+	if (dlen == 0 || dlen > UINT16_MAX) return UINT32_MAX;
+
+	instr.op = OP_FIELD_STR_TO;
+	instr.flags = LN_INSTR_F_STORE;
+	instr.aux = (uint16_t)dlen;
+
+	off = strpool_intern(comp, delim, dlen);
+	if (off == UINT32_MAX) return UINT32_MAX;
+	instr.data.str_to.delim_off = off;
+
+	if (name && store_field_name(comp, &instr, instr.data.str_to.name,
+				     sizeof(instr.data.str_to.name), name, strlen(name)) != 0)
+		return UINT32_MAX;
 
 	return emit(comp, &instr);
 }
@@ -321,6 +351,44 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
 }
 
 /**
+ * @brief Emit one OP_STATIC_FIELD (a compile-time resolved key=value).
+ *
+ * Short keys and values sit inline in the opcode; anything longer is interned
+ * in the program string pool. The standard parser puts no length limit on an
+ * annotation value or on a literal's text, so neither may turbo: refusing here
+ * aborts compilation of the whole rulebase.
+ *
+ * @return 0 on success, -1 on failure.
+ */
+static int
+emit_static_field(compiler_t *comp, const char *key, size_t klen,
+				  const char *val, size_t vlen)
+{
+	ln_instr_t instr = {0};
+
+	if (!key || klen == 0 || klen > UINT16_MAX || vlen > UINT32_MAX) return -1;
+	if (val == NULL) vlen = 0;
+
+	instr.op = OP_STATIC_FIELD;
+	instr.aux = (uint16_t)klen;
+
+	if (klen < sizeof(instr.data.kv.key) && vlen < sizeof(instr.data.kv.val)) {
+		memcpy(instr.data.kv.key, key, klen);
+		if (vlen) memcpy(instr.data.kv.val, val, vlen);
+	} else {
+		uint32_t koff = strpool_intern(comp, key, klen);
+		uint32_t voff = strpool_intern(comp, val ? val : "", vlen);
+		if (koff == UINT32_MAX || voff == UINT32_MAX) return -1;
+		instr.flags |= LN_INSTR_F_KV_POOL;
+		instr.data.kv_pool.key_off = koff;
+		instr.data.kv_pool.val_off = voff;
+		instr.data.kv_pool.val_len = (uint32_t)vlen;
+	}
+
+	return emit(comp, &instr) == UINT32_MAX ? -1 : 0;
+}
+
+/**
  * @brief Resolve annotations at compile time and emit OP_STATIC_FIELD.
  *
  * For each tag on the terminal node, look up the annotation set.
@@ -355,31 +423,22 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 
 		/* Emit OP_STATIC_FIELD for each ADD operation */
 		for (ln_annot_op *op = annot->oproot; op; op = op->next) {
+			int rc;
+			char *name_cstr;
+			char *val_cstr;
+
 			if (op->opc != ln_annot_ADD) continue;
 
-			char *name_cstr = ln_es_str2cstr(&op->name);
-			char *val_cstr = op->value ? ln_es_str2cstr(&op->value) : NULL;
+			name_cstr = ln_es_str2cstr(&op->name);
+			val_cstr = op->value ? ln_es_str2cstr(&op->value) : NULL;
 
+			/* ln_es_str2cstr() hands back the es_str_t's own buffer;
+			 * it is not ours to free. */
 			if (!name_cstr || !name_cstr[0]) continue;
 
-			ln_instr_t instr = {0};
-			instr.op = OP_STATIC_FIELD;
-
-			size_t klen = strlen(name_cstr);
-			if (klen >= sizeof(instr.data.kv.key))
-				return -1;  /* annotation field name too long: fall back to the standard parser */
-			memcpy(instr.data.kv.key, name_cstr, klen);
-			instr.aux = (uint16_t)klen;
-
-			if (val_cstr) {
-				size_t vlen = strlen(val_cstr);
-				if (vlen >= sizeof(instr.data.kv.val))
-					return -1;  /* annotation field value too long: fall back to the standard parser */
-				memcpy(instr.data.kv.val, val_cstr, vlen);
-			}
-
-			if (emit(comp, &instr) == UINT32_MAX)
-				return -1;
+			rc = emit_static_field(comp, name_cstr, strlen(name_cstr),
+					       val_cstr, val_cstr ? strlen(val_cstr) : 0);
+			if (rc != 0) return -1;
 		}
 	}
 	return 0;
@@ -475,6 +534,14 @@ struct data_NameValue {
 struct data_CharSeparated {
 	char  *term_chars;
 	size_t n_term_chars;
+};
+
+/* Mirrors parser.c's private data_StringTo (no shared header). string-to
+ * matches up to a delimiter string, not a delimiter character, so it does not
+ * share data_CharSeparated. Keep in lockstep with parser.c. */
+struct data_StringTo {
+	const char *toFind;
+	size_t      len;
 };
 
 /* Mirrors parser.c's private enum FMT_MODE and the number/float/hexnumber data
@@ -583,18 +650,9 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			 * e.g. %{"name":"network.type","type":"literal","text":"4"}%
 			 * matches "4" AND stores network.type="4" in the result. */
 			if (prs->name && prs->name[0]) {
-				ln_instr_t sf = {0};
-				sf.op = OP_STATIC_FIELD;
-				size_t klen = strlen(prs->name);
-				if (klen >= sizeof(sf.data.kv.key))
-					return -1;  /* static field name too long: fall back to the standard parser */
-				memcpy(sf.data.kv.key, prs->name, klen);
-				sf.aux = (uint16_t)klen;
-				size_t vlen = strlen(litstr);
-				if (vlen >= sizeof(sf.data.kv.val))
-					return -1;  /* static field value too long: fall back to the standard parser */
-				memcpy(sf.data.kv.val, litstr, vlen);
-				if (emit(comp, &sf) == UINT32_MAX) return -1;
+				if (emit_static_field(comp, prs->name, strlen(prs->name),
+						      litstr, strlen(litstr)) != 0)
+					return -1;
 			}
 		} else {
 			ln_instr_t nop = {0};
@@ -634,7 +692,17 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 						  sizeof(instr.data.char_to.name), prs->name, strlen(prs->name)) != 0)
 			return -1;
 		pc = emit(comp, &instr);
-	} else if (op == OP_FIELD_CHAR_TO || op == OP_FIELD_STR_TO) {
+	} else if (op == OP_FIELD_STR_TO) {
+		/* string-to carries a delimiter *string*, kept in a separate
+		 * parser_data struct from char-to/char-sep. */
+		const struct data_StringTo *sdata =
+			(const struct data_StringTo *)prs->parser_data;
+		if (!sdata || !sdata->toFind || sdata->len == 0) {
+			LN_DBGPRINTF(comp->ctx, "turbo: string-to without a delimiter");
+			return -1;
+		}
+		pc = emit_str_to(comp, prs->name, sdata->toFind, sdata->len);
+	} else if (op == OP_FIELD_CHAR_TO) {
 		char delim = ' ';  /* Default to space */
 		/* Both char-to and char-sep store their delimiter in the same
 		 * memory layout: term_chars[0..n_term_chars-1].  We cast through
@@ -919,11 +987,39 @@ ln_turbo_compile(ln_ctx ctx)
 	free(comp.visited.offsets);
 
 	if (r != 0) {
-		LN_DBGPRINTF(ctx, "turbo: compilation failed");
+		/* A partially emitted program is not a program: it has no trailing
+		 * OP_HALT and its last rule is truncated mid-way.  Discard it so
+		 * ln_turbo_is_available() reports false and callers use the
+		 * recursive walker.  Leaving it in place made every message that
+		 * did not match the truncated code burn the whole VM instruction
+		 * budget before falling back. */
+		LN_DBGPRINTF(ctx, "turbo: compilation failed, discarding partial program");
+		free(turbo->code);
+		turbo->code = NULL;
+		turbo->code_len = 0;
+		turbo->code_cap = 0;
+		free(turbo->strpool);
+		turbo->strpool = NULL;
+		turbo->strpool_len = 0;
+		turbo->strpool_cap = 0;
 		return -1;
 	}
 
-	emit_halt(&comp);
+	/* The terminating OP_HALT is what makes the program a program. If it
+	 * cannot be emitted, discard the rest for the same reason as above. */
+	if (emit_halt(&comp) == UINT32_MAX) {
+		LN_DBGPRINTF(ctx, "turbo: could not emit the terminating HALT, "
+					 "discarding the program");
+		free(turbo->code);
+		turbo->code = NULL;
+		turbo->code_len = 0;
+		turbo->code_cap = 0;
+		free(turbo->strpool);
+		turbo->strpool = NULL;
+		turbo->strpool_len = 0;
+		turbo->strpool_cap = 0;
+		return -1;
+	}
 
 	turbo->stats.n_instructions = turbo->code_len;
 	turbo->stats.n_rules = comp.n_rules;
@@ -974,6 +1070,19 @@ ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
 	if (r != LN_VM_OK) {
 		LN_DBGPRINTF(ctx, "turbo VM exec returned %d, error: %s",
 					 r, turbo->vm.error ? turbo->vm.error : "(none)");
+		*json_str = NULL;
+		return -1;
+	}
+
+	/* A truncated result would serialize into a JSON document that silently
+	 * lost fields, and this entry point has no way to tell its caller.  Refuse
+	 * it so ln_normalize_to_str() falls back to the recursive walker, which
+	 * has no field limit.  Callers that want the truncated result and can
+	 * observe the flag use ln_turbo_normalize_raw() plus
+	 * ln_fast_result_is_truncated(). */
+	if (turbo->result.flags & LN_FRESULT_TRUNCATED) {
+		LN_DBGPRINTF(ctx, "turbo: result truncated at %d fields, "
+					 "falling back to the walker", turbo->result.n_fields);
 		*json_str = NULL;
 		return -1;
 	}

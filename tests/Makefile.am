@@ -6,7 +6,8 @@ TESTS_TURBO_SHELLS = \
 	field_json_turbo_depth.sh \
 	field_json_turbo_fieldcap.sh \
 	field_turbo_long_name.sh \
-	field_turbo_types.sh
+	field_turbo_types.sh \
+	turbo_parity.sh
 
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
@@ -196,6 +197,7 @@ REGEXP_TESTS = \
 EXTRA_DIST = exec.sh \
 	$(TESTS_SHELLSCRIPTS) \
 	$(TESTS_TURBO_SHELLS) \
+	turbo_parity.py \
 	$(REGEXP_TESTS) \
 	err_callback_cookie.sh \
 	unparsed_data_binary.c \
@@ -210,7 +212,7 @@ endif
 if ENABLE_TURBO
 TESTS += $(TESTS_TURBO_SHELLS)
 
-check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
+check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile
 
 turbo_test_arena_SOURCES = turbo_test_arena.c
 turbo_test_arena_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
@@ -232,10 +234,15 @@ turbo_test_vm_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_vm_LDADD = ../src/liblognorm.la
 turbo_test_vm_LDFLAGS = -no-install
 
+turbo_test_compile_SOURCES = turbo_test_compile.c
+turbo_test_compile_CPPFLAGS = $(JSON_C_CFLAGS) -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_compile_LDADD = ../src/liblognorm.la $(JSON_C_LIBS)
+turbo_test_compile_LDFLAGS = -no-install
+
 turbo_test_json_SOURCES = turbo_test_json.c
 turbo_test_json_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_json_LDADD = ../src/liblognorm.la -lm
 turbo_test_json_LDFLAGS = -no-install
 
-TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
+TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile
 endif

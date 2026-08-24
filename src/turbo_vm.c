@@ -126,6 +126,36 @@ ln_opcode_name(ln_opcode_t op)
 	}
 }
 
+/**
+ * @brief string-to: find the delimiter STRING, standard-parser semantics.
+ *
+ * Mirrors PARSER_Parse(StringTo) in parser.c exactly:
+ *   - the scan starts one byte past the field start, so a delimiter sitting
+ *     at offset 0 is skipped and the value is never empty;
+ *   - the first occurrence wins and the delimiter itself is not consumed;
+ *   - a delimiter shorter than two bytes never matches (the standard parser's
+ *     inner loop cannot run for len < 2; replicated here so both engines
+ *     agree, see doc/turbo.rst "Known differences").
+ *
+ * @return 0 and *out_len = value length on success, -1 on no match.
+ */
+static inline int
+parse_string_to(const char *ip, size_t rem, const char *delim, size_t dlen,
+				size_t *out_len)
+{
+	size_t i;
+
+	if (dlen < 2 || rem <= dlen) return -1;
+
+	for (i = 1; i + dlen <= rem; i++) {
+		if (ip[i] == delim[0] && memcmp(ip + i, delim, dlen) == 0) {
+			*out_len = i;
+			return 0;
+		}
+	}
+	return -1;
+}
+
 /*============================================================================
  * Disassembly
  *============================================================================*/
@@ -180,11 +210,21 @@ ln_instr_disasm(const ln_instr_t *inst, char *buf, size_t len)
 		n = snprintf(buf, len, "%s \"%s\"", name, inst->data.str);
 		break;
 	case OP_STATIC_FIELD:
-		n = snprintf(buf, len, "%s \"%s\"=\"%s\"", name,
-					inst->data.kv.key, inst->data.kv.val);
+		if (inst->flags & LN_INSTR_F_KV_POOL) {
+			n = snprintf(buf, len, "%s pool+%u=pool+%u", name,
+						(unsigned)inst->data.kv_pool.key_off,
+						(unsigned)inst->data.kv_pool.val_off);
+		} else {
+			n = snprintf(buf, len, "%s \"%s\"=\"%s\"", name,
+						inst->data.kv.key, inst->data.kv.val);
+		}
+		break;
+	case OP_FIELD_STR_TO:
+		n = snprintf(buf, len, "%s \"%s\" delim=+%u/%u", name,
+					inst->data.str_to.name,
+					(unsigned)inst->data.str_to.delim_off, (unsigned)inst->aux);
 		break;
 	case OP_FIELD_CHAR_TO:
-	case OP_FIELD_STR_TO:
 		if (isprint(inst->data.char_to.delim)) {
 			n = snprintf(buf, len, "%s \"%s\" delim='%c'", name,
 						inst->data.char_to.name, inst->data.char_to.delim);
@@ -1760,11 +1800,13 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_STR_TO: {
-		const char *name = turbo_iname(vm, inst, inst->data.char_to.name);
-		char delim = (char)inst->data.char_to.delim;
+		const char *name = turbo_iname(vm, inst, inst->data.str_to.name);
+		const char *delim = vm->prog->strpool + inst->data.str_to.delim_off;
 		size_t len;
 
-		if (parse_char_to(vm->ip, remaining, delim, &len) != 0) return -1;
+		if (!vm->prog->strpool) return -1;
+		if (parse_string_to(vm->ip, remaining, delim, inst->aux, &len) != 0)
+			return -1;
 
 		vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
@@ -2078,12 +2120,20 @@ vm_exec_instr(ln_vm_t *vm)
 		 * key is in data.kv.key (null-terminated), key length in aux.
 		 * value is in data.kv.val (null-terminated).
 		 * Zero per-message cost beyond the ln_fast_add_string_static call. */
-		if (vm->result && inst->data.kv.key[0]) {
-			uint16_t klen = inst->aux;
-			size_t vlen = strlen(inst->data.kv.val);
-			ln_fast_add_string_static(vm->result,
-									  inst->data.kv.key, klen,
-									  inst->data.kv.val, (uint32_t)vlen);
+		if (vm->result) {
+			if (inst->flags & LN_INSTR_F_KV_POOL) {
+				if (vm->prog->strpool)
+					ln_fast_add_string_static(vm->result,
+							vm->prog->strpool + inst->data.kv_pool.key_off,
+							inst->aux,
+							vm->prog->strpool + inst->data.kv_pool.val_off,
+							inst->data.kv_pool.val_len);
+			} else if (inst->data.kv.key[0]) {
+				ln_fast_add_string_static(vm->result,
+						inst->data.kv.key, inst->aux,
+						inst->data.kv.val,
+						(uint32_t)strlen(inst->data.kv.val));
+			}
 		}
 		vm->pc++;
 		return 1;
@@ -3016,15 +3066,19 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(field_str_to) {
 		const ln_instr_t *inst = INST();
-		char delim;
+		const char *delim;
 		size_t len;
-		delim = (char)inst->data.char_to.delim;
-		if (UNLIKELY(parse_char_to(ip, REMAINING(), delim, &len) != 0)) {
+		if (UNLIKELY(prog->strpool == NULL)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		delim = prog->strpool + inst->data.str_to.delim_off;
+		if (UNLIKELY(parse_string_to(ip, REMAINING(), delim, inst->aux, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.char_to.name), ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str_to.name), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -3366,12 +3420,20 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(static_field) {
 		const ln_instr_t *inst = INST();
-		if (vm->result && inst->data.kv.key[0]) {
-			uint16_t klen = inst->aux;
-			size_t vlen = strlen(inst->data.kv.val);
-			ln_fast_add_string_static(vm->result,
-									  inst->data.kv.key, klen,
-									  inst->data.kv.val, (uint32_t)vlen);
+		if (vm->result) {
+			if (inst->flags & LN_INSTR_F_KV_POOL) {
+				if (prog->strpool)
+					ln_fast_add_string_static(vm->result,
+							prog->strpool + inst->data.kv_pool.key_off,
+							inst->aux,
+							prog->strpool + inst->data.kv_pool.val_off,
+							inst->data.kv_pool.val_len);
+			} else if (inst->data.kv.key[0]) {
+				ln_fast_add_string_static(vm->result,
+						inst->data.kv.key, inst->aux,
+						inst->data.kv.val,
+						(uint32_t)strlen(inst->data.kv.val));
+			}
 		}
 		pc++;
 		DISPATCH();

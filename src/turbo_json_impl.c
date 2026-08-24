@@ -479,7 +479,7 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
 
 	/* Tags array */
 	if (r->n_tags > 0) {
-		est += 20;  /* "event":{"tags":[ or "tags":[ + closing */
+		est += 24;  /* "event.tags":[ + closing */
 		for (uint8_t i = 0; i < r->n_tags; i++) {
 			if (r->tags[i].tag)
 				/* Tags also go through write_escaped_string:
@@ -510,7 +510,8 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
  *   - user.name:    close "group", emit "name"
  *   → {"source":{"ip":"...","port":443},"user":{"group":{"name":"..."},"name":"..."}}
  *
- * Tags are emitted under "event.tags" as a JSON array, nested under "event".
+ * Tags are emitted under the literal key "event.tags" as a JSON array, the
+ * same key and shape the recursive walker uses.
  */
 int
 ln_fast_to_json(const ln_fast_result_t *r,
@@ -633,7 +634,10 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	}
 	open_depth = 0;
 
-	/* Tags array: emit as "tags":[...] at root level (ECS standard) */
+	/* Tags array.  The key is the literal "event.tags", NOT a nested
+	 * {"event":{"tags":...}} object: that is exactly what the recursive
+	 * walker adds in ln_normalize() (pdag.c), and a rulebase must produce
+	 * the same document on either engine. */
 	if (r->n_tags > 0) {
 		int tag_first = 1;
 		uint8_t ti;
@@ -644,9 +648,9 @@ ln_fast_to_json(const ln_fast_result_t *r,
 			*p++ = ',';
 		}
 
-		if ((size_t)(end - p) < 9) return -1;
-		memcpy(p, "\"tags\":[", 8);
-		p += 8;
+		if ((size_t)(end - p) < 15) return -1;
+		memcpy(p, "\"event.tags\":[", 14);
+		p += 14;
 
 		for (ti = 0; ti < r->n_tags; ti++) {
 			if (!r->tags[ti].tag) continue;

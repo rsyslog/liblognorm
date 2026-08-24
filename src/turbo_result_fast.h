@@ -28,8 +28,15 @@ extern "C" {
  * Configuration
  *============================================================================*/
 
-/** Maximum fields per result */
-#define LN_FAST_MAX_FIELDS 64
+/** Maximum fields per result.
+ *
+ * Real-world CSV-shaped rulebases go well past 64: a PAN-OS TRAFFIC record is
+ * 97 columns, and an ECS mapping adds annotations on top.  The array is only
+ * written up to n_fields, so the capacity costs memory (one array per context
+ * and per snapshot), not per-message time.  Anything beyond this is not
+ * truncated silently: the JSON fast path refuses the result and the caller
+ * falls back to the recursive walker. */
+#define LN_FAST_MAX_FIELDS 128
 
 /** Maximum tags per result */
 #define LN_FAST_MAX_TAGS 16
