@@ -14,7 +14,11 @@
 # TurboVM declines a message, so a broken turbo opcode still produces the
 # walker's (correct) output and every comparison passes. Strict mode reports
 # the failure instead, which is what makes a turbo defect visible here.
-# The standard side runs -T because turbo always emits event.tags.
+#
+# Tags are excluded from the comparison. The two engines spell them
+# differently on purpose (turbo puts "tags" at the root, the ECS spelling; the
+# walker adds a flat "event.tags"), which is a serialization difference rather
+# than a field-type one, and this auditor is about field types.
 #
 # Run from a built tree:
 #     python3 tests/turbo_parity.py
@@ -131,7 +135,7 @@ def run(turbo, rule, line, preamble=(), tags=""):
                 fh.write(extra + "\n")
         rb = fh.name
     try:
-        args = [LN, "-r", rb, "-T"]
+        args = [LN, "-r", rb]
         if turbo:
             # strict: no silent walker fallback, see the note at the top
             args.insert(1, "-oturbostrict")
@@ -146,12 +150,15 @@ def run(turbo, rule, line, preamble=(), tags=""):
         os.unlink(rb)
 
 
+IGNORED_KEYS = {"originalmsg", "tags", "event.tags"}
+
+
 def matched(j):
     return "unparsed-data" not in j and "__unparseable__" not in j
 
 
 def strip(j):
-    return {k: v for k, v in j.items() if k != "originalmsg"}
+    return {k: v for k, v in j.items() if k not in IGNORED_KEYS}
 
 
 def main():

@@ -481,7 +481,7 @@ static int test_json_single_tag(void)
 
     int r = ln_fast_to_json(&result, buf, sizeof(buf), &len);
     TEST_ASSERT_EQ(r, 0, "should succeed");
-    TEST_ASSERT(json_contains(buf, "\"event.tags\""), "should have tags key");
+    TEST_ASSERT(json_contains(buf, "\"tags\""), "should have tags key");
     TEST_ASSERT(json_contains(buf, "["), "should have array open");
     TEST_ASSERT(json_contains(buf, "]"), "should have array close");
     TEST_ASSERT(json_contains(buf, "\"web\""), "should contain tag value");
@@ -530,7 +530,7 @@ static int test_json_tags_only(void)
     int r = ln_fast_to_json(&result, buf, sizeof(buf), &len);
     TEST_ASSERT_EQ(r, 0, "should succeed");
     TEST_ASSERT(json_is_object(buf, len), "should be valid JSON object");
-    TEST_ASSERT(json_contains(buf, "\"event.tags\":[\"syslog\"]"),
+    TEST_ASSERT(json_contains(buf, "\"tags\":[\"syslog\"]"),
                 "should have tags array with syslog");
 
     ln_arena_destroy(&arena);
@@ -1012,7 +1012,7 @@ static int test_json_syslog_like(void)
     TEST_ASSERT(json_contains(json_str, "\"source\":{"),
                 "should have source object");
     /* Verify tags */
-    TEST_ASSERT(json_contains(json_str, "\"event.tags\""),
+    TEST_ASSERT(json_contains(json_str, "\"tags\""),
                 "should have tags");
     TEST_ASSERT(json_contains(json_str, "\"firewall\""),
                 "should contain firewall tag");

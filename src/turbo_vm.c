@@ -803,16 +803,6 @@ parse_ipv6(const char *buf, size_t len, size_t *out_len)
 }
 
 static inline int
-parse_char_to(const char *buf, size_t len, char delim, size_t *out_len)
-{
-	size_t i = 0;
-	while (i < len && buf[i] != delim) i++;
-	if (i == 0) return -1;
-	*out_len = i;
-	return 0;
-}
-
-static inline int
 parse_op_quoted(const char *buf, size_t len, size_t *start,
 				size_t *out_len, size_t *consumed)
 {

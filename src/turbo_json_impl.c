@@ -479,7 +479,7 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
 
 	/* Tags array */
 	if (r->n_tags > 0) {
-		est += 24;  /* "event.tags":[ + closing */
+		est += 20;  /* "tags":[ + closing */
 		for (uint8_t i = 0; i < r->n_tags; i++) {
 			if (r->tags[i].tag)
 				/* Tags also go through write_escaped_string:
@@ -510,8 +510,8 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
  *   - user.name:    close "group", emit "name"
  *   → {"source":{"ip":"...","port":443},"user":{"group":{"name":"..."},"name":"..."}}
  *
- * Tags are emitted under the literal key "event.tags" as a JSON array, the
- * same key and shape the recursive walker uses.
+ * Tags are emitted at the root as "tags", the ECS spelling. The recursive
+ * walker uses a flat "event.tags" key instead; see doc/turbo.rst.
  */
 int
 ln_fast_to_json(const ln_fast_result_t *r,
@@ -634,10 +634,19 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	}
 	open_depth = 0;
 
-	/* Tags array.  The key is the literal "event.tags", NOT a nested
-	 * {"event":{"tags":...}} object: that is exactly what the recursive
-	 * walker adds in ln_normalize() (pdag.c), and a rulebase must produce
-	 * the same document on either engine. */
+	/* Tags array, at the root as "tags".
+	 *
+	 * NOT "event.tags", which is what the recursive walker adds in
+	 * ln_normalize().  Two reasons.  ECS puts tags at the top level and has
+	 * no event.tags field, and this serializer exists to emit ECS-shaped
+	 * documents.  And an "event.tags" key here would sit *beside* the
+	 * "event" object that dotted field names build, so a rulebase carrying
+	 * event.kind would produce {"event":{"kind":...},"event.tags":[...]},
+	 * with the same logical path both inside and outside the object.
+	 *
+	 * The two engines therefore use different keys for tags, as they
+	 * already do for every dotted field name: turbo nests, the walker keeps
+	 * the flat key.  See doc/turbo.rst "Known differences". */
 	if (r->n_tags > 0) {
 		int tag_first = 1;
 		uint8_t ti;
@@ -648,9 +657,9 @@ ln_fast_to_json(const ln_fast_result_t *r,
 			*p++ = ',';
 		}
 
-		if ((size_t)(end - p) < 15) return -1;
-		memcpy(p, "\"event.tags\":[", 14);
-		p += 14;
+		if ((size_t)(end - p) < 9) return -1;
+		memcpy(p, "\"tags\":[", 8);
+		p += 8;
 
 		for (ti = 0; ti < r->n_tags; ti++) {
 			if (!r->tags[ti].tag) continue;

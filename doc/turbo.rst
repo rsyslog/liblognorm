@@ -167,6 +167,23 @@ will still work correctly via the standard engine.
 Known differences from the standard engine
 -------------------------------------------
 
+The JSON *document* TurboVM writes is not the one the standard engine
+writes, by design:
+
+- Dotted field names nest. ``%source.ip:word%`` gives
+  ``{"source":{"ip":"..."}}`` under TurboVM and a flat ``"source.ip"`` key
+  under the standard engine. This is the ECS-output feature described above,
+  not an accident, but it does mean the two engines produce different
+  documents for any rulebase that uses dotted names.
+- Tags follow from that. TurboVM puts them at the root as ``"tags"``, the
+  ECS spelling; the standard engine adds a flat ``"event.tags"`` key. Writing
+  ``"event.tags"`` in the nested serializer would place the same logical path
+  both inside and outside the ``event`` object whenever a rulebase also
+  carries an ``event.*`` field.
+
+Consumers of ``ln_turbo_normalize_raw()`` and the typed field accessors see
+none of this: it is the string serializer only.
+
 A few parsers behave slightly differently under TurboVM:
 
 - ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
