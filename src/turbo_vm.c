@@ -339,16 +339,28 @@ static inline bool
 vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 {
 	ln_field_ctx_t *ctx;
+	bool discard;
 
 	if (vm->field_ctx_sp >= LN_VM_MAX_FIELD_CTX) {
 		vm->error = "field context stack overflow";
 		return false;
 	}
 
+	/*
+	 * A field named "-" is matched but not stored, and that applies to a whole
+	 * subtree, not just a scalar: the standard parser discards the parser's
+	 * entire result. Mark the context so nothing emitted below it is kept, and
+	 * inherit the mark so an inner context cannot escape it.
+	 */
+	discard = (name != NULL && name[0] == '-' && name[1] == '\0');
+	if (vm->field_ctx_sp > 0 && vm->field_ctx[vm->field_ctx_sp - 1].discard)
+		discard = true;
+
 	ctx = &vm->field_ctx[vm->field_ctx_sp++];
 	ctx->name = name;
 	ctx->name_len = name ? (uint16_t)strlen(name) : 0;
 	ctx->is_nested = is_nested ? 1 : 0;
+	ctx->discard = discard ? 1 : 0;
 
 	TRACE("[CTX] push \"%s\" (sp=%u, nested=%d)\n",
 		  name ? name : "(null)", vm->field_ctx_sp, is_nested);
@@ -495,6 +507,17 @@ vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 	uint16_t i;
 	uint16_t total_len;
 	char *prefixed;
+
+	/* "-" is matched but not stored, and neither is anything under a context
+	 * that carries the same name, however deep. */
+	if (name != NULL && name[0] == '-' && name[1] == '\0') {
+		*out_len = 0;
+		return NULL;
+	}
+	if (vm->field_ctx_sp > 0 && vm->field_ctx[vm->field_ctx_sp - 1].discard) {
+		*out_len = 0;
+		return NULL;
+	}
 
 	/* Handle ".." - resolve to context name only */
 	if (name && name[0] == '.' && name[1] == '.' &&

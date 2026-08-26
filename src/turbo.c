@@ -576,14 +576,21 @@ static int
 compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 {
 	uint32_t pc;
+	/*
+	 * A NULL parser name is the "-" field: matched but not stored. Turbo needs
+	 * that spelled out in the instruction, because an empty inline name reads
+	 * as "no context" and a container parser would then emit its members at the
+	 * top level instead of discarding them.
+	 */
+	const char *const fname = (prs->name != NULL) ? prs->name : "-";
 
 	/* Handle custom types with context push/pop */
 	if (prs->prsid == PRS_CUSTOM_TYPE) {
 		/* Push field name context BEFORE the CALL */
 		/* Skip if name is "." (root context placeholder) or empty */
-		if (prs->name && prs->name[0] &&
-			!(prs->name[0] == '.' && prs->name[1] == '\0')) {
-			uint32_t ctx_pc = emit_ctx_push(comp, prs->name);
+		if (fname[0] &&
+			!(fname[0] == '.' && fname[1] == '\0')) {
+			uint32_t ctx_pc = emit_ctx_push(comp, fname);
 			if (ctx_pc == UINT32_MAX) return -1;
 			*out_pc = ctx_pc;
 		}
@@ -621,8 +628,8 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 
 		/* Pop field name context AFTER the call */
 		/* Only pop if we pushed (skip if name was "." or empty) */
-		if (prs->name && prs->name[0] &&
-			!(prs->name[0] == '.' && prs->name[1] == '\0')) {
+		if (fname[0] &&
+			!(fname[0] == '.' && fname[1] == '\0')) {
 			if (emit_ctx_pop(comp) == UINT32_MAX) return -1;
 		}
 
@@ -668,7 +675,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		if (prs->name && prs->name[0]) {
 			instr.flags = LN_INSTR_F_STORE;
 			if (store_field_name(comp, &instr, instr.data.str,
-					     sizeof(instr.data.str), prs->name, strlen(prs->name)) != 0)
+					     sizeof(instr.data.str), fname, strlen(fname)) != 0)
 				return -1;
 		}
 		pc = emit(comp, &instr);
@@ -688,8 +695,8 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		instr.data.char_to.delim = (uint8_t)sep;
 		instr.data.char_to.ass   = (uint8_t)ass;
 		instr.data.char_to.ignore_ws = ignore_ws;
-		if (prs->name && store_field_name(comp, &instr, instr.data.char_to.name,
-						  sizeof(instr.data.char_to.name), prs->name, strlen(prs->name)) != 0)
+		if (store_field_name(comp, &instr, instr.data.char_to.name,
+						  sizeof(instr.data.char_to.name), fname, strlen(fname)) != 0)
 			return -1;
 		pc = emit(comp, &instr);
 	} else if (op == OP_FIELD_STR_TO) {
@@ -701,7 +708,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			LN_DBGPRINTF(comp->ctx, "turbo: string-to without a delimiter");
 			return -1;
 		}
-		pc = emit_str_to(comp, prs->name, sdata->toFind, sdata->len);
+		pc = emit_str_to(comp, fname, sdata->toFind, sdata->len);
 	} else if (op == OP_FIELD_CHAR_TO) {
 		char delim = ' ';  /* Default to space */
 		/* Both char-to and char-sep store their delimiter in the same
@@ -719,10 +726,10 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				delim = csdata->term_chars[0];
 			}
 		}
-		pc = emit_field(comp, op, prs->name, delim);
+		pc = emit_field(comp, op, fname, delim);
 	} else if (op == OP_V2_IPTABLES || op == OP_CEE_SYSLOG || op == OP_CEF_HDR) {
 		/* Simple opcodes: no parser_data config, just emit with field name */
-		pc = emit_field(comp, op, prs->name, ' ');
+		pc = emit_field(comp, op, fname, ' ');
 	} else if (op == OP_CHECKPOINT_LEA) {
 		/* Checkpoint LEA: extract terminator from parser_data */
 		ln_instr_t instr = {0};
@@ -734,12 +741,12 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				(struct data_CheckpointLEA *)prs->parser_data;
 			instr.data.char_to.delim = (uint8_t)cpdata->terminator;
 		}
-		if (prs->name && store_field_name(comp, &instr, instr.data.char_to.name,
-						  sizeof(instr.data.char_to.name), prs->name, strlen(prs->name)) != 0)
+		if (store_field_name(comp, &instr, instr.data.char_to.name,
+						  sizeof(instr.data.char_to.name), fname, strlen(fname)) != 0)
 			return -1;
 		pc = emit(comp, &instr);
 	} else {
-		pc = emit_field(comp, op, prs->name, ' ');
+		pc = emit_field(comp, op, fname, ' ');
 	}
 
 	if (pc == UINT32_MAX) return -1;

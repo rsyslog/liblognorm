@@ -68,7 +68,8 @@ typedef struct {
 	const char *name;           /**< Parent field name */
 	uint16_t    name_len;       /**< Name length */
 	uint8_t     is_nested;      /**< Create nested object for this context */
-	uint8_t     _pad;
+	uint8_t     discard;        /**< Field name was "-": match but store nothing,
+	                              *  including everything nested below it */
 } ln_field_ctx_t;
 
 /*============================================================================
