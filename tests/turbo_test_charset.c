@@ -104,6 +104,8 @@ main(void)
 		"rule=:%f:{\"type\":\"char-to\",\"extradata\":\",;\"}%%tail:rest%\n";
 	static const char *const three =
 		"rule=:%f:{\"type\":\"char-to\",\"extradata\":\",;|\"}%%tail:rest%\n";
+	static const char *const sepone =
+		"rule=:%f:{\"type\":\"char-sep\",\"extradata\":\",\"}%%tail:rest%\n";
 	static const char *const sep =
 		"rule=:%f:{\"type\":\"char-sep\",\"extradata\":\",;\"}%%tail:rest%\n";
 
@@ -128,6 +130,19 @@ main(void)
 	/* char-sep shares the opcode and the same set handling. */
 	compare("sep/first",    sep, "abc,def");
 	compare("sep/second",   sep, "abc;def");
+
+	/*
+	 * The two parsers scan alike but end differently: char-to refuses a field
+	 * that is empty or has no terminator in range, char-sep accepts both and
+	 * takes whatever is left. A rule alternative behind such a field is
+	 * reached only when the field genuinely refuses, so this decides which
+	 * rule the message lands on.
+	 */
+	compare("to/empty",        one, ",leading");
+	compare("to/unterminated", one, "noterminator");
+	compare("sep/empty",       sepone, ",leading");
+	compare("sep/unterminated", sepone, "noterminator");
+	compare("two/empty",       two, ";leading");
 
 	printf("%d comparisons, %d failure(s)\n", checks, failures);
 	return failures == 0 ? 0 : 1;

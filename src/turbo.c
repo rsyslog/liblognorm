@@ -148,7 +148,7 @@ prsid_to_opcode(prsid_t prsid)
 	case PRSID_JSON:           return OP_FIELD_JSON;
 	case PRSID_MAC48:          return OP_FIELD_MAC;
 	case PRSID_CHARTO:         return OP_FIELD_CHAR_TO;
-	case PRSID_CHARSEP:        return OP_FIELD_CHAR_TO;  /* Same behavior */
+	case PRSID_CHARSEP:        return OP_FIELD_CHAR_TO;  /* same scan, see F_CHARSEP */
 	case PRSID_STRINGTO:       return OP_FIELD_STR_TO;
 	case PRSID_RFC3164DATE:    return OP_FIELD_DATE;
 	case PRSID_RFC5424DATE:    return OP_FIELD_DATE;
@@ -803,6 +803,10 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			}
 		}
 		pc = emit_field(comp, op, fname, delim);
+		/* char-sep never refuses; char-to refuses an empty or unterminated
+		 * field. The scan is the same, so the opcode is told which it is. */
+		if (pc != UINT32_MAX && prs->prsid == PRSID_CHARSEP)
+			comp->turbo->code[pc].flags |= LN_INSTR_F_CHARSEP;
 		/*
 		 * The field ends at whichever member of the set comes first, so a set
 		 * larger than one character cannot be carried in `delim`. Intern it

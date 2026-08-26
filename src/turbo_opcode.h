@@ -222,6 +222,13 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
  * are free for it to reuse. This one shares its value with
  * LN_INSTR_F_OPTIONAL, which has no meaning for a field that always stores.
  */
+#define LN_INSTR_F_CHARSEP   0x08  /**< OP_FIELD_CHAR_TO: char-sep semantics.
+                                    *   char-sep always matches: with no
+                                    *   terminator in range it takes the rest,
+                                    *   and an empty value is valid. char-to
+                                    *   refuses both. Shares its value with
+                                    *   LN_INSTR_F_CASE_INS, which this opcode
+                                    *   never carries. */
 #define LN_INSTR_F_CHARSET   0x02  /**< OP_FIELD_CHAR_TO: the terminator set does
                                     *   not fit in `delim` and lives in the
                                     *   program string pool at data.char_to

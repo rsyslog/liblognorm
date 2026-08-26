@@ -2376,7 +2376,17 @@ vm_exec_instr(ln_vm_t *vm)
 		} else {
 			rc = ln_simd_char_to(vm->ip, remaining, delim, &span);
 		}
-		if (rc != LN_SIMD_OK) return -1;
+		if (rc != LN_SIMD_OK) {
+			/* char-sep matches whatever is left when no terminator is in
+			 * range; char-to refuses. */
+			if (!(inst->flags & LN_INSTR_F_CHARSEP)) return -1;
+			span.start = vm->ip;
+			span.len = remaining;
+			span.consumed = remaining;
+		} else if (span.len == 0 && !(inst->flags & LN_INSTR_F_CHARSEP)) {
+			/* char-to refuses an empty field. */
+			return -1;
+		}
 
 		vm_add_string_field(vm, name, span.start, span.len);
 		vm->ip += span.consumed;
@@ -3697,6 +3707,17 @@ ln_vm_continue(ln_vm_t *vm)
 			rc = ln_simd_char_to(ip, REMAINING(), delim, &span);
 		}
 		if (UNLIKELY(rc != LN_SIMD_OK)) {
+			/* char-sep matches whatever is left when no terminator is in
+			 * range; char-to refuses. */
+			if (!(inst->flags & LN_INSTR_F_CHARSEP)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			span.start = ip;
+			span.len = REMAINING();
+			span.consumed = REMAINING();
+		} else if (UNLIKELY(span.len == 0 && !(inst->flags & LN_INSTR_F_CHARSEP))) {
+			/* char-to refuses an empty field. */
 			WRITEBACK();
 			BACKTRACK();
 		}
