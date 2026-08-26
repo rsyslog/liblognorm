@@ -36,6 +36,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
+
+/* enum FMT_MODE value FMT_AS_TIMESTAMP_UX_MS; kept in lockstep with parser.c. */
+#define FMT_MODE_TIMESTAMP_UX_MS 3
 #include <locale.h>
 #if defined(__has_include)
 # if __has_include(<xlocale.h>)
@@ -329,6 +333,240 @@ ln_vm_reset(ln_vm_t *vm)
 	vm->backtrack_count = 0;
 	vm->matched_rule = NULL;
 	vm->error = NULL;
+}
+
+/*============================================================================
+ * Date conversion for OP_FIELD_DATE with format="timestamp-unix"[-ms]
+ *
+ * Self-contained on purpose: the VM does not call into the standard parser and
+ * does not build a json_object per message. tests/turbo_test_date.c compares
+ * this against the standard parser over every accepted spelling of both
+ * formats, so the duplication is held to exact parity by test rather than by
+ * hope.
+ *==========================================================================*/
+
+typedef struct {
+	int year, month, day;
+	int hour, minute, second;
+	int secfrac, secfrac_digits;
+	int off_hour, off_minute;
+	char off_mode;
+} turbo_date_t;
+
+static inline int
+turbo_date_int(const unsigned char **buf, size_t *len)
+{
+	const unsigned char *p = *buf;
+	size_t n = *len;
+	int v = 0;
+
+	while (n > 0 && *p >= '0' && *p <= '9') {
+		v = v * 10 + (*p - '0');
+		++p; --n;
+	}
+	*buf = p; *len = n;
+	return v;
+}
+
+/* Days-from-civil; the standard parser clamps the same range and yields 0
+ * outside it. */
+static int64_t
+turbo_date_to_unix(const turbo_date_t *d, int ms)
+{
+	int64_t y, era, yoe, doy, doe, days, ts;
+
+	if (d->year < 1970 || d->year > 2100)
+		return 0;
+
+	y = d->year - (d->month <= 2);
+	era = (y >= 0 ? y : y - 399) / 400;
+	yoe = y - era * 400;
+	doy = (153 * (d->month + (d->month > 2 ? -3 : 9)) + 2) / 5 + d->day - 1;
+	doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	days = era * 146097 + doe - 719468;
+
+	ts = days * 86400 + d->hour * 3600 + d->minute * 60 + d->second;
+	if (d->off_mode == '-')
+		ts += d->off_hour * 3600 + d->off_minute * 60;
+	else
+		ts -= d->off_hour * 3600 + d->off_minute * 60;
+
+	if (ms) {
+		int frac = d->secfrac;
+		int div = 1;
+
+		ts *= 1000;
+		if (d->secfrac_digits == 1) frac *= 100;
+		else if (d->secfrac_digits == 2) frac *= 10;
+		else if (d->secfrac_digits > 3) {
+			int i;
+			for (i = 0; i < d->secfrac_digits - 3; ++i) div *= 10;
+		}
+		ts += frac / div;
+	}
+	return ts;
+}
+
+static int
+turbo_scan_rfc3164(const unsigned char *p, size_t orglen, size_t *parsed,
+		   turbo_date_t *d)
+{
+	size_t len = orglen;
+	int v;
+
+	memset(d, 0, sizeof(*d));
+	d->off_mode = '+';
+	if (len < 3) return -1;
+
+	switch (*p++) {
+	case 'j': case 'J':
+		if (*p == 'a' || *p == 'A') { d->month = 1; p++; if(*p!='n'&&*p!='N') return -1; p++; }
+		else if (*p == 'u' || *p == 'U') {
+			p++;
+			if (*p == 'n' || *p == 'N') d->month = 6;
+			else if (*p == 'l' || *p == 'L') d->month = 7;
+			else return -1;
+			p++;
+		} else return -1;
+		break;
+	case 'f': case 'F':
+		d->month = 2; if((*p!='e'&&*p!='E')) return -1; p++; if((*p!='b'&&*p!='B')) return -1; p++; break;
+	case 'm': case 'M':
+		if (*p != 'a' && *p != 'A') return -1;
+		p++;
+		if (*p == 'r' || *p == 'R') d->month = 3;
+		else if (*p == 'y' || *p == 'Y') d->month = 5;
+		else return -1;
+		p++;
+		break;
+	case 'a': case 'A':
+		if (*p == 'p' || *p == 'P') { d->month = 4; p++; if(*p!='r'&&*p!='R') return -1; p++; }
+		else if (*p == 'u' || *p == 'U') { d->month = 8; p++; if(*p!='g'&&*p!='G') return -1; p++; }
+		else return -1;
+		break;
+	case 's': case 'S':
+		d->month = 9; if(*p!='e'&&*p!='E') return -1; p++; if(*p!='p'&&*p!='P') return -1; p++; break;
+	case 'o': case 'O':
+		d->month = 10; if(*p!='c'&&*p!='C') return -1; p++; if(*p!='t'&&*p!='T') return -1; p++; break;
+	case 'n': case 'N':
+		d->month = 11; if(*p!='o'&&*p!='O') return -1; p++; if(*p!='v'&&*p!='V') return -1; p++; break;
+	case 'd': case 'D':
+		d->month = 12; if(*p!='e'&&*p!='E') return -1; p++; if(*p!='c'&&*p!='C') return -1; p++; break;
+	default: return -1;
+	}
+	len -= 3;
+
+	if (len == 0 || *p++ != ' ') return -1;
+	--len;
+	if (len > 0 && *p == ' ') { --len; ++p; }        /* one-digit day */
+
+	d->day = turbo_date_int(&p, &len);
+	if (d->day < 1 || d->day > 31) return -1;
+	if (len == 0 || *p++ != ' ') return -1;
+	--len;
+
+	v = turbo_date_int(&p, &len);
+	if (v > 1970 && v < 2100) {                      /* Cisco year variant */
+		if (len == 0 || *p++ != ' ') return -1;
+		--len;
+		v = turbo_date_int(&p, &len);
+	}
+	d->hour = v;
+	if (d->hour < 0 || d->hour > 23) return -1;
+
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->minute = turbo_date_int(&p, &len);
+	if (d->minute < 0 || d->minute > 59) return -1;
+
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->second = turbo_date_int(&p, &len);
+	if (d->second < 0 || d->second > 60) return -1;
+
+	if (len > 0 && *p == ':') { ++p; --len; }        /* tolerated extra colon */
+
+	{
+		struct tm tm;
+		const time_t now = time(NULL);
+		gmtime_r(&now, &tm);
+		d->year = tm.tm_year + 1900;                 /* RFC3164 carries no year */
+	}
+	*parsed = orglen - len;
+	return 0;
+}
+
+static int
+turbo_scan_rfc5424(const unsigned char *p, size_t orglen, size_t *parsed,
+		   turbo_date_t *d)
+{
+	size_t len = orglen;
+
+	memset(d, 0, sizeof(*d));
+	d->year = turbo_date_int(&p, &len);
+	if (len == 0 || *p++ != '-') return -1;
+	--len;
+	d->month = turbo_date_int(&p, &len);
+	if (d->month < 1 || d->month > 12) return -1;
+	if (len == 0 || *p++ != '-') return -1;
+	--len;
+	d->day = turbo_date_int(&p, &len);
+	if (d->day < 1 || d->day > 31) return -1;
+	if (len == 0 || *p++ != 'T') return -1;
+	--len;
+	d->hour = turbo_date_int(&p, &len);
+	if (d->hour < 0 || d->hour > 23) return -1;
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->minute = turbo_date_int(&p, &len);
+	if (d->minute < 0 || d->minute > 59) return -1;
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->second = turbo_date_int(&p, &len);
+	if (d->second < 0 || d->second > 60) return -1;
+
+	if (len > 0 && *p == '.') {
+		const unsigned char *start;
+		--len; ++p;
+		start = p;
+		d->secfrac = turbo_date_int(&p, &len);
+		d->secfrac_digits = (int)(p - start);
+	}
+
+	if (len == 0) return -1;
+	if (*p == 'Z') {
+		d->off_mode = '+'; --len; ++p;
+	} else if (*p == '+' || *p == '-') {
+		d->off_mode = (char)*p;
+		--len; ++p;
+		d->off_hour = turbo_date_int(&p, &len);
+		if (d->off_hour < 0 || d->off_hour > 23) return -1;
+		if (len == 0 || *p++ != ':') return -1;
+		--len;
+		d->off_minute = turbo_date_int(&p, &len);
+		if (d->off_minute < 0 || d->off_minute > 59) return -1;
+	} else {
+		return -1;                                   /* TZ is mandatory */
+	}
+
+	*parsed = orglen - len;
+	return 0;
+}
+
+int
+ln_turbo_date2unix(const int kind, const char *const str, const size_t strLen,
+	const int ms, size_t *const parsed, int64_t *const ts)
+{
+	turbo_date_t d;
+	int r;
+
+	*parsed = 0;
+	r = (kind == 1)
+	  ? turbo_scan_rfc5424((const unsigned char *)str, strLen, parsed, &d)
+	  : turbo_scan_rfc3164((const unsigned char *)str, strLen, parsed, &d);
+	if (r != 0) return -1;
+	*ts = turbo_date_to_unix(&d, ms);
+	return 0;
 }
 
 /*============================================================================
@@ -3321,6 +3559,30 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_date) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
+		/*
+		 * format="timestamp-unix"[-ms] turns the date into an epoch integer.
+		 * ln_turbo_date2unix() runs the standard parser's own scan and
+		 * conversion and returns a plain int64_t, so the grammar and the
+		 * leap-year/offset/sub-second arithmetic exist once while the fast
+		 * path still allocates nothing per message.
+		 */
+		if (UNLIKELY(inst->flags & LN_INSTR_F_DATE_FMT)) {
+			size_t dparsed = 0;
+			int64_t ts = 0;
+
+			if (UNLIKELY(ln_turbo_date2unix((int)(inst->aux >> 8), ip,
+						REMAINING(),
+						(inst->aux & 0xff) == FMT_MODE_TIMESTAMP_UX_MS,
+						&dparsed, &ts) != 0 || dparsed == 0)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			vm->ip = ip;
+			vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), ts);
+			ip += dparsed;
+			pc++;
+			DISPATCH();
+		}
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();

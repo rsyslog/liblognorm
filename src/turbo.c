@@ -567,6 +567,34 @@ turbo_numeric_wants_number(ln_opcode_t op, const void *pdata)
 	return 0;
 }
 
+/* Date parsers accept format="timestamp-unix"/"timestamp-unix-ms", which make
+ * the walker emit an epoch integer instead of the matched text. Keep in lockstep
+ * with parser.c's enum FMT_MODE. */
+#define TURBO_FMT_AS_STRING 0
+struct data_RFC3164Date { int fmt_mode; };
+struct data_RFC5424Date { int fmt_mode; };
+
+/*
+ * Does this date parser request a converted timestamp?
+ *
+ * OP_FIELD_DATE only matches and stores the date text; it does not decompose it
+ * into fields, and the walker's conversion helper is private to parser.c.
+ * Rather than reimplement date arithmetic in the VM (the very thing that would
+ * reintroduce a parity gap), the instruction is flagged so the VM declines the
+ * message and the walker produces the value. The rule keeps compiling, so only
+ * messages reaching this field lose the fast path.
+ */
+static int
+turbo_date_wants_conversion(int prsid, const void *pdata)
+{
+	if (pdata == NULL) return 0;
+	if (prsid == PRSID_RFC3164DATE)
+		return ((const struct data_RFC3164Date *)pdata)->fmt_mode != TURBO_FMT_AS_STRING;
+	if (prsid == PRSID_RFC5424DATE)
+		return ((const struct data_RFC5424Date *)pdata)->fmt_mode != TURBO_FMT_AS_STRING;
+	return 0;
+}
+
 /* Forward declaration for Checkpoint LEA parser data (defined in parser.c). */
 struct data_CheckpointLEA {
 	char terminator;
@@ -757,6 +785,19 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	if ((op == OP_FIELD_INT || op == OP_FIELD_HEX || op == OP_FIELD_FLOAT) &&
 	    turbo_numeric_wants_number(op, prs->parser_data))
 		comp->turbo->code[pc].flags |= LN_INSTR_F_NUMERIC;
+
+	/* date-rfc3164/date-rfc5424 with format="timestamp-unix"[-ms] emit an epoch
+	 * integer rather than the matched text. Record the requested mode and which
+	 * of the two grammars applies; the VM delegates the conversion to the
+	 * standard parser so one implementation produces the value on both engines. */
+	if (op == OP_FIELD_DATE &&
+	    turbo_date_wants_conversion(prs->prsid, prs->parser_data)) {
+		const int fmt = *(const int *)prs->parser_data;
+		const uint16_t kind = (prs->prsid == PRSID_RFC5424DATE) ? 1u : 0u;
+
+		comp->turbo->code[pc].flags |= LN_INSTR_F_DATE_FMT;
+		comp->turbo->code[pc].aux = (uint16_t)((fmt & 0xff) | (kind << 8));
+	}
 
 	if (prs->node) {
 		uint32_t cont_entry;

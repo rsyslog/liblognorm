@@ -201,6 +201,10 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 #define LN_INSTR_F_NUMERIC   0x20  /**< Numeric field parsed with format="number":
 									  emit a native JSON number instead of a string,
 									  matching the standard parser. */
+#define LN_INSTR_F_DATE_FMT  0x80  /**< Date parser with format="timestamp-unix"
+									  or "timestamp-unix-ms". aux carries the
+									  FMT_MODE in its low byte and 0=rfc3164 /
+									  1=rfc5424 in its high byte. */
 #define LN_INSTR_F_KV_POOL   0x40  /**< OP_STATIC_FIELD: the key and the value are
 									  too long for the inline buffers and live in
 									  the program string pool instead (data.kv_pool).

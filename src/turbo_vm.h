@@ -76,6 +76,14 @@ typedef struct {
 	                                *  parser produces */
 } ln_field_ctx_t;
 
+/*
+ * Convert an RFC3164 (kind 0) or RFC5424 (kind 1) date to a Unix timestamp for
+ * OP_FIELD_DATE with format="timestamp-unix"[-ms]. Allocates nothing; parity
+ * with the standard parser is covered by tests/turbo_test_date.c.
+ */
+int ln_turbo_date2unix(const int kind, const char *const str, const size_t strLen,
+	const int ms, size_t *const parsed, int64_t *const ts);
+
 /*============================================================================
  * Fork State
  *============================================================================*/
