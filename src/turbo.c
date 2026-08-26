@@ -332,6 +332,13 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
 		return 0;  /* no tags */
 
 	int n = json_object_array_length(node->tags);
+	/*
+	 * Two tags on one node may annotate the same field name. The standard
+	 * parser walks the tag bucket from the end and its annotation add
+	 * replaces, so the first tag declared on the rule is the one that
+	 * survives. These fields replace as well and the last emission wins, so
+	 * the tags are walked from the end here to leave the same winner.
+	 */
 	for (int i = 0; i < n; i++) {
 		struct json_object *tagObj = json_object_array_get_idx(node->tags, i);
 		if (!tagObj) continue;
@@ -363,7 +370,7 @@ emit_tags(compiler_t *comp, struct ln_pdag *node)
  */
 static int
 emit_static_field(compiler_t *comp, const char *key, size_t klen,
-				  const char *val, size_t vlen)
+				  const char *val, size_t vlen, int from_annot)
 {
 	ln_instr_t instr = {0};
 
@@ -372,6 +379,7 @@ emit_static_field(compiler_t *comp, const char *key, size_t klen,
 
 	instr.op = OP_STATIC_FIELD;
 	instr.aux = (uint16_t)klen;
+	if (from_annot) instr.flags |= LN_INSTR_F_ANNOT;
 
 	if (klen < sizeof(instr.data.kv.key) && vlen < sizeof(instr.data.kv.val)) {
 		memcpy(instr.data.kv.key, key, klen);
@@ -407,7 +415,14 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 		return 0;
 
 	int n = json_object_array_length(node->tags);
-	for (int i = 0; i < n; i++) {
+	/*
+	 * Two tags on one node may annotate the same field name. The standard
+	 * parser walks the tag bucket from its end and its annotation add
+	 * replaces what came before, so the first tag declared on the rule is the
+	 * one that survives. These fields replace as well and the last emission
+	 * wins, so the tags are walked from the end here to leave the same value.
+	 */
+	for (int i = n - 1; i >= 0; i--) {
 		struct json_object *tagObj = json_object_array_get_idx(node->tags, i);
 		if (!tagObj) continue;
 		const char *tagStr = json_object_get_string(tagObj);
@@ -438,7 +453,7 @@ emit_annotation_fields(compiler_t *comp, struct ln_pdag *node)
 			if (!name_cstr || !name_cstr[0]) continue;
 
 			rc = emit_static_field(comp, name_cstr, strlen(name_cstr),
-					       val_cstr, val_cstr ? strlen(val_cstr) : 0);
+					       val_cstr, val_cstr ? strlen(val_cstr) : 0, 1);
 			if (rc != 0) return -1;
 		}
 	}
@@ -687,7 +702,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			 * matches "4" AND stores network.type="4" in the result. */
 			if (prs->name && prs->name[0]) {
 				if (emit_static_field(comp, prs->name, strlen(prs->name),
-						      litstr, strlen(litstr)) != 0)
+						      litstr, strlen(litstr), 0) != 0)
 					return -1;
 			}
 		} else {
@@ -699,7 +714,7 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			 * %..:{"type":"literal","text":""}% yields an empty string rather
 			 * than no field at all. */
 			if (fname[0] && !(fname[0] == '-' && fname[1] == '\0')) {
-				if (emit_static_field(comp, fname, strlen(fname), "", 0) != 0)
+				if (emit_static_field(comp, fname, strlen(fname), "", 0, 0) != 0)
 					return -1;
 			}
 		}

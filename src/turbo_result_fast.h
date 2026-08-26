@@ -192,6 +192,7 @@ ln_fast_result_clear(ln_fast_result_t *r)
  *
  * FAST PATH: For known field names, pass static string literal.
  */
+
 static inline int
 ln_fast_add_string_static(ln_fast_result_t *r,
 						  const char *name, uint16_t name_len,
@@ -218,6 +219,46 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 	}
 	
 	return 0;
+}
+
+/*
+ * Replace the value of an existing field, or add it when absent.
+ *
+ * An annotation is applied by the standard parser with a replacing add, so a
+ * second annotation writing the same name overwrites the first rather than
+ * leaving two entries under one name. The fast path has to reach the same
+ * single value. The scan is linear, but it runs only for annotation fields,
+ * of which a rule carries a handful.
+ *
+ * @return 0 on success, -1 if the result is full.
+ */
+static inline int
+ln_fast_set_string_static(ln_fast_result_t *r,
+						  const char *name, uint16_t name_len,
+						  const char *val, uint32_t val_len)
+{
+	int i;
+
+	for (i = r->n_fields - 1; i >= 0; i--) {
+		ln_fast_field_t *const f = &r->fields[i];
+
+		if (f->name_len != name_len || f->name == NULL
+			|| memcmp(f->name, name, name_len) != 0)
+			continue;
+		f->flags = LN_FFIELD_STATIC_NAME | LN_FFIELD_STATIC_VAL
+				 | ln_ffield_detect_nested(name, name_len);
+		if (val_len < LN_FAST_INLINE_SIZE) {
+			f->type = LN_FTYPE_STRING_INLINE;
+			memcpy(f->v.inl, val, val_len);
+			f->v.inl[val_len] = '\0';
+		} else {
+			f->type = LN_FTYPE_STRING;
+			f->v.str.ptr = val;
+			f->v.str.len = val_len;
+		}
+		return 0;
+	}
+	return ln_fast_add_string_static(r, name, name_len, val, val_len);
 }
 
 /**

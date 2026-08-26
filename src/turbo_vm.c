@@ -2658,18 +2658,36 @@ vm_exec_instr(ln_vm_t *vm)
 		 * value is in data.kv.val (null-terminated).
 		 * Zero per-message cost beyond the ln_fast_add_string_static call. */
 		if (vm->result) {
+			const int annot = (inst->flags & LN_INSTR_F_ANNOT) != 0;
+
 			if (inst->flags & LN_INSTR_F_KV_POOL) {
-				if (vm->prog->strpool)
-					ln_fast_add_string_static(vm->result,
-							vm->prog->strpool + inst->data.kv_pool.key_off,
-							inst->aux,
-							vm->prog->strpool + inst->data.kv_pool.val_off,
-							inst->data.kv_pool.val_len);
+				if (vm->prog->strpool) {
+					const char *const k = vm->prog->strpool
+							    + inst->data.kv_pool.key_off;
+					const char *const v = vm->prog->strpool
+							    + inst->data.kv_pool.val_off;
+
+					if (annot)
+						ln_fast_set_string_static(vm->result, k,
+								inst->aux, v,
+								inst->data.kv_pool.val_len);
+					else
+						ln_fast_add_string_static(vm->result, k,
+								inst->aux, v,
+								inst->data.kv_pool.val_len);
+				}
 			} else if (inst->data.kv.key[0]) {
-				ln_fast_add_string_static(vm->result,
-						inst->data.kv.key, inst->aux,
-						inst->data.kv.val,
-						(uint32_t)strlen(inst->data.kv.val));
+				const uint32_t vlen =
+					(uint32_t)strlen(inst->data.kv.val);
+
+				if (annot)
+					ln_fast_set_string_static(vm->result,
+							inst->data.kv.key, inst->aux,
+							inst->data.kv.val, vlen);
+				else
+					ln_fast_add_string_static(vm->result,
+							inst->data.kv.key, inst->aux,
+							inst->data.kv.val, vlen);
 			}
 		}
 		vm->pc++;
@@ -4001,9 +4019,14 @@ ln_vm_continue(ln_vm_t *vm)
 				uint16_t nlen;
 				const char *full = vm_build_field_name(vm, key, &nlen);
 
-				if (full != NULL && full[0] != '\0')
-					ln_fast_add_string_static(vm->result, full, nlen,
-								  val, vlen);
+				if (full != NULL && full[0] != '\0') {
+					if (inst->flags & LN_INSTR_F_ANNOT)
+						ln_fast_set_string_static(vm->result, full,
+									  nlen, val, vlen);
+					else
+						ln_fast_add_string_static(vm->result, full,
+									  nlen, val, vlen);
+				}
 			}
 		}
 		pc++;
