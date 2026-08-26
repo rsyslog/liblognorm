@@ -112,6 +112,9 @@ typedef enum {
 	OP_V2_IPTABLES  = 0x73,  /**< Parse iptables name=value pairs */
 	OP_CEE_SYSLOG   = 0x74,  /**< Parse CEE-syslog (@cee: + JSON) */
 	OP_CHECKPOINT_LEA = 0x75, /**< Parse Checkpoint LEA name: value; */
+	OP_FIELD_TIME   = 0x76,  /**< Extract a wall-clock time, HH:MM:SS.
+                              *   aux selects the grammar: 0 reads a 24-hour
+                              *   clock, 1 a 12-hour one. */
 
 	/*=== Debug (0xF0-0xFF) ===*/
 	OP_NOP          = 0xF0,  /**< No operation */

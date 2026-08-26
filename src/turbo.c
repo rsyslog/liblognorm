@@ -153,8 +153,8 @@ prsid_to_opcode(prsid_t prsid)
 	case PRSID_RFC3164DATE:    return OP_FIELD_DATE;
 	case PRSID_RFC5424DATE:    return OP_FIELD_DATE;
 	case PRSID_ISODATE:        return OP_FIELD_DATE;
-	case PRSID_TIME24HR:       return OP_FIELD_DATE;
-	case PRSID_TIME12HR:       return OP_FIELD_DATE;
+	case PRSID_TIME24HR:       return OP_FIELD_TIME;
+	case PRSID_TIME12HR:       return OP_FIELD_TIME;
 	case PRSID_DURATION:       return OP_FIELD_WORD;     /* Parse as word */
 	case PRSID_KERNEL_TIMESTAMP: return OP_FIELD_WORD;   /* Parse as word */
 	case PRSID_CISCO_IFACE:    return OP_FIELD_WORD;     /* Parse as word */
@@ -828,6 +828,10 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	if ((op == OP_FIELD_INT || op == OP_FIELD_HEX || op == OP_FIELD_FLOAT) &&
 	    turbo_numeric_wants_number(op, prs->parser_data))
 		comp->turbo->code[pc].flags |= LN_INSTR_F_NUMERIC;
+
+	/* aux selects the clock the time parser reads. */
+	if (op == OP_FIELD_TIME)
+		comp->turbo->code[pc].aux = (prs->prsid == PRSID_TIME12HR) ? 1u : 0u;
 
 	if (op == OP_FIELD_INT || op == OP_FIELD_HEX) {
 		const uint64_t maxval = turbo_numeric_maxval(op, prs->parser_data);

@@ -98,6 +98,7 @@ ln_opcode_name(ln_opcode_t op)
 	case OP_FIELD_JSON:     return "FIELD_JSON";
 	case OP_FIELD_MAC:      return "FIELD_MAC";
 	case OP_FIELD_DATE:     return "FIELD_DATE";
+	case OP_FIELD_TIME:     return "FIELD_TIME";
 	case OP_FIELD_REGEX:    return "FIELD_REGEX";
 	case OP_FIELD_NAME_VALUE: return "FIELD_NAME_VALUE";
 	case OP_SKIP_SPACE:     return "SKIP_SPACE";
@@ -208,6 +209,7 @@ ln_instr_disasm(const ln_instr_t *inst, char *buf, size_t len)
 	case OP_FIELD_JSON:
 	case OP_FIELD_MAC:
 	case OP_FIELD_DATE:
+	case OP_FIELD_TIME:
 	case OP_V2_IPTABLES:
 	case OP_CEE_SYSLOG:
 		n = snprintf(buf, len, "%s \"%s\"", name, inst->data.str);
@@ -999,6 +1001,45 @@ cef_unescape(ln_vm_t *vm, const char *const s, const size_t len,
  * The name pointer comes from instruction data which is stable
  * for the lifetime of the program. No copying needed.
  */
+
+/*
+ * Match a wall-clock time, exactly eight characters, HH:MM:SS.
+ *
+ * The standard parser accepts a fixed shape and nothing else, so this is a
+ * bounded check rather than a scan: hours 00-23 on a 24-hour clock, 00-12 on a
+ * 12-hour one, then minutes and seconds below 60. Returns 1 on a match.
+ */
+static inline int
+vm_match_time(const char *p, size_t remaining, int is_12hr)
+{
+	if (remaining < 8)
+		return 0;
+	if (is_12hr) {
+		if (p[0] == '0') {
+			if (p[1] < '0' || p[1] > '9') return 0;
+		} else if (p[0] == '1') {
+			if (p[1] < '0' || p[1] > '2') return 0;
+		} else {
+			return 0;
+		}
+	} else {
+		if (p[0] == '0' || p[0] == '1') {
+			if (p[1] < '0' || p[1] > '9') return 0;
+		} else if (p[0] == '2') {
+			if (p[1] < '0' || p[1] > '3') return 0;
+		} else {
+			return 0;
+		}
+	}
+	if (p[2] != ':') return 0;
+	if (p[3] < '0' || p[3] > '5') return 0;
+	if (p[4] < '0' || p[4] > '9') return 0;
+	if (p[5] != ':') return 0;
+	if (p[6] < '0' || p[6] > '5') return 0;
+	if (p[7] < '0' || p[7] > '9') return 0;
+	return 1;
+}
+
 static inline bool
 vm_add_string_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
 {
@@ -2361,6 +2402,15 @@ vm_exec_instr(ln_vm_t *vm)
 		return 1;
 	}
 
+	case OP_FIELD_TIME: {
+		if (!vm_match_time(vm->ip, remaining, inst->aux != 0)) return -1;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str),
+				    vm->ip, 8);
+		vm->ip += 8;
+		vm->pc++;
+		return 1;
+	}
+
 	case OP_FIELD_DATE: {
 		const char *name = turbo_iname(vm, inst, inst->data.str);
 		ln_span_t span;
@@ -3693,6 +3743,19 @@ ln_vm_continue(ln_vm_t *vm)
 		vm->ip = ip;
 		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
+		pc++;
+		DISPATCH();
+	}
+
+	CASE(field_time) {
+		const ln_instr_t *inst = INST();
+		if (UNLIKELY(!vm_match_time(ip, REMAINING(), inst->aux != 0))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		vm->ip = ip;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, 8);
+		ip += 8;
 		pc++;
 		DISPATCH();
 	}

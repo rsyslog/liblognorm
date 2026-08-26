@@ -130,6 +130,7 @@
 		dispatch_table[OP_V2_IPTABLES]     = &&op_v2_iptables; \
 		dispatch_table[OP_CEE_SYSLOG]      = &&op_cee_syslog; \
 		dispatch_table[OP_CHECKPOINT_LEA]   = &&op_checkpoint_lea; \
+		dispatch_table[OP_FIELD_TIME]      = &&op_field_time; \
 		/* Debug (0xF0-0xFF) */ \
 		dispatch_table[OP_NOP]             = &&op_nop; \
 		dispatch_table[OP_DEBUG]           = &&op_debug; \
