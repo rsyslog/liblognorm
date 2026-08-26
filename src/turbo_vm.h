@@ -70,6 +70,10 @@ typedef struct {
 	uint8_t     is_nested;      /**< Create nested object for this context */
 	uint8_t     discard;        /**< Field name was "-": match but store nothing,
 	                              *  including everything nested below it */
+	uint32_t    n_fields_at_push; /**< result->n_fields when this context opened,
+	                                *  so a context that stores nothing can still
+	                                *  produce the empty object the standard
+	                                *  parser produces */
 } ln_field_ctx_t;
 
 /*============================================================================

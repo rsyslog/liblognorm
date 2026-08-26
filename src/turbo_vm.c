@@ -398,6 +398,7 @@ vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 	ctx->name_len = name ? (uint16_t)strlen(name) : 0;
 	ctx->is_nested = is_nested ? 1 : 0;
 	ctx->discard = discard ? 1 : 0;
+	ctx->n_fields_at_push = vm->result ? vm->result->n_fields : 0;
 
 	TRACE("[CTX] push \"%s\" (sp=%u, nested=%d)\n",
 		  name ? name : "(null)", vm->field_ctx_sp, is_nested);
@@ -405,14 +406,38 @@ vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 	return true;
 }
 
+static const char *vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len);
+
 static inline bool
 vm_pop_field_ctx(ln_vm_t *vm)
 {
+	const ln_field_ctx_t *closed;
+
 	if (vm->field_ctx_sp == 0) {
 		vm->error = "field context stack underflow";
 		return false;
 	}
+	closed = &vm->field_ctx[vm->field_ctx_sp - 1];
 	vm->field_ctx_sp--;
+
+	/*
+	 * A named parser that stored nothing still yields an (empty) object in the
+	 * standard parser: a custom type whose members are all "-", or one whose
+	 * matching alternative is an empty literal. Emitting nothing here would
+	 * make the field absent instead of empty. Popped first, so the name is
+	 * built against the enclosing context.
+	 */
+	if (!closed->discard && closed->name != NULL && closed->name[0] != '\0'
+	    && !(closed->name[0] == '.' && closed->name[1] == '\0')
+	    && vm->result != NULL
+	    && vm->result->n_fields == closed->n_fields_at_push) {
+		uint16_t nlen;
+		const char *full = vm_build_field_name(vm, closed->name, &nlen);
+
+		if (full != NULL && full[0] != '\0')
+			ln_fast_add_rawjson_static(vm->result, full, nlen, "{}", 2);
+	}
+
 
 	TRACE("[CTX] pop (sp=%u)\n", vm->field_ctx_sp);
 
