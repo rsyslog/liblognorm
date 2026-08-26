@@ -112,6 +112,12 @@ CASES = [
      "2026-08-10T12:00:00Z z"),
     ("cee-syslog",            "%f:cee-syslog%",             '@cee: {"a":1}'),
     ("name-value-list",       "%f:name-value-list%",        "a=1 b=2"),
+
+    # A key parsed out of the message, longer than any inline buffer: turbo
+    # arena-allocates the name, so it must not be clipped.
+    ("name-value-list-long-key",
+     "%f:name-value-list%",
+     "kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk=1 b=2"),
     ("cef",                   "%f:cef%",                    "CEF:0|V|P|1.0|100|n|5|src=1.2.3.4"),
     ("cisco-interface-spec",  "%f:cisco-interface-spec% z", "GigabitEthernet0/1 z"),
     ("iptables",              "%f:iptables%",               "SRC=1.2.3.4 DST=5.6.7.8 LEN=40"),

@@ -2443,7 +2443,6 @@ vm_exec_instr(ln_vm_t *vm)
 
 			/* --- Store the field --- */
 			/* Arena-allocate name so it outlives this stack frame */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 
@@ -2681,7 +2680,6 @@ vm_exec_instr(ln_vm_t *vm)
 					/* Flag: name without '=', store as null */
 					name_len = sp_off;
 					if (name_len == 0) break;
-					if (name_len > 63) name_len = 63;
 					arena_name = ln_arena_strndup(vm->arena,
 								name_start, name_len);
 					if (!arena_name) break;
@@ -2696,7 +2694,6 @@ vm_exec_instr(ln_vm_t *vm)
 				/* No '=' found: check if rest is a flag */
 				name_len = (size_t)(end - p);
 				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
@@ -2736,7 +2733,6 @@ vm_exec_instr(ln_vm_t *vm)
 			p += val_len;
 
 			/* Store field */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 			vm_add_string_field(vm, arena_name, val_start, val_len);
@@ -2846,7 +2842,6 @@ vm_exec_instr(ln_vm_t *vm)
 			}
 
 			/* Store field */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 			vm_add_string_field(vm, arena_name, val_start, val_len);
@@ -3734,7 +3729,6 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 
 			/* Arena-allocate name so it outlives this stack frame */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 
@@ -4195,7 +4189,6 @@ ln_vm_continue(ln_vm_t *vm)
 				/* Flag: name without value */
 				name_len = sp_off;
 				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
@@ -4209,7 +4202,6 @@ ln_vm_continue(ln_vm_t *vm)
 				/* No '=': rest is a flag */
 				name_len = (size_t)(input_end - p);
 				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
@@ -4248,7 +4240,6 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 			p += val_len;
 
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena,
 						name_start, name_len);
 			if (!arena_name) break;
@@ -4392,7 +4383,6 @@ ln_vm_continue(ln_vm_t *vm)
 				p += val_len + 1; /* skip value + ';' */
 			}
 
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena,
 						name_start, name_len);
 			if (!arena_name) break;
