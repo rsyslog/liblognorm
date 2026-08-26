@@ -45,6 +45,7 @@ tests/turbo_test_cef
 tests/turbo_test_annot
 tests/turbo_test_maxval
 tests/turbo_test_time
+tests/turbo_test_charset
 configure~
 .deps/
 .libs/

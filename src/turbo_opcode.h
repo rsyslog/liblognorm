@@ -150,10 +150,19 @@ typedef struct {
 			int32_t  _pad[14];
 		} jump;
 		
-		/* Field with delimiter */
+		/* Field with delimiter.
+		 *
+		 * char-to and char-sep terminate on a SET of characters, not on one.
+		 * A single-character set is the common case and rides in `delim`, so
+		 * the scan stays a plain byte search. A larger set is interned in the
+		 * program string pool and `set_off` points at it, with aux carrying
+		 * its length; the pool copy is NUL-terminated, which is what the
+		 * set-matching scan expects. */
 		struct {
-			char     name[56]; /**< Field name */
-			uint8_t  delim;    /**< Delimiter char */
+			char     name[52]; /**< Field name */
+			uint32_t set_off;  /**< String-pool offset of the terminator set,
+			                     *   valid only with LN_INSTR_F_CHARSET */
+			uint8_t  delim;    /**< Delimiter char (single-character set) */
 			uint8_t  ass;      /**< Assignator char (for name-value-list) */
 			uint8_t  ignore_ws;/**< name-value-list: trim surrounding whitespace */
 			uint8_t  _pad[1];
@@ -213,6 +222,13 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
  * are free for it to reuse. This one shares its value with
  * LN_INSTR_F_OPTIONAL, which has no meaning for a field that always stores.
  */
+#define LN_INSTR_F_CHARSET   0x02  /**< OP_FIELD_CHAR_TO: the terminator set does
+                                    *   not fit in `delim` and lives in the
+                                    *   program string pool at data.char_to
+                                    *   .set_off, aux holding its length.
+                                    *   Shares its value with
+                                    *   LN_INSTR_F_GREEDY, which this opcode
+                                    *   never carries. */
 #define LN_INSTR_F_ANNOT     0x01  /**< OP_STATIC_FIELD: the field was resolved
                                     *   from an annotation. The standard parser
                                     *   applies an annotation with a replacing

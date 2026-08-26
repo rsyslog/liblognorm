@@ -789,15 +789,37 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		 *
 		 * NOTE: Do NOT use ln_DataForDisplayCharTo() here: it returns
 		 * the display string "char-to{X}", not the raw delimiter char. */
+		const char *term_set = NULL;
+		size_t n_term = 0;
+
 		if (prs->parser_data &&
 			(prs->prsid == PRSID_CHARTO || prs->prsid == PRSID_CHARSEP)) {
 			struct data_CharSeparated *csdata =
 				(struct data_CharSeparated *)prs->parser_data;
 			if (csdata->n_term_chars > 0 && csdata->term_chars) {
 				delim = csdata->term_chars[0];
+				term_set = csdata->term_chars;
+				n_term = csdata->n_term_chars;
 			}
 		}
 		pc = emit_field(comp, op, fname, delim);
+		/*
+		 * The field ends at whichever member of the set comes first, so a set
+		 * larger than one character cannot be carried in `delim`. Intern it
+		 * and let the VM scan for any of them.
+		 */
+		if (pc != UINT32_MAX && n_term > 1) {
+			uint32_t off;
+
+			if (n_term > UINT16_MAX)
+				return -1;
+			off = strpool_intern(comp, term_set, n_term);
+			if (off == UINT32_MAX)
+				return -1;
+			comp->turbo->code[pc].flags |= LN_INSTR_F_CHARSET;
+			comp->turbo->code[pc].data.char_to.set_off = off;
+			comp->turbo->code[pc].aux = (uint16_t)n_term;
+		}
 	} else if (op == OP_V2_IPTABLES || op == OP_CEE_SYSLOG || op == OP_CEF_HDR) {
 		/* Simple opcodes: no parser_data config, just emit with field name */
 		pc = emit_field(comp, op, fname, ' ');

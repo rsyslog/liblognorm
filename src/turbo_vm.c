@@ -2365,9 +2365,18 @@ vm_exec_instr(ln_vm_t *vm)
 		const char *name = turbo_iname(vm, inst, inst->data.char_to.name);
 		char delim = (char)inst->data.char_to.delim;
 		ln_span_t span;
+		int rc;
 
-		if (ln_simd_char_to(vm->ip, remaining, delim, &span) != LN_SIMD_OK)
-			return -1;
+		/* A single-character set is the common case and stays a byte scan. */
+		if (UNLIKELY(inst->flags & LN_INSTR_F_CHARSET)) {
+			if (vm->prog->strpool == NULL) return -1;
+			rc = ln_simd_char_to_set(vm->ip, remaining,
+						 vm->prog->strpool + inst->data.char_to.set_off,
+						 &span);
+		} else {
+			rc = ln_simd_char_to(vm->ip, remaining, delim, &span);
+		}
+		if (rc != LN_SIMD_OK) return -1;
 
 		vm_add_string_field(vm, name, span.start, span.len);
 		vm->ip += span.consumed;
@@ -3673,8 +3682,21 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		ln_span_t span;
+		int rc;
 		delim = (char)inst->data.char_to.delim;
-		if (UNLIKELY(ln_simd_char_to(ip, REMAINING(), delim, &span) != LN_SIMD_OK)) {
+		/* A single-character set is the common case and stays a byte scan. */
+		if (UNLIKELY(inst->flags & LN_INSTR_F_CHARSET)) {
+			if (UNLIKELY(prog->strpool == NULL)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			rc = ln_simd_char_to_set(ip, REMAINING(),
+						 prog->strpool + inst->data.char_to.set_off,
+						 &span);
+		} else {
+			rc = ln_simd_char_to(ip, REMAINING(), delim, &span);
+		}
+		if (UNLIKELY(rc != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
 		}

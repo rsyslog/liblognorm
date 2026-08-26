@@ -780,6 +780,28 @@ ln_simd_char_to(const char *buf, size_t len, char delim, ln_span_t *span)
 }
 
 int
+ln_simd_char_to_set(const char *buf, size_t len, const char *chars, ln_span_t *span)
+{
+	size_t pos;
+
+	if (!buf || !span || !chars) return LN_SIMD_EINVAL;
+
+	pos = ln_simd_find_char_set(buf, len, chars);
+
+	span->start = buf;
+	span->len = pos;
+
+	if (pos < len) {
+		/* Stop AT the terminator, as ln_simd_char_to() does, so the next
+		 * instruction can match and consume it. */
+		span->consumed = pos;
+		return LN_SIMD_OK;
+	}
+	span->consumed = len;
+	return LN_SIMD_ENOTFOUND;
+}
+
+int
 ln_simd_string_to(const char *buf, size_t len,
 				  const char *delim, size_t delim_len,
 				  ln_span_t *span)

@@ -156,6 +156,16 @@ size_t ln_simd_find_char(const char *buf, size_t len, char c);
 size_t ln_simd_find_char_set(const char *buf, size_t len, const char *chars);
 
 /**
+ * @brief char-to over a SET of terminators.
+ *
+ * Same contract as ln_simd_char_to(), except the field ends at whichever
+ * member of @p chars appears first. @p chars is a null-terminated set.
+ *
+ * @return LN_SIMD_OK when a terminator was found, LN_SIMD_ENOTFOUND otherwise.
+ */
+int ln_simd_char_to_set(const char *buf, size_t len, const char *chars, ln_span_t *span);
+
+/**
  * @brief Find first character NOT in a set.
  *
  * Inverse of find_char_set - finds first character that doesn't match.
