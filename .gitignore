@@ -41,6 +41,7 @@ tests/turbo_test_vm
 tests/turbo_test_json
 tests/turbo_test_date
 tests/turbo_test_dupfield
+tests/turbo_test_cef
 configure~
 .deps/
 .libs/

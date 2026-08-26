@@ -900,6 +900,99 @@ vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 	return prefixed;
 }
 
+/*
+ * CEF writes a delimiter that belongs to a value as "\|" or "\=", and a
+ * literal backslash as "\\". A value therefore ends at the first delimiter
+ * that is not itself escaped.
+ */
+static const char *
+cef_find_unescaped(const char *const base, const char *s,
+				   const char *const end, const char c)
+{
+	while (s < end) {
+		const size_t off = ln_simd_find_char(s, (size_t)(end - s), c);
+		const char *hit;
+		const char *b;
+		size_t nbs = 0;
+
+		if (off >= (size_t)(end - s))
+			return NULL;
+		hit = s + off;
+		b = hit;
+		while (b > base && *(b - 1) == '\\') {
+			++nbs;
+			--b;
+		}
+		if ((nbs & 1) == 0)
+			return hit;
+		s = hit + 1;
+	}
+	return NULL;
+}
+
+/*
+ * Remove CEF escape characters. A header field escapes only the delimiter and
+ * the backslash itself; an extension value additionally spells a newline as
+ * "\n", a carriage return as "\r" and a solidus as "\/". Any other escape is
+ * not valid CEF and rejects the message, which is what the standard parser
+ * does, so an input both engines see must be accepted or refused by both.
+ *
+ * A value carrying no backslash is the common case and is returned as a span
+ * into the input, so nothing is copied. Only an escaped value is rewritten,
+ * into the arena, which keeps the per-message allocation count at zero for
+ * ordinary input.
+ *
+ * Returns 0 on success, -1 if the value carries an escape CEF does not define.
+ */
+static int
+cef_unescape(ln_vm_t *vm, const char *const s, const size_t len,
+			 const int is_ext, const char **const out,
+			 size_t *const out_len)
+{
+	char *dst;
+	size_t si, di = 0;
+
+	if (len == 0 || ln_simd_find_char(s, len, '\\') >= len) {
+		*out = s;
+		*out_len = len;
+		return 0;
+	}
+	dst = (char *)ln_arena_alloc(vm->arena, len);
+	if (dst == NULL) {
+		*out = s;
+		*out_len = len;
+		return 0;
+	}
+	for (si = 0; si < len; ++si) {
+		char c = s[si];
+
+		if (c != '\\') {
+			dst[di++] = c;
+			continue;
+		}
+		if (si + 1 >= len)
+			return -1;
+		c = s[++si];
+		if (is_ext) {
+			switch (c) {
+			case '=':  dst[di++] = '=';  break;
+			case '\\': dst[di++] = '\\'; break;
+			case 'n':  dst[di++] = '\n'; break;
+			case 'r':  dst[di++] = '\r'; break;
+			case '/':  dst[di++] = '/';  break;
+			default:   return -1;
+			}
+		} else {
+			if (c != '\\' && c != '|')
+				return -1;
+			dst[di++] = c;
+		}
+	}
+	*out = dst;
+	*out_len = di;
+	return 0;
+}
+
 /**
  * @brief Add string field using fast result.
  *
@@ -2887,6 +2980,7 @@ vm_exec_instr(ln_vm_t *vm)
 		/* Parse 6 pipe-delimited header fields with escape handling */
 		for (hdr_idx = 0; hdr_idx < 6; hdr_idx++) {
 			const char *field_start = p;
+			const char *field_val;
 			size_t field_len;
 
 			/* Scan for unescaped '|' or end of input */
@@ -2900,8 +2994,13 @@ vm_exec_instr(ln_vm_t *vm)
 			}
 
 			field_len = (size_t)(p - field_start);
+			if (cef_unescape(vm, field_start, field_len, 0,
+							 &field_val, &field_len) != 0) {
+				if (name[0]) vm_pop_field_ctx(vm);
+				return -1;
+			}
 			vm_add_string_field(vm, hdr_names[hdr_idx],
-								field_start, field_len);
+								field_val, field_len);
 
 			if (hdr_idx < 5) {
 				/* Expect pipe separator between fields */
@@ -2936,6 +3035,8 @@ vm_exec_instr(ln_vm_t *vm)
 				const char *val_start;
 				size_t val_len;
 				const char *next_eq;
+				const char *key_eq;
+				const char *val_span;
 				const char *scan;
 				char *arena_key;
 
@@ -2958,15 +3059,7 @@ vm_exec_instr(ln_vm_t *vm)
 				 * Scan backwards from next '=' to find the space
 				 * before the next key. */
 				val_start = p;
-				next_eq = NULL;
-				scan = p;
-				while (scan < end) {
-					size_t off = ln_simd_find_char(scan,
-								(size_t)(end - scan), '=');
-					if (off >= (size_t)(end - scan)) break;
-					next_eq = scan + off;
-					break;
-				}
+				next_eq = cef_find_unescaped(val_start, val_start, end, '=');
 
 				if (next_eq && next_eq > val_start) {
 					/* Walk back from '=' to find space before key */
@@ -2989,12 +3082,17 @@ vm_exec_instr(ln_vm_t *vm)
 					p = end;
 				}
 
-				if (key_len > 63) key_len = 63;
 				arena_key = ln_arena_strndup(vm->arena,
 							key_start, key_len);
 				if (!arena_key) break;
+				if (cef_unescape(vm, val_start, val_len, 1,
+								 &val_span, &val_len) != 0) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					return -1;
+				}
 				vm_add_string_field(vm, arena_key,
-									val_start, val_len);
+									val_span, val_len);
 				n_ext++;
 			}
 
@@ -4030,6 +4128,7 @@ ln_vm_continue(ln_vm_t *vm)
 		/* Parse 6 pipe-delimited header fields */
 		for (hdr_idx = 0; hdr_idx < 6; hdr_idx++) {
 			const char *field_start = p;
+			const char *field_val;
 			size_t field_len;
 
 			while (p < input_end) {
@@ -4042,8 +4141,14 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 
 			field_len = (size_t)(p - field_start);
+			if (cef_unescape(vm, field_start, field_len, 0,
+							 &field_val, &field_len) != 0) {
+				if (name[0]) vm_pop_field_ctx(vm);
+				WRITEBACK();
+				BACKTRACK();
+			}
 			vm_add_string_field(vm, cef_hdr_names[hdr_idx],
-								field_start, field_len);
+								field_val, field_len);
 
 			if (hdr_idx < 5) {
 				if (UNLIKELY(p >= input_end || *p != '|')) {
@@ -4075,6 +4180,8 @@ ln_vm_continue(ln_vm_t *vm)
 				const char *val_start;
 				size_t val_len;
 				const char *next_eq;
+				const char *key_eq;
+				const char *val_span;
 				const char *scan;
 				char *arena_key;
 
@@ -4082,8 +4189,9 @@ ln_vm_continue(ln_vm_t *vm)
 				if (p >= input_end) break;
 
 				key_start = p;
-				eq_off = ln_simd_find_char(p, (size_t)(input_end - p), '=');
-				if (eq_off >= (size_t)(input_end - p)) break;
+				key_eq = cef_find_unescaped(p, p, input_end, '=');
+				if (key_eq == NULL) break;
+				eq_off = (size_t)(key_eq - p);
 
 				key_len = eq_off;
 				if (key_len == 0) break;
@@ -4091,15 +4199,7 @@ ln_vm_continue(ln_vm_t *vm)
 				p += key_len + 1;
 
 				val_start = p;
-				next_eq = NULL;
-				scan = p;
-				while (scan < input_end) {
-					size_t off = ln_simd_find_char(scan,
-								(size_t)(input_end - scan), '=');
-					if (off >= (size_t)(input_end - scan)) break;
-					next_eq = scan + off;
-					break;
-				}
+				next_eq = cef_find_unescaped(val_start, val_start, input_end, '=');
 
 				if (next_eq && next_eq > val_start) {
 					const char *kstart = next_eq;
@@ -4120,12 +4220,18 @@ ln_vm_continue(ln_vm_t *vm)
 					p = input_end;
 				}
 
-				if (key_len > 63) key_len = 63;
 				arena_key = ln_arena_strndup(vm->arena,
 							key_start, key_len);
 				if (!arena_key) break;
+				if (cef_unescape(vm, val_start, val_len, 1,
+								 &val_span, &val_len) != 0) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					WRITEBACK();
+					BACKTRACK();
+				}
 				vm_add_string_field(vm, arena_key,
-									val_start, val_len);
+									val_span, val_len);
 				n_ext++;
 			}
 
