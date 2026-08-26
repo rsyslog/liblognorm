@@ -31,15 +31,14 @@
 #include "turbo_vm.h"
 #include "turbo_vm_opt.h"
 #include "turbo_simd.h"
+/* enum FMT_MODE value FMT_AS_TIMESTAMP_UX_MS; kept in lockstep with parser.c. */
+#define FMT_MODE_TIMESTAMP_UX_MS 3
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <time.h>
-
-/* enum FMT_MODE value FMT_AS_TIMESTAMP_UX_MS; kept in lockstep with parser.c. */
-#define FMT_MODE_TIMESTAMP_UX_MS 3
 #include <locale.h>
 #if defined(__has_include)
 # if __has_include(<xlocale.h>)
@@ -335,6 +334,7 @@ ln_vm_reset(ln_vm_t *vm)
 	vm->error = NULL;
 }
 
+
 /*============================================================================
  * Date conversion for OP_FIELD_DATE with format="timestamp-unix"[-ms]
  *
@@ -584,6 +584,12 @@ vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 		return false;
 	}
 
+	/*
+	 * A context named ".." takes the name of the level above it: that is what
+	 * ".." means, and it is how the standard parser collapses a single-member
+	 * subtree into its parent's name. Pushing the literal instead put ".." (or
+	 * nothing) into every field path produced underneath.
+	 */
 	if (name != NULL && name[0] == '.' && name[1] == '.' && name[2] == '\0') {
 		/* Already a full path: the level above carries one. */
 		name = (vm->field_ctx_sp > 0)
@@ -675,7 +681,6 @@ vm_pop_field_ctx(ln_vm_t *vm)
 		if (full != NULL && full[0] != '\0')
 			ln_fast_add_rawjson_static(vm->result, full, nlen, "{}", 2);
 	}
-
 
 	TRACE("[CTX] pop (sp=%u)\n", vm->field_ctx_sp);
 
@@ -951,6 +956,7 @@ vm_add_null_field(ln_vm_t *vm, const char *name)
 
 	return ln_fast_add_null_static(vm->result, full_name, name_len) == 0;
 }
+
 /**
  * @brief Add a raw JSON value (emitted verbatim, without quotes) using fast
  * result. Used for float format="number", where the matched text is already a
@@ -2258,8 +2264,14 @@ vm_exec_instr(ln_vm_t *vm)
 	case OP_FIELD_DATE: {
 		const char *name = turbo_iname(vm, inst, inst->data.str);
 		ln_span_t span;
+		int rc;
 
-		int rc = ln_simd_timestamp(vm->ip, remaining, &span, NULL);
+		/* format="timestamp-unix"[-ms] needs an epoch conversion the VM
+		 * does not implement; decline so the walker serves this message
+		 * rather than storing the raw text the walker would not store. */
+		if (inst->flags & LN_INSTR_F_DATE_FMT) return -1;
+
+		rc = ln_simd_timestamp(vm->ip, remaining, &span, NULL);
 		if (rc != LN_SIMD_OK) return -1;
 
 		vm_add_string_field(vm, name, span.start, span.len);

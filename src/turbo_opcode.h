@@ -197,7 +197,7 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 									  string pool: the opcode's inline name buffer
 									  holds a uint32 pool offset instead of the
 									  name. Lets turbo carry names longer than the
-									  inline buffer, matching the standard parser. */
+									  inline buffer, like the standard parser. */
 #define LN_INSTR_F_NUMERIC   0x20  /**< Numeric field parsed with format="number":
 									  emit a native JSON number instead of a string,
 									  matching the standard parser. */
@@ -207,7 +207,7 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 									  1=rfc5424 in its high byte. */
 #define LN_INSTR_F_KV_POOL   0x40  /**< OP_STATIC_FIELD: the key and the value are
 									  too long for the inline buffers and live in
-									  the program string pool instead (data.kv_pool).
+									  the string pool instead (data.kv_pool).
 									  Lets turbo carry annotation values of any
 									  length, matching the standard parser. */
 

@@ -255,7 +255,8 @@ emit_literal(compiler_t *comp, const char *lit, size_t len)
 {
 	ln_instr_t instr = {0};
 	instr.op = OP_LITERAL;
-	if (len >= sizeof(instr.data.str)) return UINT32_MAX;  /* too long for inline: fall back to the standard parser */
+	/* too long for the inline buffer: fall back to the standard parser */
+	if (len >= sizeof(instr.data.str)) return UINT32_MAX;
 	instr.aux = (uint16_t)len;
 	memcpy(instr.data.str, lit, len);
 	return emit(comp, &instr);
@@ -693,6 +694,14 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			ln_instr_t nop = {0};
 			nop.op = OP_NOP;
 			pc = emit(comp, &nop);
+			/* An empty literal matches nothing but still stores its (empty)
+			 * value when named, which is how an "optional" alternative such as
+			 * %..:{"type":"literal","text":""}% yields an empty string rather
+			 * than no field at all. */
+			if (fname[0] && !(fname[0] == '-' && fname[1] == '\0')) {
+				if (emit_static_field(comp, fname, strlen(fname), "", 0) != 0)
+					return -1;
+			}
 		}
 	} else if (op == OP_SKIP_SPACE) {
 		/* whitespace field: matches one or more spaces/tabs. When named, the
