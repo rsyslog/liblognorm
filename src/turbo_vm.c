@@ -1136,6 +1136,38 @@ json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
 		c->n_emitted++;
 }
 
+/*
+ * Emit a nested array verbatim, tagged LN_FFIELD_RAW_JSON.
+ *
+ * Flattening an array to .0/.1/... keys loses the fact that it was an array:
+ * both the JSON serializer and any consumer of the fast result can only rebuild
+ * an object with numeric keys, and "0" is indistinguishable from a genuine
+ * object key. Keeping the array as a raw JSON span is what %field:json% already
+ * does for a whole object, so consumers that handle RAW_JSON need no change.
+ */
+static int
+json_emit_rawjson(ln_json_ctx_t *c, const char *raw, size_t raw_len)
+{
+	const char *key;
+	const char *val;
+
+	if (c->validate_only) return 0;
+	if (c->full || c->vm->result == NULL) return 0;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return 0;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	val = ln_arena_strndup(c->vm->arena, raw, raw_len);
+	if (!key || !val) return -1;   /* arena exhausted: caller flattens instead */
+	if (ln_fast_add_rawjson_static(c->vm->result, key, (uint16_t)c->key_len,
+				       val, (uint32_t)raw_len) != 0)
+		return -1;
+	c->n_emitted++;
+	return 0;
+}
+
 static void
 json_emit_int(ln_json_ctx_t *c, int64_t v)
 {
@@ -1371,9 +1403,34 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 	case '{':
 		c->pos++;
 		return json_parse_object(c, depth);
-	case '[':
+	case '[': {
+		size_t start = c->pos;
+		bool saved_validate_only = c->validate_only;
+		int rc;
+
+		/* A top-level array has no key to hang the value on; merging one
+		 * into the parent object is not meaningful, so leave that case on
+		 * the original path. */
+		if (c->key_len == 0) {
+			c->pos++;
+			return json_parse_array(c, depth);
+		}
+		/* Walk the array to validate it and find its end without emitting
+		 * per-element fields, then store the whole span. */
+		c->validate_only = true;
 		c->pos++;
+		rc = json_parse_array(c, depth);
+		c->validate_only = saved_validate_only;
+		if (rc != 0) return -1;
+		if (json_emit_rawjson(c, c->buf + start, c->pos - start) == 0)
+			return 0;
+		/* The span did not fit the per-message arena (it is sized for a
+		 * whole message, and a large array can exceed what is left).
+		 * Fall back to per-element flattening, which allocates in small
+		 * pieces: the array shape is lost, but no data is. */
+		c->pos = start + 1;
 		return json_parse_array(c, depth);
+	}
 	case '"': {
 		const char *s; size_t sl;
 		c->pos++;
