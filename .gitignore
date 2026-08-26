@@ -43,6 +43,7 @@ tests/turbo_test_date
 tests/turbo_test_dupfield
 tests/turbo_test_cef
 tests/turbo_test_annot
+tests/turbo_test_maxval
 configure~
 .deps/
 .libs/

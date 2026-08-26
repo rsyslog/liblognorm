@@ -2218,6 +2218,10 @@ vm_exec_instr(ln_vm_t *vm)
 		size_t len;
 
 		if (parse_number(vm->ip, remaining, &value, &len) != 0) return -1;
+		/* aux carries "maxval"; 0 means unconstrained. */
+		if (inst->aux != 0
+		    && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))
+			return -1;
 
 		/* Native JSON integer with format="number", the matched string otherwise. */
 		if (inst->flags & LN_INSTR_F_NUMERIC)
@@ -2289,6 +2293,9 @@ vm_exec_instr(ln_vm_t *vm)
 		size_t len;
 
 		if (parse_hex(vm->ip, remaining, &value, &len) != 0) return -1;
+		if (inst->aux != 0
+		    && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))
+			return -1;
 
 		/* Native JSON integer (decimal) with format="number", the matched hex
 		 * literal as a string otherwise. */
@@ -3490,6 +3497,12 @@ ln_vm_continue(ln_vm_t *vm)
 			WRITEBACK();
 			BACKTRACK();
 		}
+		/* aux carries "maxval"; 0 means unconstrained. */
+		if (UNLIKELY(inst->aux != 0
+			     && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		vm->ip = ip;
 		/* Native JSON integer with format="number", the matched string otherwise. */
 		if (inst->flags & LN_INSTR_F_NUMERIC)
@@ -3572,6 +3585,11 @@ ln_vm_continue(ln_vm_t *vm)
 		int64_t value;
 		size_t len;
 		if (UNLIKELY(parse_hex(ip, REMAINING(), &value, &len) != 0)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		if (UNLIKELY(inst->aux != 0
+			     && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))) {
 			WRITEBACK();
 			BACKTRACK();
 		}

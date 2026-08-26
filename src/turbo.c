@@ -583,6 +583,25 @@ turbo_numeric_wants_number(ln_opcode_t op, const void *pdata)
 	return 0;
 }
 
+/*
+ * "maxval" bounds a number parser: the standard parser refuses a value above
+ * it, which is how two rule alternatives that differ only in that bound are
+ * told apart. The bound rides in aux, where 0 means unconstrained, matching
+ * the standard parser's own test. Only number and hexnumber carry one.
+ */
+static uint64_t
+turbo_numeric_maxval(ln_opcode_t op, const void *pdata)
+{
+	if (pdata == NULL) return 0;
+	if (op == OP_FIELD_INT) {
+		const int64_t m = ((const struct data_Number *)pdata)->maxval;
+		return m > 0 ? (uint64_t)m : 0;
+	}
+	if (op == OP_FIELD_HEX)
+		return ((const struct data_HexNumber *)pdata)->maxval;
+	return 0;
+}
+
 /* Date parsers accept format="timestamp-unix"/"timestamp-unix-ms", which make
  * the walker emit an epoch integer instead of the matched text. Keep in lockstep
  * with parser.c's enum FMT_MODE. */
@@ -809,6 +828,16 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	if ((op == OP_FIELD_INT || op == OP_FIELD_HEX || op == OP_FIELD_FLOAT) &&
 	    turbo_numeric_wants_number(op, prs->parser_data))
 		comp->turbo->code[pc].flags |= LN_INSTR_F_NUMERIC;
+
+	if (op == OP_FIELD_INT || op == OP_FIELD_HEX) {
+		const uint64_t maxval = turbo_numeric_maxval(op, prs->parser_data);
+
+		/* A bound too large for aux cannot be carried, and dropping it would
+		 * accept values the standard parser refuses. Refuse to compile. */
+		if (maxval > UINT16_MAX)
+			return -1;
+		comp->turbo->code[pc].aux = (uint16_t)maxval;
+	}
 
 	/* date-rfc3164/date-rfc5424 with format="timestamp-unix"[-ms] emit an epoch
 	 * integer rather than the matched text. Record the requested mode and which
