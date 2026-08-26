@@ -346,6 +346,43 @@ vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 		return false;
 	}
 
+	if (name != NULL && name[0] == '.' && name[1] == '.' && name[2] == '\0') {
+		/* Already a full path: the level above carries one. */
+		name = (vm->field_ctx_sp > 0)
+		     ? vm->field_ctx[vm->field_ctx_sp - 1].name
+		     : NULL;
+	} else if (name != NULL && name[0] != '\0'
+		   && !(name[0] == '.' && name[1] == '\0')
+		   && !(name[0] == '-' && name[1] == '\0')
+		   && vm->field_ctx_sp > 0) {
+		/*
+		 * Contexts nest: %log:@outer% containing %mid:@inner% must yield
+		 * log.mid.<field>. Only the top of the stack is consulted when a
+		 * field name is built, so each context stores the whole path rather
+		 * than its own segment; otherwise every level but the innermost was
+		 * dropped.
+		 */
+		const ln_field_ctx_t *parent = &vm->field_ctx[vm->field_ctx_sp - 1];
+
+		if (parent->name != NULL && parent->name[0] != '\0'
+		    && !(parent->name[0] == '.' && parent->name[1] == '\0')
+		    && !parent->discard) {
+			char buf[512];   /* same ceiling as the JSON key scratch */
+			size_t nl = strlen(name);
+
+			if ((size_t)parent->name_len + 1 + nl < sizeof(buf)) {
+				memcpy(buf, parent->name, parent->name_len);
+				buf[parent->name_len] = '.';
+				memcpy(buf + parent->name_len + 1, name, nl + 1);
+				{
+					const char *dup = ln_arena_strndup(vm->arena, buf,
+							parent->name_len + 1 + nl);
+					if (dup != NULL) name = dup;
+				}
+			}
+		}
+	}
+
 	/*
 	 * A field named "-" is matched but not stored, and that applies to a whole
 	 * subtree, not just a scalar: the standard parser discards the parser's
@@ -2614,14 +2651,11 @@ vm_exec_instr(ln_vm_t *vm)
 		if (p < end) {
 			/* Extensions nest under the field, so compose "<field>.Extensions"
 			 * (the context stack tracks only the top level). */
-			char ext_buf[256];
 			const char *ext_ctx = "Extensions";
 			int n_ext;
 
-			if (name[0]) {
-				int en = snprintf(ext_buf, sizeof(ext_buf), "%s.Extensions", name);
-				if (en > 0 && en < (int)sizeof(ext_buf)) ext_ctx = ext_buf;
-			}
+			/* Push the plain segment: the context stack composes the
+			 * full path itself. */
 			vm_push_field_ctx(vm, ext_ctx, false);
 			n_ext = 0;
 
@@ -3554,18 +3588,31 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(static_field) {
 		const ln_instr_t *inst = INST();
 		if (vm->result) {
+			const char *key = NULL;
+			const char *val = NULL;
+			uint32_t vlen = 0;
+
 			if (inst->flags & LN_INSTR_F_KV_POOL) {
-				if (prog->strpool)
-					ln_fast_add_string_static(vm->result,
-							prog->strpool + inst->data.kv_pool.key_off,
-							inst->aux,
-							prog->strpool + inst->data.kv_pool.val_off,
-							inst->data.kv_pool.val_len);
+				if (prog->strpool) {
+					key = prog->strpool + inst->data.kv_pool.key_off;
+					val = prog->strpool + inst->data.kv_pool.val_off;
+					vlen = inst->data.kv_pool.val_len;
+				}
 			} else if (inst->data.kv.key[0]) {
-				ln_fast_add_string_static(vm->result,
-						inst->data.kv.key, inst->aux,
-						inst->data.kv.val,
-						(uint32_t)strlen(inst->data.kv.val));
+				key = inst->data.kv.key;
+				val = inst->data.kv.val;
+				vlen = (uint32_t)strlen(inst->data.kv.val);
+			}
+			/* Resolve like any other field: a static field inside a context
+			 * takes its prefix, ".." takes the enclosing name, and "-" stores
+			 * nothing. Adding it raw skipped all three. */
+			if (key != NULL) {
+				uint16_t nlen;
+				const char *full = vm_build_field_name(vm, key, &nlen);
+
+				if (full != NULL && full[0] != '\0')
+					ln_fast_add_string_static(vm->result, full, nlen,
+								  val, vlen);
 			}
 		}
 		pc++;
@@ -3721,14 +3768,11 @@ ln_vm_continue(ln_vm_t *vm)
 		if (p < input_end) {
 			/* Extensions nest under the field, so compose "<field>.Extensions"
 			 * (the context stack tracks only the top level). */
-			char ext_buf[256];
 			const char *ext_ctx = "Extensions";
 			int n_ext = 0;
 
-			if (name[0]) {
-				int en = snprintf(ext_buf, sizeof(ext_buf), "%s.Extensions", name);
-				if (en > 0 && en < (int)sizeof(ext_buf)) ext_ctx = ext_buf;
-			}
+			/* Push the plain segment: the context stack composes the
+			 * full path itself. */
 			vm_push_field_ctx(vm, ext_ctx, false);
 
 			while (p < input_end) {
