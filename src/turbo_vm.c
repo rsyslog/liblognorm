@@ -611,6 +611,23 @@ vm_add_int_field(ln_vm_t *vm, const char *name, int64_t val)
 	return ln_fast_add_int_static(vm->result, full_name, name_len, val) == 0;
 }
 
+/*
+ * Add a JSON null field. A valueless iptables flag is a key with a null value
+ * in the standard parser, not a key with an empty string.
+ */
+static bool
+vm_add_null_field(ln_vm_t *vm, const char *name)
+{
+	uint16_t name_len;
+	const char *full_name;
+
+	if (!vm->result) return true;
+
+	full_name = vm_build_field_name(vm, name, &name_len);
+	if (!full_name || !full_name[0]) return true;
+
+	return ln_fast_add_null_static(vm->result, full_name, name_len) == 0;
+}
 /**
  * @brief Add a raw JSON value (emitted verbatim, without quotes) using fast
  * result. Used for float format="number", where the matched text is already a
@@ -1219,6 +1236,16 @@ json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 	char stackbuf[64];
 	const char *num;
 
+	/*
+	 * libfastjson keeps the source spelling of a number: 1.50 stays 1.50,
+	 * 100.0 stays 100.0, 1e3 stays 1e3. Storing the span verbatim is
+	 * therefore what matches the standard parser byte for byte, and it
+	 * skips strtod entirely. The parse below is only the fallback for a
+	 * span the arena could not take.
+	 */
+	if (json_emit_rawjson(c, s, len) == 0)
+		return;
+
 	if (len < sizeof(stackbuf)) {
 		memcpy(stackbuf, s, len);
 		stackbuf[len] = '\0';
@@ -1230,11 +1257,42 @@ json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 	json_emit_double(c, strtod_l(num, NULL, (locale_t)c->vm->c_locale));
 }
 
-/* bool emitted as the STRING "true"/"false" (string-store convention). */
 static void
 json_emit_bool(ln_json_ctx_t *c, bool v)
 {
-	json_emit_string(c, v ? "true" : "false", v ? 4 : 5);
+	const char *key;
+
+	if (c->validate_only) return;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_bool_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
+		c->n_emitted++;
+}
+
+/* A null member is part of the document; dropping it would make the field
+ * absent, which is not what the standard parser produces. */
+static void
+json_emit_null(ln_json_ctx_t *c)
+{
+	const char *key;
+
+	if (c->validate_only) return;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_null_static(c->vm->result, key, (uint16_t)c->key_len) == 0)
+		c->n_emitted++;
 }
 
 static int json_parse_value(ln_json_ctx_t *c, int depth);
@@ -1450,7 +1508,8 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 		return -1;
 	case 'n':
 		if (c->len - c->pos >= 4 && memcmp(c->buf + c->pos, "null", 4) == 0) {
-			c->pos += 4; return 0;        /* null -> skip (no field) */
+			json_emit_null(c);
+			c->pos += 4; return 0;
 		}
 		return -1;
 	default:
@@ -2291,7 +2350,7 @@ vm_exec_instr(ln_vm_t *vm)
 					arena_name = ln_arena_strndup(vm->arena,
 								name_start, name_len);
 					if (!arena_name) break;
-					vm_add_string_field(vm, arena_name, "", 0);
+					vm_add_null_field(vm, arena_name);
 					n_pairs++;
 					p += sp_off;
 					continue;
@@ -2306,7 +2365,7 @@ vm_exec_instr(ln_vm_t *vm)
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
+				vm_add_null_field(vm, arena_name);
 				n_pairs++;
 				p = end;
 				break;
@@ -3726,8 +3785,8 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(v2_iptables) {
 		/*
 		 * Parse iptables-format name=value pairs.
-		 * Minimum 2 pairs required.  Flags (names without '=')
-		 * stored as empty string values.
+		 * Minimum 2 pairs required.  A flag (a name without '=') gets a
+		 * null value, as the standard parser gives it.
 		 */
 		const ln_instr_t *inst = INST();
 		const char *ctx_name;
@@ -3774,7 +3833,7 @@ ln_vm_continue(ln_vm_t *vm)
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
+				vm_add_null_field(vm, arena_name);
 				n_pairs++;
 				p += sp_off;
 				continue;
@@ -3788,7 +3847,7 @@ ln_vm_continue(ln_vm_t *vm)
 				arena_name = ln_arena_strndup(vm->arena,
 							name_start, name_len);
 				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
+				vm_add_null_field(vm, arena_name);
 				n_pairs++;
 				p = input_end;
 				break;

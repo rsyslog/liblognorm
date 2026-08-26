@@ -243,6 +243,55 @@ ln_fast_add_int_static(ln_fast_result_t *r,
 }
 
 /**
+ * @brief Add boolean field with static name.
+ *
+ * The JSON flattener used to store booleans as the strings "true"/"false",
+ * which the serializer then quoted; the standard parser emits a JSON boolean.
+ */
+static inline int
+ln_fast_add_bool_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len,
+						int val)
+{
+	ln_fast_field_t *f;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+
+	f = &r->fields[r->n_fields++];
+	f->name = name;
+	f->name_len = name_len;
+	f->type = LN_FTYPE_BOOL;
+	f->flags = LN_FFIELD_STATIC_NAME
+			 | ln_ffield_detect_nested(name, name_len);
+	f->v.b = val ? 1 : 0;
+
+	return 0;
+}
+
+/**
+ * @brief Add JSON null field with static name.
+ *
+ * A null member is part of the document: dropping it makes the field absent
+ * rather than null, which is a different result from the standard parser's.
+ */
+static inline int
+ln_fast_add_null_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len)
+{
+	ln_fast_field_t *f;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+
+	f = &r->fields[r->n_fields++];
+	f->name = name;
+	f->name_len = name_len;
+	f->type = LN_FTYPE_NULL;
+	f->flags = LN_FFIELD_STATIC_NAME
+			 | ln_ffield_detect_nested(name, name_len);
+	f->v.i = 0;
+
+	return 0;
+}
+
+/**
  * @brief Add double field with static name.
  */
 static inline int
