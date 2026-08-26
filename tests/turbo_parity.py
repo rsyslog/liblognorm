@@ -82,6 +82,34 @@ CASES = [
     ("time-24hr",             "%f:time-24hr% z",            "13:45:00 z"),
     ("duration",              "%f:duration% z",             "01:30:00 z"),
     ("json",                  "%f:json%",                   '{"a":1,"b":[1,2]}'),
+
+    # %.:json% merges the parsed object into the parent rather than storing it
+    # under a name. Arrays inside it must stay arrays: flattening them to .0/.1
+    # keys is indistinguishable from an object with numeric keys.
+    ("json-merge",            "%.:json%",                   '{"a":1}'),
+    ("json-merge-array",      "%.:json%",                   '{"c":["x","y"]}'),
+    ("json-merge-array-obj",  "%.:json%",       '{"a":{"b":[{"n":"0"},{"n":"1"}]}}'),
+    ("json-merge-array-deep", "%.:json%",       '{"a":{"b":{"c":[1,[2,3]]}}}'),
+
+    # Date parsers accept a format option that changes the emitted JSON type.
+    ("date-rfc3164-ts-unix",
+     '%{"name":"ts","type":"date-rfc3164","format":"timestamp-unix"}% z',
+     "Aug 10 12:00:00 z"),
+    ("date-rfc3164-ts-unix-ms",
+     '%{"name":"ts","type":"date-rfc3164","format":"timestamp-unix-ms"}% z',
+     "Aug 10 12:00:00 z"),
+    ("date-rfc3164-fmt-string",
+     '%{"name":"ts","type":"date-rfc3164","format":"string"}% z',
+     "Aug 10 12:00:00 z"),
+    ("date-rfc5424-ts-unix",
+     '%{"name":"ts","type":"date-rfc5424","format":"timestamp-unix"}% z',
+     "2026-08-10T12:00:00Z z"),
+    ("date-rfc5424-ts-unix-ms",
+     '%{"name":"ts","type":"date-rfc5424","format":"timestamp-unix-ms"}% z',
+     "2026-08-10T12:00:00Z z"),
+    ("date-rfc5424-fmt-string",
+     '%{"name":"ts","type":"date-rfc5424","format":"string"}% z',
+     "2026-08-10T12:00:00Z z"),
     ("cee-syslog",            "%f:cee-syslog%",             '@cee: {"a":1}'),
     ("name-value-list",       "%f:name-value-list%",        "a=1 b=2"),
     ("cef",                   "%f:cef%",                    "CEF:0|V|P|1.0|100|n|5|src=1.2.3.4"),
