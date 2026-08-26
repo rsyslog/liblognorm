@@ -1433,7 +1433,7 @@ ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
 						  const char **value, size_t *vlen)
 {
 	if (!r || !name) return -1;
-	for (int i = 0; i < r->n_fields; i++) {
+	for (int i = r->n_fields - 1; i >= 0; i--) {
 		if (r->fields[i].name &&
 			strcmp(r->fields[i].name, name) == 0) {
 			const ln_fast_field_t *f = &r->fields[i];
@@ -1459,7 +1459,7 @@ ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 					   int64_t *value)
 {
 	if (!r || !name) return -1;
-	for (int i = 0; i < r->n_fields; i++) {
+	for (int i = r->n_fields - 1; i >= 0; i--) {
 		if (r->fields[i].type == LN_FTYPE_INT &&
 			r->fields[i].name &&
 			strcmp(r->fields[i].name, name) == 0) {

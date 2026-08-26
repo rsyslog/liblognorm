@@ -187,11 +187,20 @@ int ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 								   const char **sval, size_t *slen,
 								   int64_t *ival, double *dval);
 
-/** Find a string field by name. @return 0 if found, -1 otherwise. */
+/**
+ * Find a string field by name.
+ *
+ * A rulebase may bind the same name more than once in one rule; the result
+ * then carries several fields under that name. The last binding wins, which
+ * is what a caller materializing the result into a JSON object also observes.
+ *
+ * @return 0 if found, -1 otherwise.
+ */
 int ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
 							  const char **value, size_t *vlen);
 
-/** Find an integer field by name. @return 0 if found, -1 otherwise. */
+/** Find an integer field by name. The last binding wins, as for
+ *  ln_fast_result_get_string(). @return 0 if found, -1 otherwise. */
 int ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 						   int64_t *value);
 
