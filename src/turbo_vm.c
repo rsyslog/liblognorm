@@ -3112,7 +3112,6 @@ vm_exec_instr(ln_vm_t *vm)
 				const char *next_eq;
 				const char *key_eq;
 				const char *val_span;
-				const char *scan;
 				char *arena_key;
 
 				/* Skip spaces */
@@ -3122,8 +3121,9 @@ vm_exec_instr(ln_vm_t *vm)
 				key_start = p;
 
 				/* Find '=' */
-				eq_off = ln_simd_find_char(p, (size_t)(end - p), '=');
-				if (eq_off >= (size_t)(end - p)) break;
+				key_eq = cef_find_unescaped(p, p, end, '=');
+				if (key_eq == NULL) break;
+				eq_off = (size_t)(key_eq - p);
 
 				key_len = eq_off;
 				if (key_len == 0) break;
@@ -4286,7 +4286,6 @@ ln_vm_continue(ln_vm_t *vm)
 				const char *next_eq;
 				const char *key_eq;
 				const char *val_span;
-				const char *scan;
 				char *arena_key;
 
 				while (p < input_end && *p == ' ') p++;
