@@ -3,7 +3,7 @@
 # This file is part of the liblognorm project, released under ASL 2.0
 #
 # Field and context names longer than the inline opcode buffers (str[60] for
-# most fields, char_to.name[56] for the char-to family) are interned in the
+# most fields, char_to.name[52] for the char-to family) are interned in the
 # program string pool and referenced by offset, so turbo parses them natively
 # with no length limit and no v1 fallback, matching the v1 parser. Before this,
 # an over-long name silently corrupted or truncated the field on the turbo path.
@@ -22,7 +22,7 @@ execute 'Hi'
 assert_output_json_eq '{ "threat": { "enrichments": { "indicator": { "file": { "x509": {
 	"subject": { "distinguished_name": "Hi" } } } } } } }'
 
-# char-to family uses the smaller char_to.name[56] buffer; a 61-char name must
+# char-to family uses the smaller char_to.name[52] buffer; a 61-char name must
 # also pool. Terminator ":" then a literal rest.
 reset_rules
 add_rule 'version=2'

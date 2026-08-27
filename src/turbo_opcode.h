@@ -338,8 +338,9 @@ static inline ln_instr_t ln_i_field_char_to(const char *name, char delim) {
 	i.flags = LN_INSTR_F_STORE;
 	i.data.char_to.delim = (uint8_t)delim;
 	if (name) {
-		/* Reserve a NUL terminator (security audit #6). name[56]. */
-		for (int j = 0; j < 56 - 1 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). The bound comes
+		 * from the array so it cannot drift from the layout. */
+		for (size_t j = 0; j + 1 < sizeof(i.data.char_to.name) && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;
@@ -355,8 +356,9 @@ static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char 
 	i.data.char_to.ass   = (uint8_t)ass;
 	i.data.char_to.ignore_ws = ignore_ws;
 	if (name) {
-		/* Reserve a NUL terminator (security audit #6). name[56]. */
-		for (int j = 0; j < 56 - 1 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). The bound comes
+		 * from the array so it cannot drift from the layout. */
+		for (size_t j = 0; j + 1 < sizeof(i.data.char_to.name) && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;

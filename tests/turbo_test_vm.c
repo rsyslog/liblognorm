@@ -946,7 +946,7 @@ static int test_inline_name_nul_terminated(void)
                 "field name reserves NUL terminator");
 
     ln_instr_t c = ln_i_field_char_to(huge, ',');
-    TEST_ASSERT(c.data.char_to.name[55] == '\0',
+    TEST_ASSERT(c.data.char_to.name[sizeof(c.data.char_to.name) - 1] == '\0',
                 "char_to name reserves NUL terminator");
     return 1;
 }
