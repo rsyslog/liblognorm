@@ -20,12 +20,12 @@ fields are extracted. TurboVM replaces this with:
   arena (~16 KB), fitting in L1 cache. Zero malloc/free per message.
 - **SIMD parsing**: character scanning, delimiter search, whitespace skipping,
   and IP address parsing use SSE4.2 or NEON intrinsics when available.
-- **Output parity**: field values match the standard engine, so a rulebase
-  produces the same JSON on either engine (numeric fields are emitted as
-  strings by default, as in the standard parser).
-- **Nested JSON**: dotted field names (e.g. ``source.ip``) produce properly
-  nested JSON objects (``{"source":{"ip":"..."}}``), enabling direct ECS
-  (Elastic Common Schema) output.
+- **Output parity**: field *values* match the standard engine (numeric
+  fields are strings by default, as in the standard parser). The JSON
+  *document* nests dotted names; see "Known differences" below.
+- **Nested JSON**: dotted field names (e.g. ``source.ip``) produce
+  nested JSON objects (``{"source":{"ip":"..."}}``), which is the ECS
+  (Elastic Common Schema) shape.
 
 Building with TurboVM
 ---------------------
@@ -95,7 +95,7 @@ on the normalization context before loading rules::
 After loading, verify that compilation succeeded::
 
     if (ln_turbo_is_available(ctx)) {
-        /* TurboVM ready — ln_normalize() will use the fast path */
+        /* bytecode is ready; ln_normalize_to_str() runs it */
     }
 
 For direct string output (bypassing json-c entirely)::
@@ -108,9 +108,11 @@ For direct string output (bypassing json-c entirely)::
         free(json_str);
     }
 
-The standard ``ln_normalize()`` function also benefits from TurboVM
-when it is enabled — the bytecode engine is used internally, with
-automatic fallback to the recursive walker if needed.
+Only ``ln_normalize_to_str()``, ``ln_turbo_normalize_to_str()`` and
+``ln_turbo_normalize_raw()`` execute the bytecode and honour
+``LN_CTXOPT_TURBO_STRICT``. ``ln_normalize()`` always uses the recursive
+walker. Comparing those two APIs with turbo enabled compares the walker
+with itself and hides a turbo decline.
 
 High-performance API (lognorm-turbo.h)
 --------------------------------------
@@ -130,10 +132,17 @@ internal ``turbo*.h`` headers and the fast-result/snapshot struct layouts
 are **not** installed and may change between releases without affecting the
 ABI. The contract covers:
 
-- ``ln_turbo_normalize_raw()`` — normalize into an opaque, context-owned
-  result (valid until the next normalize call on that context);
+- ``ln_turbo_normalize_raw()``: normalize into an opaque, context-owned
+  result (valid until the next normalize call on that context). A
+  truncated result is still returned, with
+  ``ln_fast_result_is_truncated()`` set; the string path refuses that
+  result and falls back to the walker.
 - ``ln_turbo_snapshot_result()`` / ``ln_fast_result_snapshot_get()`` /
-  ``ln_fast_result_snapshot_free()`` — retain a result beyond the next call;
+  ``ln_fast_result_snapshot_free()``: retain a result beyond the next
+  call. The snapshot copies used field slots plus the result tail
+  (tags, match info). Unused slots past ``n_fields`` are not copied.
+  The allocation still covers a full ``ln_fast_result_t`` because
+  ``ln_fast_result_snapshot_get()`` returns a pointer to that object.
 - typed accessors ``ln_fast_result_field_count()``,
   ``ln_fast_result_get_field()``, ``ln_fast_result_get_field_typed()``
   (preserves ``LN_FTYPE_*`` value type and the ``LN_FFIELD_NESTED`` flag),
@@ -143,8 +152,7 @@ ABI. The contract covers:
 Supported Parsers
 -----------------
 
-TurboVM supports 32 of the 33 parser types defined in liblognorm v2.
-The following parsers are compiled to bytecode:
+TurboVM compiles every v2 parser type:
 
 - **Text**: ``word``, ``alpha``, ``string``, ``rest``, ``char-to``,
   ``char-separated``, ``string-to``, ``op-quoted-string``,
@@ -154,16 +162,13 @@ The following parsers are compiled to bytecode:
 - **Date/Time**: ``date-rfc3164``, ``date-rfc5424``, ``date-iso``,
   ``time-24hr``, ``time-12hr``, ``duration``, ``kernel-timestamp``
 - **Structured**: ``json``, ``cee-syslog``, ``cef``, ``v2-iptables``,
-  ``checkpoint-lea``, ``name-value-list``
+  ``checkpoint-lea``, ``name-value-list``, ``repeat``
 - **Special**: ``whitespace``, ``cisco-interface-spec``
 
-The following parser type falls back to the standard engine:
-
-- **repeat**: requires recursive sub-rule invocation, which is outside
-  the scope of the single-pass VM instruction set.
-
-The fallback is automatic and transparent: rulebases using ``repeat``
-will still work correctly via the standard engine.
+A construct the compiler cannot express still fails the whole rulebase
+(compilation is all-or-nothing). Per-message declines fall back to the
+recursive walker unless ``LN_CTXOPT_TURBO_STRICT`` / ``-oturbostrict``
+is set.
 
 Known differences from the standard engine
 -------------------------------------------
@@ -185,25 +190,37 @@ writes, by design:
 Consumers of ``ln_turbo_normalize_raw()`` and the typed field accessors see
 none of this: it is the string serializer only.
 
-A few parsers behave slightly differently under TurboVM:
+A few parsers keep a deliberate match with the standard engine:
 
-- ``cisco-interface-spec``, ``duration`` and ``kernel-timestamp`` are compiled
-  as a plain word match, so they may accept input the standard parser rejects.
-- ``char-to`` accepts a zero-length value where the standard parser requires
-  at least one byte before the delimiter, so ``"",`` yields an empty string
-  under TurboVM and the literal ``""`` under the standard parser.
-- ``string-to`` with a single-character delimiter never matches. That is the
-  standard parser's behaviour (its inner comparison loop cannot run for a
-  delimiter shorter than two bytes) and TurboVM replicates it deliberately
-  so a rulebase behaves the same on both engines.
+- ``string-to`` with a single-character delimiter never matches. That is
+  the standard parser's behaviour (its inner comparison loop cannot run
+  for a delimiter shorter than two bytes) and TurboVM replicates it so a
+  rulebase behaves the same on both engines.
 - ``json`` field names follow the same three contracts as the standard
   parser (see configuration.rst "Special field names"): ``-`` is matched
   and discarded; ``.`` inlines object keys at the current context; a
-  real name stores the value as one nested JSON object (verbatim bytes,
-  so arrays / booleans / nulls round-trip). The ``.`` inline path walks
-  the object into the turbo arena (dotted leaves, 64-leaf cap). Nested
-  arrays on that path become indexed keys (``.0``, ``.1``) rather than
-  JSON arrays. Named ``%field:json%`` keeps arrays as arrays.
+  real name stores the value as one nested JSON object. Named
+  ``%field:json%`` keeps arrays, booleans and nulls as JSON types. The
+  ``.`` inline path walks the object into the turbo arena (dotted leaves,
+  capped at ``LN_FAST_MAX_FIELDS``). Nested arrays on that path are kept
+  as JSON arrays (``LN_FFIELD_RAW_JSON``), not flattened to ``.0`` /
+  ``.1`` keys.
+- The JSON scanner matches libfastjson: trailing whitespace after a
+  value is consumed, single-quoted keys and strings are accepted, and
+  ``true`` / ``false`` / ``null`` are case-insensitive. A named JSON
+  field whose span contains a single quote is re-emitted as RFC JSON so
+  the document stays valid.
+
+Extracted field names (for example a name-value-list key) are
+JSON-escaped the same way as string values. An unescaped quote in a key
+would terminate the object syntax.
+
+A rule that binds the same name twice keeps every binding, as libfastjson
+does. The JSON document lists them newest first (duplicate keys).
+``ln_fast_result_get_string()`` returns the last, matching
+``json_object_object_get_ex``. A RFC JSON parser that last-wins on
+duplicate keys therefore sees the first-added value, which is what
+``json.loads`` of the walker document also returns.
 
 Performance Notes
 -----------------
@@ -230,19 +247,23 @@ Two fixed-size structures bound what a single message can carry:
 
 - ``LN_FAST_MAX_FIELDS`` (128) fields per result. Rulebases over CSV-shaped
   sources reach this: a PAN-OS TRAFFIC record is 97 columns before
-  annotations. Exceeding it is not silent — ``ln_normalize_to_str()``
+  annotations. Exceeding it is not silent: ``ln_normalize_to_str()``
   refuses the result and falls back to the recursive walker, which has no
   field limit. Callers of ``ln_turbo_normalize_raw()`` get the partial
   result plus ``ln_fast_result_is_truncated()`` and decide for themselves.
 - ``LN_FAST_MAX_TAGS`` (16) tags per result, with the same contract.
 
-A third limit is on the rulebase rather than the message: the compiler
-recurses once per parser and once per literal in a rule and gives up past a
-depth of 200, so a rule runs out of compile depth at roughly 100 sequential
-fields. Compilation is all-or-nothing, so one rule that long puts the whole
-rulebase on the recursive walker. ``-oturbostrict`` and the
-``turbo: compilation failed`` debug line are the way to notice.
+A third limit is on the rulebase rather than the message. Linear
+non-terminal chains (one parser, not a terminal) compile in a loop, so a
+long sequential rule does not consume one C stack frame per field.
+Recursion is reserved for forks, prefix-terminals, and custom-type /
+repeat bodies, and is capped at ``LN_TURBO_MAX_COMPILE_DEPTH`` (1024).
+Exceeding it discards the program. Compilation is all-or-nothing, so one
+such rule puts the whole rulebase on the recursive walker.
+``-oturbostrict`` and the ``turbo: compilation failed`` debug line are
+the way to notice.
 
 Field names, annotation values and literal texts are *not* limited by the
-size of the opcode buffers they normally live in: anything that does not fit
-inline is interned in the program string pool.
+size of the opcode buffers they normally live in: anything that does not
+fit in the 60-byte inline slot is interned in the program string pool
+(``OP_LITERAL_EXT`` for long compacted literals).

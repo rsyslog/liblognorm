@@ -23,6 +23,21 @@ Version 2.1.0, 2026-06-25
   headers (turbo*.h) remain internal and are not installed.
   Enabled via: ./configure --enable-turbo
   Contributed by Jérémie Jourdin / Advens.
+  Turbo parser parity with the recursive walker (same 2.1.0 series):
+  - compile every v2 parser, including repeat
+  - sequential compile of linear field chains; recursion cap 1024 for
+    forks, prefix-terminals and custom-type / repeat bodies
+  - intern literals longer than the 60-byte inline buffer
+  - LN_FAST_MAX_FIELDS raised to 128; snapshots copy used field slots
+    plus the result tail (allocation still covers the full struct)
+  - json scanner matches libfastjson (trailing space, single quotes,
+    case-insensitive true/false/null); named JSON with a single quote
+    is re-emitted as RFC JSON
+  - JSON serializer escapes keys as well as values
+  - cisco-interface-spec, duration, kernel-timestamp, char-to and
+    char-sep match the standard parser
+  - ln_normalize() stays on the walker; only ln_normalize_to_str()
+    and the lognorm-turbo.h entry points execute bytecode
 - pcre2 used instead of pcre (which is no longer supported)
 - packaging: install only curated public headers. The Turbo public API is
   provided by lognorm-turbo.h; internal Turbo implementation headers are
