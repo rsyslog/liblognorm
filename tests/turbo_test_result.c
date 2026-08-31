@@ -286,6 +286,36 @@ static int test_add_string_empty(void)
     return 1;
 }
 
+static int test_set_string_last_wins(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    const char *val;
+    size_t vlen;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    TEST_ASSERT(ln_fast_add_string_static(&result, "f", 1, "AA", 2) == 0,
+                "first add");
+    TEST_ASSERT(ln_fast_add_string_static(&result, "f", 1, "BB", 2) == 0,
+                "second add");
+    TEST_ASSERT(ln_fast_set_string_static(&result, "f", 1, "CC", 2) == 0,
+                "set overwrites the last slot");
+    TEST_ASSERT_EQ(result.n_fields, 2, "set does not append");
+    TEST_ASSERT(memcmp(result.fields[0].v.inl, "AA", 2) == 0,
+                "first slot untouched");
+    TEST_ASSERT(memcmp(result.fields[1].v.inl, "CC", 2) == 0,
+                "last slot holds the set value");
+    TEST_ASSERT(ln_fast_result_get_string(&result, "f", &val, &vlen) == 0,
+                "get");
+    TEST_ASSERT_EQ((int)vlen, 2, "get length");
+    TEST_ASSERT(memcmp(val, "CC", 2) == 0, "get matches the set value");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
 /*============================================================================
  * Integer Field Tests
  *============================================================================*/
@@ -1154,6 +1184,7 @@ int main(void)
     RUN_TEST(test_add_string_boundary_47);
     RUN_TEST(test_add_string_boundary_48);
     RUN_TEST(test_add_string_empty);
+    RUN_TEST(test_set_string_last_wins);
     printf("\n");
 
     /* Integer field tests */

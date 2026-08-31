@@ -41,6 +41,7 @@
 #include <time.h>
 #include <locale.h>
 #include <json.h>
+json_object *ln_turbo_field_json(const ln_fast_field_t *f);
 #if defined(__has_include)
 # if __has_include(<xlocale.h>)
 #  include <xlocale.h>
@@ -3760,13 +3761,41 @@ vm_exec_sub(ln_vm_t *vm, uint32_t target_pc)
 	return 0;
 }
 
+/*
+ * Length-bounded reparse of a RAW_JSON span. write_field_value emits the
+ * same span verbatim; a named repeat has to reify it as a json_object.
+ * Fall back to the raw string if the span is not valid JSON, so the field
+ * is never silently dropped to null.
+ */
+static json_object *
+vm_parse_raw_json(const char *s, uint32_t slen)
+{
+	json_object *jval = NULL;
+	struct json_tokener *jtok;
+
+	if (s == NULL)
+		return json_object_new_string("");
+	jtok = json_tokener_new();
+	if (jtok != NULL) {
+		jval = json_tokener_parse_ex(jtok, s, (int)slen);
+		json_tokener_free(jtok);
+	}
+	if (jval != NULL)
+		return jval;
+	return json_object_new_string_len(s, (int)slen);
+}
+
 static json_object *
 vm_field_json(const ln_fast_field_t *f)
 {
 	switch (f->type) {
 	case LN_FTYPE_STRING:
+		if (f->flags & LN_FFIELD_RAW_JSON)
+			return vm_parse_raw_json(f->v.str.ptr, f->v.str.len);
 		return json_object_new_string_len(f->v.str.ptr, (int)f->v.str.len);
 	case LN_FTYPE_STRING_INLINE:
+		if (f->flags & LN_FFIELD_RAW_JSON)
+			return vm_parse_raw_json(f->v.inl, (uint32_t)strlen(f->v.inl));
 		return json_object_new_string(f->v.inl);
 	case LN_FTYPE_INT:
 		return json_object_new_int64(f->v.i);
@@ -3777,13 +3806,14 @@ vm_field_json(const ln_fast_field_t *f)
 	case LN_FTYPE_NULL:
 		return NULL;
 	default:
-		if (f->flags & LN_FFIELD_RAW_JSON) {
-			if (f->type == LN_FTYPE_STRING_INLINE)
-				return json_tokener_parse(f->v.inl);
-			return json_tokener_parse(f->v.str.ptr);
-		}
 		return json_object_new_string("");
 	}
+}
+
+json_object *
+ln_turbo_field_json(const ln_fast_field_t *f)
+{
+	return vm_field_json(f);
 }
 
 static json_object *

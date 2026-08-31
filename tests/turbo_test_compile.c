@@ -28,6 +28,8 @@
 #include "liblognorm.h"
 #include "lognorm-turbo.h"
 #include "turbo_result_fast.h"   /* LN_FAST_MAX_FIELDS */
+
+json_object *ln_turbo_field_json(const ln_fast_field_t *f);
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -409,6 +411,107 @@ test_past_cap_is_not_silently_truncated(void)
     return 1;
 }
 
+/*============================================================================
+ * Named repeat of json: vm_pack_iter must nest objects, not quote the span.
+ * ln_turbo_field_json covers the tokener-failure fallback that the parser
+ * cannot reach (a json body that matches is well-formed).
+ *============================================================================*/
+static int
+test_named_repeat_json_nests_objects(void)
+{
+    ln_ctx ctx = load_rb(
+        "version=2\n"
+        "rule=:%{\"name\":\"items\",\"type\":\"repeat\","
+        "\"parser\":{\"name\":\"j\",\"type\":\"json\"},"
+        "\"while\":{\"type\":\"literal\",\"text\":\",\"}}%\n");
+    char *js;
+
+    CHECK(ctx != NULL, "ctx setup");
+    js = norm(ctx, "{\"a\":1},{\"b\":2}");
+    CHECK(js != NULL, "normalize succeeded");
+    CHECK(strstr(js, "\"a\"") != NULL, "first object nested");
+    CHECK(strstr(js, "\\\"a\\\"") == NULL, "JSON text is not quoted");
+    free(js);
+    ln_exitCtx(ctx);
+    return 1;
+}
+
+static int
+test_named_repeat_json_long_nests_objects(void)
+{
+    static const char *line =
+        "{\"k\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"},"
+        "{\"k\":\"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\"}";
+    ln_ctx ctx = load_rb(
+        "version=2\n"
+        "rule=:%{\"name\":\"items\",\"type\":\"repeat\","
+        "\"parser\":{\"name\":\"j\",\"type\":\"json\"},"
+        "\"while\":{\"type\":\"literal\",\"text\":\",\"}}%\n");
+    char *js;
+
+    CHECK(ctx != NULL, "ctx setup");
+    js = norm(ctx, line);
+    CHECK(js != NULL, "normalize succeeded");
+    CHECK(strstr(js, "\"k\"") != NULL, "long object nested");
+    CHECK(strstr(js, "\\\"k\\\"") == NULL, "JSON text is not quoted");
+    free(js);
+    ln_exitCtx(ctx);
+    return 1;
+}
+
+static int
+test_field_json_raw_reparse_and_fallback(void)
+{
+    ln_fast_field_t f;
+    json_object *obj;
+    char long_bad[60];
+
+    memset(&f, 0, sizeof(f));
+    ln_fast_store_string(&f, "j", 1, "{\"a\":1}", 7);
+    f.flags |= LN_FFIELD_RAW_JSON;
+    CHECK(f.type == LN_FTYPE_STRING_INLINE, "short span is inline");
+    obj = ln_turbo_field_json(&f);
+    CHECK(obj != NULL, "inline RAW_JSON parsed");
+    CHECK(json_object_is_type(obj, json_type_object), "inline nests an object");
+    json_object_put(obj);
+
+    memset(&f, 0, sizeof(f));
+    ln_fast_store_string(&f, "j", 1,
+        "{\"k\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}", 58);
+    f.flags |= LN_FFIELD_RAW_JSON;
+    CHECK(f.type == LN_FTYPE_STRING, "long span is external");
+    obj = ln_turbo_field_json(&f);
+    CHECK(obj != NULL, "external RAW_JSON parsed");
+    CHECK(json_object_is_type(obj, json_type_object), "external nests an object");
+    json_object_put(obj);
+
+    memset(&f, 0, sizeof(f));
+    ln_fast_store_string(&f, "j", 1, "not-json", 8);
+    f.flags |= LN_FFIELD_RAW_JSON;
+    obj = ln_turbo_field_json(&f);
+    CHECK(obj != NULL, "invalid inline is not null");
+    CHECK(json_object_is_type(obj, json_type_string), "invalid inline stays a string");
+    CHECK(strcmp(json_object_get_string(obj), "not-json") == 0, "inline text kept");
+    json_object_put(obj);
+
+    memset(long_bad, 'x', sizeof(long_bad));
+    memset(&f, 0, sizeof(f));
+    ln_fast_store_string(&f, "j", 1, long_bad, (uint32_t)sizeof(long_bad));
+    f.flags |= LN_FFIELD_RAW_JSON;
+    obj = ln_turbo_field_json(&f);
+    CHECK(obj != NULL, "invalid external is not null");
+    CHECK(json_object_is_type(obj, json_type_string), "invalid external stays a string");
+    CHECK((size_t)json_object_get_string_len(obj) == sizeof(long_bad),
+          "external text length kept");
+    json_object_put(obj);
+
+    memset(&f, 0, sizeof(f));
+    f.type = LN_FTYPE_NULL;
+    obj = ln_turbo_field_json(&f);
+    CHECK(obj == NULL, "JSON null stays a JSON null");
+    return 1;
+}
+
 int
 main(void)
 {
@@ -422,6 +525,9 @@ main(void)
     RUN(test_string_to_uses_its_delimiter);
     RUN(test_cap_is_reachable);
     RUN(test_past_cap_is_not_silently_truncated);
+    RUN(test_named_repeat_json_nests_objects);
+    RUN(test_named_repeat_json_long_nests_objects);
+    RUN(test_field_json_raw_reparse_and_fallback);
 
     printf("\nTests run: %d, failed: %d\n", tests_run, tests_failed);
     return tests_failed > 0 ? 1 : 0;

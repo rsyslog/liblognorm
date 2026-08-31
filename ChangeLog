@@ -38,6 +38,8 @@ Version 2.1.0, 2026-06-25
     char-sep match the standard parser
   - ln_normalize() stays on the walker; only ln_normalize_to_str()
     and the lognorm-turbo.h entry points execute bytecode
+  - named repeat of json re-parses RAW_JSON into nested objects; a
+    span that is not valid JSON is kept as a string, not dropped to null
 - pcre2 used instead of pcre (which is no longer supported)
 - packaging: install only curated public headers. The Turbo public API is
   provided by lognorm-turbo.h; internal Turbo implementation headers are

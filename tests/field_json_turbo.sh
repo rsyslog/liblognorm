@@ -132,4 +132,16 @@ assert_output_json_eq '{ "a": 1, "b": { } }'
 execute '{"b":[]}'
 assert_output_json_eq '{ "b": [ ] }'
 
+# Named repeat of json: each iteration nests an object, not a quoted string.
+# Under 48 bytes is STRING_INLINE; over it is the pointer path.
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%{"name":"items","type":"repeat","parser":{"name":"j","type":"json"},"while":{"type":"literal","text":","}}%'
+execute '{"a":1},{"b":2}'
+assert_output_json_eq '{ "items": [ { "j": { "a": 1 } }, { "j": { "b": 2 } } ] }'
+execute '{"k":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},{"k":"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}'
+assert_output_json_eq '{ "items": [ { "j": { "k": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" } }, { "j": { "k": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" } } ] }'
+execute '{,},{"a":1}'
+assert_output_contains 'unparsed-data'
+
 cleanup_tmp_files

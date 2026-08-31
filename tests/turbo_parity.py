@@ -344,6 +344,23 @@ CASES = [
      '"while":{"type":"alternative","parser":['
      '{"type":"literal","text":", "},{"type":"literal","text":","}]}}% b %w:word%',
      "a 1:2, 3:4,5:6, 7:8 b test"),
+    # Named repeat whose body is json. vm_pack_iter must nest the object, not
+    # quote the captured span. Under 48 bytes is STRING_INLINE; over it is the
+    # pointer path. A body that is not JSON fails both engines; tokener
+    # fallback on a stored RAW_JSON span is covered by turbo_test_compile.
+    ("repeat-json",
+     '%{"name":"items","type":"repeat","parser":{"name":"j","type":"json"},'
+     '"while":{"type":"literal","text":","}}%',
+     '{"a":1},{"b":2}'),
+    ("repeat-json-long",
+     '%{"name":"items","type":"repeat","parser":{"name":"j","type":"json"},'
+     '"while":{"type":"literal","text":","}}%',
+     '{"k":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},'
+     '{"k":"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}'),
+    ("repeat-json-bad",
+     '%{"name":"items","type":"repeat","parser":{"name":"j","type":"json"},'
+     '"while":{"type":"literal","text":","}}%',
+     '{,},{"a":1}'),
 ]
 
 # Every v2 parser in parser_lookup_table must appear in CASES. tokenized is

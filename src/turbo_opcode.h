@@ -121,8 +121,10 @@ typedef enum {
 	OP_FIELD_KERNEL_TS = 0x77, /**< Extract a kernel timestamp [sec.usec]. */
 	OP_CISCO_IFACE  = 0x78,  /**< Cisco interface spec: [if:]ip/port [(ip2/port2)] [(user)]. */
 	OP_REPEAT       = 0x79,  /**< Repeat parser-sub while while-sub matches.
-                              *   data.repeat holds relative PCs; aux bit0 =
-                              *   permitMismatchInParser, bit1 = failOnDuplicate. */
+                              *   data.repeat holds relative PCs.
+                              *   flags LN_INSTR_F_REPEAT_PERMIT =
+                              *   permitMismatchInParser; aux bit0 =
+                              *   failOnDuplicate. */
 
 	/*=== Debug (0xF0-0xFF) ===*/
 	OP_NOP          = 0xF0,  /**< No operation */

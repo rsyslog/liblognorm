@@ -247,11 +247,9 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 }
 
 /*
- * Replace the value of an existing field, or add it when absent (last-wins).
- *
- * CEF extensions and annotations use json_object_object_add, which overwrites
- * a name already present. One scan: a hit stores in place, a miss appends
- * without going back through first-wins.
+ * Replace the last matching name, or append when absent. Backward scan so
+ * the write lands on the same slot ln_fast_result_get_string reads, matching
+ * json_object_object_add.
  *
  * @return 0 on success, -1 if the result is full.
  */
@@ -260,9 +258,9 @@ ln_fast_set_string_static(ln_fast_result_t *r,
 						  const char *name, uint16_t name_len,
 						  const char *val, uint32_t val_len)
 {
-	uint8_t i;
+	int i;
 
-	for (i = 0; i < r->n_fields; i++) {
+	for (i = (int)r->n_fields - 1; i >= 0; i--) {
 		ln_fast_field_t *const f = &r->fields[i];
 
 		if (f->name_len != name_len)
@@ -353,9 +351,9 @@ static inline int
 ln_fast_set_null_static(ln_fast_result_t *r,
 						const char *name, uint16_t name_len)
 {
-	uint8_t i;
+	int i;
 
-	for (i = 0; i < r->n_fields; i++) {
+	for (i = (int)r->n_fields - 1; i >= 0; i--) {
 		ln_fast_field_t *const f = &r->fields[i];
 
 		if (f->name_len != name_len)
