@@ -3859,7 +3859,7 @@ vm_repeat(ln_vm_t *vm, const ln_instr_t *inst)
 {
 	uint32_t parser_pc, while_pc, repeat_pc;
 	const char *name;
-	uint16_t name_len;
+	uint16_t name_len = 0;
 	int merge;
 	int permit;
 	int n_iter = 0;
