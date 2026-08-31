@@ -728,24 +728,19 @@ ln_simd_word(const char *buf, size_t len, ln_span_t *span)
 
 	 if (!buf || !span) return LN_SIMD_EINVAL;
 
-	 /* STRICT COMPLIANCE: Do NOT skip leading whitespace.
-	  * The VM handles skipping via OP_SKIP_SPACE.
-	  * If we start on a space, it's an empty word (or error).
+	 /* Do NOT skip leading whitespace: the VM skips it with OP_SKIP_SPACE.
+	  *
+	  * The standard parser ends the word at a space and at nothing else, so a
+	  * tab or a newline belongs to the word. Ending at those too would cut the
+	  * word short, and the rule would then fail on the text left behind.
 	  */
-	 if (len > 0 && ln_is_space(buf[0])) {
-		  /* Legacy behavior: if starting on space, return error or empty.
-		   * parser.c ln_v2_parseWord returns -1 if i==0.
-		   */
+	 word_len = ln_simd_find_char(buf, len, ' ');
+
+	 /* The standard parser refuses an empty word, which is what it reports
+	  * when the field starts on a space or at the end of the input. A rule
+	  * alternative behind such a field is reached only through that refusal. */
+	 if (word_len == 0)
 		  return LN_SIMD_ENOTFOUND;
-	 }
-
-	 /* Find end of word (next whitespace) */
-	 word_len = ln_simd_find_char_set(buf, len, " \t\n\r");
-
-	 if (word_len == 0 && len > 0 && !ln_is_space(buf[0])) {
-		  /* No separators found, word is entire buffer */
-		  word_len = len;
-	 }
 
 	 span->start = buf;
 	 span->len = word_len;
