@@ -693,7 +693,7 @@ static int test_vm_field_int(void)
     return 1;
 }
 
-static int test_fast_first_wins(void)
+static int test_fast_duplicate_name_appends(void)
 {
     ln_arena_t arena;
     ln_fast_result_t result;
@@ -701,13 +701,17 @@ static int test_fast_first_wins(void)
     ln_arena_init_sized(&arena, 8192);
     ln_fast_result_init(&result, &arena);
 
+    /* Walker/libfastjson keeps every binding. First-wins skip was a
+     * regression against that (turbo_test_dupfield). */
     TEST_ASSERT(ln_fast_add_string_static(&result, "priority", 8, "15", 2) == 0,
                 "first add");
-    TEST_ASSERT(ln_fast_add_int_static(&result, "priority", 8, 1) == 0,
-                "second add skipped");
-    TEST_ASSERT_EQ(result.n_fields, 1, "one field");
-    TEST_ASSERT(result.fields[0].type == LN_FTYPE_STRING_INLINE, "kept the string");
-    TEST_ASSERT(memcmp(result.fields[0].v.inl, "15", 2) == 0, "first value kept");
+    TEST_ASSERT(ln_fast_add_string_static(&result, "priority", 8, "1", 1) == 0,
+                "second add");
+    TEST_ASSERT_EQ(result.n_fields, 2, "both bindings stored");
+    TEST_ASSERT(result.fields[0].type == LN_FTYPE_STRING_INLINE, "first is string");
+    TEST_ASSERT(memcmp(result.fields[0].v.inl, "15", 2) == 0, "first value");
+    TEST_ASSERT(result.fields[1].type == LN_FTYPE_STRING_INLINE, "second is string");
+    TEST_ASSERT(memcmp(result.fields[1].v.inl, "1", 1) == 0, "second value");
 
     ln_arena_destroy(&arena);
     return 1;
@@ -1467,7 +1471,7 @@ int main(void)
     RUN_TEST(test_vm_field_word);
     RUN_TEST(test_vm_field_alpha);
     RUN_TEST(test_vm_field_int);
-    RUN_TEST(test_fast_first_wins);
+    RUN_TEST(test_fast_duplicate_name_appends);
     RUN_TEST(test_vm_field_rest);
     RUN_TEST(test_vm_field_char_to);
     RUN_TEST(test_vm_field_ipv4);
