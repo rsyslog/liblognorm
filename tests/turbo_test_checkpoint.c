@@ -1,13 +1,11 @@
 /*
- * Strict parity test for the word parser on the TurboVM fast path.
+ * Strict parity test for Checkpoint LEA on the TurboVM fast path.
  *
- * The standard parser ends a word at a space and at nothing else, and refuses
- * a word that is empty. The fast path ended it at a tab, a newline or a
- * carriage return as well, which cut the word short and left text the rest of
- * the rule could not match, and it accepted an empty word, which let a rule
- * match where the standard parser hands the message to the next one.
- *
- * Accepting and refusing both matter here, so both are compared.
+ * The walker stores a quoted value without the surrounding quotes, and a
+ * semicolon inside those quotes belongs to the value. The fast path ended the
+ * value at the first ';' and kept the quotes, so a value that contained a
+ * semicolon left text the rest of the rule could not match, and a value that
+ * did not still disagreed on every field.
  *
  * This file is part of the liblognorm project, released under ASL 2.0.
  */
@@ -97,33 +95,25 @@ compare(const char *what, const char *rb, const char *msg, const char *field)
 int
 main(void)
 {
-	static const char *const one  = "rule=:%f:word% end\n";
-	static const char *const two  = "rule=:%a:word% %b:word%\n";
-	/* An alternative behind the word is reached only when the word refuses. */
-	static const char *const alt =
-		"rule=:%a:word% %b:word%\n"
-		"rule=:%whole:rest%\n";
+	static const char *const term =
+		"rule=:[ %{\"name\":\"f\",\"type\":\"checkpoint-lea\",\"terminator\":\"]\"}%]\n";
+	static const char *const named =
+		"rule=:%f:checkpoint-lea%\n";
 
-	/* A space ends the word. */
-	compare("plain",        one, "abc end", "f");
+	/* Unquoted, terminator, with and without a trailing semicolon. */
+	compare("unquoted/semi",    term, "[ tcp_flags: RST-ACK; src: 192.168.0.1; ]", "src");
+	compare("unquoted/no-semi", term, "[ tcp_flags: RST-ACK; src: 192.168.0.1 ]", "src");
 
-	/* Nothing else does: these characters belong to the word. */
-	compare("tab-inside",   one, "ab\tcd end", "f");
-	compare("nl-inside",    one, "ab\ncd end", "f");
-	compare("cr-inside",    one, "ab\rcd end", "f");
+	/* Quoted values drop the quotes. */
+	compare("quoted/semi",    term, "[ tcp_flags:\"RST-ACK\"; src:\"192.168.0.1\"; ]", "src");
+	compare("quoted/no-semi", term, "[ tcp_flags:\"RST-ACK\"; src:\"192.168.0.1\" ]", "src");
 
-	/*
-	 * An empty word is refused. A message that begins with a space is
-	 * covered in turbo_test_leadws.c: that used to be a VM-wide trim, not
-	 * a property of this parser.
-	 */
-	compare("empty-at-end",   two, "one ", "a");
-	compare("empty-at-end/b", two, "one ", "b");
+	/* A semicolon inside quotes belongs to the value. */
+	compare("quoted/semi-in-value", term, "[ desc:\"a;b\"; k:\"c\" ]", "desc");
+	compare("quoted/semi-in-value/k", term, "[ desc:\"a;b\"; k:\"c\" ]", "k");
 
-	/* The refusal decides which rule the message lands on. */
-	compare("alt/word-wins",     alt, "one two", "a");
-	compare("alt/rest-when-empty", alt, "one ",  "whole");
-	compare("alt/no-a-when-empty", alt, "one ",  "a");
+	/* No terminator: the original pair form. */
+	compare("plain", named, "tcp_flags: RST-ACK; src: 192.168.0.1;", "src");
 
 	printf("%d comparisons, %d failure(s)\n", checks, failures);
 	return failures == 0 ? 0 : 1;

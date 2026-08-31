@@ -131,6 +131,9 @@
 		dispatch_table[OP_CEE_SYSLOG]      = &&op_cee_syslog; \
 		dispatch_table[OP_CHECKPOINT_LEA]   = &&op_checkpoint_lea; \
 		dispatch_table[OP_FIELD_TIME]      = &&op_field_time; \
+		dispatch_table[OP_FIELD_KERNEL_TS] = &&op_field_kernel_ts; \
+		dispatch_table[OP_CISCO_IFACE]     = &&op_cisco_iface; \
+		dispatch_table[OP_REPEAT]          = &&op_repeat; \
 		/* Debug (0xF0-0xFF) */ \
 		dispatch_table[OP_NOP]             = &&op_nop; \
 		dispatch_table[OP_DEBUG]           = &&op_debug; \

@@ -538,6 +538,28 @@ static int test_vm_skip_space(void)
     return 1;
 }
 
+static int test_vm_no_leading_trim(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_literal("hello", 5),
+        ln_i_match("rule1"),
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_no_leading_trim");
+
+    int r = ln_vm_exec(&vm, &prog, " hello", 6, &result);
+    TEST_ASSERT_EQ(r, LN_VM_NOMATCH,
+                   "a leading space is not skipped before the first instruction");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
 static int test_vm_skip_n(void)
 {
     ln_arena_t arena;
@@ -594,6 +616,51 @@ static int test_vm_field_word(void)
     return 1;
 }
 
+static int test_vm_field_alpha(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+    const ln_fast_field_t *f;
+    const char *val;
+    size_t vlen;
+    int r;
+    ln_instr_t code[] = {
+        ln_i_field(OP_FIELD_WORD, "user"),
+        ln_i_match("rule1"),
+    };
+    ln_program_t prog;
+
+    /* aux 2 is the alpha scan (compiler sets it for PRSID_ALPHA). */
+    code[0].aux = 2;
+    prog = ln_program_make(code, 2, "test_field_alpha");
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "abc123", 6, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "alpha stops at digit");
+    f = find_field(&result, "user");
+    TEST_ASSERT(f != NULL, "alpha field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 3 && memcmp(val, "abc", 3) == 0, "alpha abc123");
+    teardown_vm(&vm, &arena);
+
+    /* NBSP is not a letter. A whitespace word would swallow it. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "alice\xc2\xa0Host", 12, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "alpha stops at nbsp");
+    f = find_field(&result, "user");
+    TEST_ASSERT(f != NULL, "alpha-nbsp field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 5 && memcmp(val, "alice", 5) == 0, "alpha alice");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "123abc", 6, &result);
+    TEST_ASSERT(r != LN_VM_OK, "alpha refuses a leading digit");
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
 static int test_vm_field_int(void)
 {
     ln_arena_t arena;
@@ -608,16 +675,41 @@ static int test_vm_field_int(void)
     };
     ln_program_t prog = ln_program_make(code, 2, "test_field_int");
 
-    int r = ln_vm_exec(&vm, &prog, "-42", 3, &result);
+    int r = ln_vm_exec(&vm, &prog, "42", 2, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "field int match");
 
     const ln_fast_field_t *f = find_field(&result, "pid");
     TEST_ASSERT(f != NULL, "field found");
-    /* number is stored as the matched string, as the standard parser does */
     TEST_ASSERT_EQ(f->type, LN_FTYPE_STRING_INLINE, "type is inline string");
-    TEST_ASSERT(strcmp(f->v.inl, "-42") == 0, "value is \"-42\"");
+    TEST_ASSERT(strcmp(f->v.inl, "42") == 0, "value is \"42\"");
 
     teardown_vm(&vm, &arena);
+
+    /* Walker Number is digits only. A leading minus is not a number. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "-42", 3, &result);
+    TEST_ASSERT(r != LN_VM_OK, "field int refuses a leading minus");
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+static int test_fast_first_wins(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+
+    ln_arena_init_sized(&arena, 8192);
+    ln_fast_result_init(&result, &arena);
+
+    TEST_ASSERT(ln_fast_add_string_static(&result, "priority", 8, "15", 2) == 0,
+                "first add");
+    TEST_ASSERT(ln_fast_add_int_static(&result, "priority", 8, 1) == 0,
+                "second add skipped");
+    TEST_ASSERT_EQ(result.n_fields, 1, "one field");
+    TEST_ASSERT(result.fields[0].type == LN_FTYPE_STRING_INLINE, "kept the string");
+    TEST_ASSERT(memcmp(result.fields[0].v.inl, "15", 2) == 0, "first value kept");
+
+    ln_arena_destroy(&arena);
     return 1;
 }
 
@@ -713,6 +805,125 @@ static int test_vm_field_ipv4(void)
     return 1;
 }
 
+static int test_vm_field_ipv6(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+    const ln_fast_field_t *f;
+    const char *val;
+    size_t vlen;
+    int r;
+
+    ln_instr_t code[] = {
+        ln_i_field(OP_FIELD_IPV6, "src_ip"),
+        ln_i_match("rule1"),
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_field_ipv6");
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "2001:db8::1", 11, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "field ipv6 match");
+    f = find_field(&result, "src_ip");
+    TEST_ASSERT(f != NULL, "field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(val != NULL, "value not null");
+    TEST_ASSERT(vlen == 11 && memcmp(val, "2001:db8::1", 11) == 0, "ipv6 value");
+    teardown_vm(&vm, &arena);
+
+    /* Leading "::" (RFC4291). The scanner used to require i>0 before ':'. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "::1", 3, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "ipv6 leading-compress match");
+    f = find_field(&result, "src_ip");
+    TEST_ASSERT(f != NULL, "leading-compress field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 3 && memcmp(val, "::1", 3) == 0, "ipv6 ::1 value");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "::ffff:192.0.2.1", 16, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "ipv6 mapped-v4 match");
+    f = find_field(&result, "src_ip");
+    TEST_ASSERT(f != NULL, "mapped-v4 field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 16 && memcmp(val, "::ffff:192.0.2.1", 16) == 0,
+                "ipv6 mapped-v4 value");
+    teardown_vm(&vm, &arena);
+
+    /* A lone leading colon is not "::"; walker refuses it too. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, ":0:0:0:0:0:0:1", 13, &result);
+    TEST_ASSERT(r != LN_VM_OK, "ipv6 missing first digit refuses");
+    teardown_vm(&vm, &arena);
+
+    /* One hex nibble if two bytes remain. Walker ISO IPv6 does this. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "cx", 2, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "ipv6 one-nibble match");
+    f = find_field(&result, "src_ip");
+    TEST_ASSERT(f != NULL, "one-nibble field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 1 && memcmp(val, "c", 1) == 0, "ipv6 one-nibble value");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "c", 1, &result);
+    TEST_ASSERT(r != LN_VM_OK, "ipv6 one-nibble at eos refuses");
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+static int test_vm_field_iso_date(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+    const ln_fast_field_t *f;
+    const char *val;
+    size_t vlen;
+    int r;
+    ln_instr_t code[] = {
+        ln_i_field(OP_FIELD_DATE, "d"),
+        ln_i_match("rule1"),
+    };
+    ln_program_t prog;
+
+    code[0].aux = 1;
+    prog = ln_program_make(code, 2, "test_field_iso_date");
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "2024-01-15 rest", 15, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "iso date match");
+    f = find_field(&result, "d");
+    TEST_ASSERT(f != NULL, "iso date field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 10 && memcmp(val, "2024-01-15", 10) == 0, "iso date value");
+    teardown_vm(&vm, &arena);
+
+    /* 16+ readable bytes: SSE/NEON layout check, not the 10-byte scalar. */
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "2024-01-15 13:45:00z", 20, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "iso date simd-width match");
+    f = find_field(&result, "d");
+    TEST_ASSERT(f != NULL, "iso date simd field found");
+    val = field_str(f, &vlen);
+    TEST_ASSERT(vlen == 10 && memcmp(val, "2024-01-15", 10) == 0,
+                "iso date simd value");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "2024-13-01", 10, &result);
+    TEST_ASSERT(r != LN_VM_OK, "iso date refuses month 13");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "2024-13-01 13:45:00z", 20, &result);
+    TEST_ASSERT(r != LN_VM_OK, "iso date simd-width refuses month 13");
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
 static int test_vm_field_quoted(void)
 {
     ln_arena_t arena;
@@ -791,6 +1002,37 @@ static int test_vm_call_ret(void)
     int r = ln_vm_exec(&vm, &prog, "hello world", 11, &result);
     TEST_ASSERT_EQ(r, LN_VM_OK, "call/ret should match");
 
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+static int test_vm_call_commits_forks(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+    ln_instr_t code[] = {
+        /* [0] */ {.op = OP_CALL, .data.jump.offset = 4},
+        /* [1] */ ln_i_char(' '),
+        /* [2] */ ln_i_literal("attempted", 9),
+        /* [3] */ ln_i_match("rule1"),
+        /* [4] */ ln_i_fork(3),
+        /* [5] */ ln_i_field(OP_FIELD_IPV6, "f"),
+        /* [6] */ {.op = OP_RET},
+        /* [7] */ ln_i_field(OP_FIELD_WORD, "f"),
+        /* [8] */ {.op = OP_RET},
+    };
+    ln_program_t prog = ln_program_make(code, 9, "test_call_commit");
+    int r;
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "client attempted", 16, &result);
+    TEST_ASSERT(r != LN_VM_OK, "committed ipv6 nibble must not retry word");
+    teardown_vm(&vm, &arena);
+
+    setup_vm(&vm, &arena, &result);
+    r = ln_vm_exec(&vm, &prog, "qqq attempted", 13, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "failed first alt still tries word");
     teardown_vm(&vm, &arena);
     return 1;
 }
@@ -917,6 +1159,32 @@ static int test_vm_literal_oversized_aux(void)
     static const char big[100] = {0};
     int r = ln_vm_exec(&vm, &prog, big, sizeof(big), &result);
     TEST_ASSERT_EQ(r, LN_VM_NOMATCH, "oversized literal must not match/over-read");
+
+    teardown_vm(&vm, &arena);
+    return 1;
+}
+
+/* Pooled literal: text lives in strpool, compared with SIMD memeq. */
+static int test_vm_literal_ext(void)
+{
+    ln_arena_t arena;
+    ln_vm_t vm;
+    ln_fast_result_t result;
+    static const char pool[] = "the_quick_brown_fox_jumps_over_the_lazy_dog_XXXX";
+    static const char input[] = "the_quick_brown_fox_jumps_over_the_lazy_dog_XXXX";
+    const uint32_t lit_len = (uint32_t)(sizeof(pool) - 1);
+
+    setup_vm(&vm, &arena, &result);
+
+    ln_instr_t code[] = {
+        ln_i_literal_ext(0, lit_len),
+        ln_i_match("rule1"),
+    };
+    ln_program_t prog = ln_program_make(code, 2, "test_lit_ext");
+    prog.strpool = pool;
+
+    int r = ln_vm_exec(&vm, &prog, input, sizeof(input) - 1, &result);
+    TEST_ASSERT_EQ(r, LN_VM_OK, "pooled literal must match");
 
     teardown_vm(&vm, &arena);
     return 1;
@@ -1191,15 +1459,20 @@ int main(void)
 
     printf("Skip instruction tests:\n");
     RUN_TEST(test_vm_skip_space);
+    RUN_TEST(test_vm_no_leading_trim);
     RUN_TEST(test_vm_skip_n);
     printf("\n");
 
     printf("Field extraction tests:\n");
     RUN_TEST(test_vm_field_word);
+    RUN_TEST(test_vm_field_alpha);
     RUN_TEST(test_vm_field_int);
+    RUN_TEST(test_fast_first_wins);
     RUN_TEST(test_vm_field_rest);
     RUN_TEST(test_vm_field_char_to);
     RUN_TEST(test_vm_field_ipv4);
+    RUN_TEST(test_vm_field_ipv6);
+    RUN_TEST(test_vm_field_iso_date);
     RUN_TEST(test_vm_field_quoted);
     printf("\n");
 
@@ -1209,6 +1482,7 @@ int main(void)
 
     printf("Call/ret tests:\n");
     RUN_TEST(test_vm_call_ret);
+    RUN_TEST(test_vm_call_commits_forks);
     printf("\n");
 
     printf("Security regression tests:\n");
@@ -1217,6 +1491,7 @@ int main(void)
     RUN_TEST(test_vm_pc_runs_off_end);
     RUN_TEST(test_vm_self_loop_instruction_limit);
     RUN_TEST(test_vm_literal_oversized_aux);
+    RUN_TEST(test_vm_literal_ext);
     RUN_TEST(test_inline_literal_len_clamped);
     RUN_TEST(test_inline_name_nul_terminated);
     printf("\n");

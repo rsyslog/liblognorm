@@ -47,6 +47,15 @@ add_rule 'rule=:%field:json%end'
 execute '{"f1": "1", "f2": 2}end'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 
+# json-c includes whitespace after the value in the parse. A following
+# literal must still see "end", not " end".
+execute '{"f1": "1", "f2": 2} end'
+assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
+
+# libfastjson accepts single-quoted keys/strings; so must turbo.
+execute "{'f1': 1}end"
+assert_output_json_eq '{ "field": { "f1": 1 } }'
+
 # A non-JSON body does not match; only unparsed-data is emitted.
 reset_rules
 add_rule 'version=2'
@@ -113,5 +122,14 @@ add_rule 'version=2'
 add_rule 'rule=:%.:json%'
 execute '{"timestamp":"2026-08-20T12:00:00.1+0000","src_ip":"1.2.3.4","alert":{"severity":1}}'
 assert_output_json_eq '{ "timestamp": "2026-08-20T12:00:00.1+0000", "src_ip": "1.2.3.4", "alert": { "severity": 1 } }'
+
+# Empty nested objects are stored (skipempty is the only way to drop them).
+# An empty array was already kept as a raw span; an empty object was not.
+execute '{"dns":{"grouped":{}}}'
+assert_output_json_eq '{ "dns": { "grouped": { } } }'
+execute '{"a":1,"b":{}}'
+assert_output_json_eq '{ "a": 1, "b": { } }'
+execute '{"b":[]}'
+assert_output_json_eq '{ "b": [ ] }'
 
 cleanup_tmp_files

@@ -14,9 +14,11 @@
 # matter how many keys it carries, and a test built on it passes even with the
 # limit set to 1.
 #
-# The truncation FLAG itself stays visible to callers of the raw API and is
-# asserted end to end by rsyslog's mmnormalize-turbo-truncated-stat testbench
-# test (mmnormalize/turbo.truncated impstats counter).
+# The raw API (ln_turbo_normalize_raw) still returns the truncated result
+# plus LN_FRESULT_TRUNCATED; it does not refuse. Callers decide. rsyslog's
+# mmnormalize declines that result, falls back to ln_normalize, and counts
+# it in the turbo.truncated impstats counter
+# (rsyslog's tests/mmnormalize-turbo-truncated-stat.sh).
 srcdir="${srcdir:-.}"
 # shellcheck disable=SC1091
 . "$srcdir"/exec.sh

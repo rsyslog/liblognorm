@@ -31,11 +31,12 @@ extern "C" {
 /** Maximum fields per result.
  *
  * Real-world CSV-shaped rulebases go well past 64: a PAN-OS TRAFFIC record is
- * 97 columns, and an ECS mapping adds annotations on top.  The array is only
- * written up to n_fields, so the capacity costs memory (one array per context
- * and per snapshot), not per-message time.  Anything beyond this is not
- * truncated silently: the JSON fast path refuses the result and the caller
- * falls back to the recursive walker. */
+ * 97 columns, and an ECS mapping adds annotations on top. Parse-time writes
+ * stop at n_fields. A snapshot still allocates the full array (arena_data[]
+ * sits after sizeof(ln_fast_result_t)); only the used prefix is copied.
+ * Anything beyond this is not truncated silently: the JSON string path
+ * refuses the result and the caller falls back to the recursive walker.
+ * n_fields is uint8_t, so this cap must stay at or below 255. */
 #define LN_FAST_MAX_FIELDS 128
 
 /** Maximum tags per result */
@@ -187,27 +188,33 @@ ln_fast_result_clear(ln_fast_result_t *r)
 	r->original_len = 0;
 }
 
-/**
- * @brief Add string field with static name (no copy).
- *
- * FAST PATH: For known field names, pass static string literal.
- */
-
 static inline int
-ln_fast_add_string_static(ln_fast_result_t *r,
-						  const char *name, uint16_t name_len,
-						  const char *val, uint32_t val_len)
+ln_fast_name_taken(const ln_fast_result_t *r, const char *name, uint16_t name_len)
 {
-	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	uint8_t i;
 
-	f = &r->fields[r->n_fields++];
+	for (i = 0; i < r->n_fields; i++) {
+		const ln_fast_field_t *f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name == name)
+			return 1;
+		if (f->name != NULL && memcmp(f->name, name, name_len) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+static inline void
+ln_fast_store_string(ln_fast_field_t *f,
+					 const char *name, uint16_t name_len,
+					 const char *val, uint32_t val_len)
+{
 	f->name = name;
 	f->name_len = name_len;
 	f->flags = LN_FFIELD_STATIC_NAME | LN_FFIELD_STATIC_VAL
 			 | ln_ffield_detect_nested(name, name_len);
-
-	/* Inline small strings */
 	if (val_len < LN_FAST_INLINE_SIZE) {
 		f->type = LN_FTYPE_STRING_INLINE;
 		memcpy(f->v.inl, val, val_len);
@@ -217,18 +224,34 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 		f->v.str.ptr = val;
 		f->v.str.len = val_len;
 	}
-	
+}
+
+/**
+ * @brief Add string field with static name (no copy).
+ *
+ * FAST PATH: For known field names, pass static string literal.
+ * Appends even when the name is already present. Sequential parsers
+ * that share a name (``%f:ipv4%:%f:number%``) must all land so a
+ * last-wins lookup matches the walker. Use ln_fast_set_string_static
+ * when a later binding should overwrite in place (CEF, annotations).
+ */
+
+static inline int
+ln_fast_add_string_static(ln_fast_result_t *r,
+						  const char *name, uint16_t name_len,
+						  const char *val, uint32_t val_len)
+{
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	ln_fast_store_string(&r->fields[r->n_fields++], name, name_len, val, val_len);
 	return 0;
 }
 
 /*
- * Replace the value of an existing field, or add it when absent.
+ * Replace the value of an existing field, or add it when absent (last-wins).
  *
- * An annotation is applied by the standard parser with a replacing add, so a
- * second annotation writing the same name overwrites the first rather than
- * leaving two entries under one name. The fast path has to reach the same
- * single value. The scan is linear, but it runs only for annotation fields,
- * of which a rule carries a handful.
+ * CEF extensions and annotations use json_object_object_add, which overwrites
+ * a name already present. One scan: a hit stores in place, a miss appends
+ * without going back through first-wins.
  *
  * @return 0 on success, -1 if the result is full.
  */
@@ -237,28 +260,22 @@ ln_fast_set_string_static(ln_fast_result_t *r,
 						  const char *name, uint16_t name_len,
 						  const char *val, uint32_t val_len)
 {
-	int i;
+	uint8_t i;
 
-	for (i = r->n_fields - 1; i >= 0; i--) {
+	for (i = 0; i < r->n_fields; i++) {
 		ln_fast_field_t *const f = &r->fields[i];
 
-		if (f->name_len != name_len || f->name == NULL
-			|| memcmp(f->name, name, name_len) != 0)
+		if (f->name_len != name_len)
 			continue;
-		f->flags = LN_FFIELD_STATIC_NAME | LN_FFIELD_STATIC_VAL
-				 | ln_ffield_detect_nested(name, name_len);
-		if (val_len < LN_FAST_INLINE_SIZE) {
-			f->type = LN_FTYPE_STRING_INLINE;
-			memcpy(f->v.inl, val, val_len);
-			f->v.inl[val_len] = '\0';
-		} else {
-			f->type = LN_FTYPE_STRING;
-			f->v.str.ptr = val;
-			f->v.str.len = val_len;
-		}
+		if (f->name != name
+			&& (f->name == NULL || memcmp(f->name, name, name_len) != 0))
+			continue;
+		ln_fast_store_string(f, name, name_len, val, val_len);
 		return 0;
 	}
-	return ln_fast_add_string_static(r, name, name_len, val, val_len);
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	ln_fast_store_string(&r->fields[r->n_fields++], name, name_len, val, val_len);
+	return 0;
 }
 
 /**
@@ -329,6 +346,41 @@ ln_fast_add_null_static(ln_fast_result_t *r,
 			 | ln_ffield_detect_nested(name, name_len);
 	f->v.i = 0;
 
+	return 0;
+}
+
+static inline int
+ln_fast_set_null_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len)
+{
+	uint8_t i;
+
+	for (i = 0; i < r->n_fields; i++) {
+		ln_fast_field_t *const f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name != name
+			&& (f->name == NULL || memcmp(f->name, name, name_len) != 0))
+			continue;
+		f->name = name;
+		f->name_len = name_len;
+		f->type = LN_FTYPE_NULL;
+		f->flags = LN_FFIELD_STATIC_NAME
+				 | ln_ffield_detect_nested(name, name_len);
+		f->v.i = 0;
+		return 0;
+	}
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	{
+		ln_fast_field_t *f = &r->fields[r->n_fields++];
+		f->name = name;
+		f->name_len = name_len;
+		f->type = LN_FTYPE_NULL;
+		f->flags = LN_FFIELD_STATIC_NAME
+				 | ln_ffield_detect_nested(name, name_len);
+		f->v.i = 0;
+	}
 	return 0;
 }
 

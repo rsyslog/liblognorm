@@ -43,15 +43,15 @@ struct ln_fast_result_snapshot_s {
 /**
  * @brief Create a snapshot from a turbo parse result.
  *
- * Performs a single malloc(sizeof(snapshot) + arena->used), copies the
- * result struct and arena bytes, then rebases all arena pointers.
+ * Single malloc of sizeof(snapshot) + arena used + extra string copies.
+ * Copies used field slots and the result tail (n_fields, tags, match
+ * info), then rebases arena pointers. Unused slots past n_fields are
+ * not copied; the allocation still covers the full ln_fast_result_t
+ * because ln_fast_result_snapshot_get() returns a pointer to it.
  *
  * @param src    Source result (from ln_turbo_normalize_raw)
  * @param arena  Arena that backs the result's string data
  * @return Snapshot (caller owns), or NULL on allocation failure
- *
- * Cost: 1 malloc + ~4.4KB memcpy (result) + arena->used memcpy + field walk
- * Typically under 6KB total for a ~20-field log message.
  */
 ln_fast_result_snapshot_t *
 ln_fast_result_snapshot_create(const ln_fast_result_t *src,

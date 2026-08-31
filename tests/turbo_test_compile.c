@@ -143,12 +143,12 @@ test_clean_rulebase_is_available(void)
 /*============================================================================
  * A rulebase turbo cannot compile must leave nothing runnable.
  *
- * "repeat" is the one v2 parser with no bytecode form, so compile_node()
- * bails out part-way through emitting the program. Before the fix the
- * half-emitted code stayed in place, ln_turbo_is_available() reported ready
- * because code_len was non-zero, and the VM then ran a program with no
- * terminating OP_HALT: every message that did not match it backtracked until
- * it hit MAX_INSTRUCTIONS (100M) before falling back to the walker.
+ * A number whose maxval does not fit in aux refuses to compile (dropping
+ * the bound would accept values the standard parser refuses). Before the
+ * discard-on-failure fix the half-emitted code stayed in place, turbo
+ * reported ready because code_len was non-zero, and the VM then ran a
+ * program with no terminating OP_HALT: every unmatched message burned
+ * MAX_INSTRUCTIONS.
  *============================================================================*/
 static int
 test_failed_compile_leaves_nothing_runnable(void)
@@ -156,8 +156,7 @@ test_failed_compile_leaves_nothing_runnable(void)
     ln_ctx ctx = load_rb_lenient(
         "version=2\n"
         "rule=:%f:word% ok\n"
-        "rule=:x %r:repeat{ \"parser\": {\"type\":\"word\", \"name\":\".\"}, "
-            "\"while\": {\"type\":\"literal\", \"text\":\" \"} }%\n");
+        "rule=:%{\"name\":\"n\",\"type\":\"number\",\"maxval\":100000}%\n");
     char *js;
 
     CHECK(ctx != NULL, "ctx setup");
@@ -205,6 +204,73 @@ test_long_named_literal_compiles(void)
     CHECK(strstr(js, text) != NULL, "literal text stored as a field value");
     free(js);
     ln_exitCtx(ctx);
+    return 1;
+}
+
+/*============================================================================
+ * Unnamed literals longer than the 60-byte inline buffer compile too.
+ *
+ * pdagOptimize concatenates consecutive unnamed literals; a 70-byte run
+ * used to abort the whole rulebase via emit_literal(). It now lives in the
+ * string pool as OP_LITERAL_EXT.
+ *============================================================================*/
+static int
+test_long_unnamed_literal_compiles(void)
+{
+    static const char lit[] =
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        "yyyyyyyyyy";
+    ln_ctx ctx = load_rb(
+        "version=2\n"
+        "rule=:"
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        "yyyyyyyyyy %f:word%\n");
+    char *js;
+
+    CHECK(ctx != NULL, "ctx setup");
+    CHECK(ln_turbo_is_available(ctx) == 1,
+          "a long unnamed literal must not abort compilation");
+    CHECK(strlen(lit) > 60, "test literal is past the inline buffer");
+
+    js = norm(ctx, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                   "yyyyyyyyyy hello");
+    CHECK(js != NULL, "normalize succeeded");
+    CHECK(strstr(js, "\"hello\"") != NULL, "field after the long literal");
+    free(js);
+    ln_exitCtx(ctx);
+    return 1;
+}
+
+/*============================================================================
+ * A long sequential field chain compiles.
+ *
+ * compile_node used to recurse once per parser, then give up past depth 200,
+ * so a 250-field rule never produced bytecode. Linear non-terminal chains
+ * are now a loop; this locks that.
+ *============================================================================*/
+static int
+test_long_sequential_chain_compiles(void)
+{
+    enum { N = 250 };
+    size_t cap = 32 + (size_t)N * 32;
+    char *rb = malloc(cap);
+    char *p;
+    ln_ctx ctx;
+    int i;
+
+    CHECK(rb != NULL, "alloc");
+    p = rb;
+    p += sprintf(p, "version=2\nrule=:");
+    for (i = 0; i < N - 1; i++)
+        p += sprintf(p, "%%f%03d:char-to:|%%", i);
+    sprintf(p, "%%f%03d:rest%%\n", N - 1);
+
+    ctx = load_rb(rb);
+    CHECK(ctx != NULL, "ctx setup");
+    CHECK(ln_turbo_is_available(ctx) == 1,
+          "a 250-field sequential rule must compile");
+    ln_exitCtx(ctx);
+    free(rb);
     return 1;
 }
 
@@ -260,11 +326,9 @@ test_string_to_uses_its_delimiter(void)
  * A result wider than the fast-result array is never silently truncated.
  *
  * The vehicle is "%.:json%", which inlines every object key as its own field.
- * A chain of char-sep fields cannot reach the cap: compile_node() recurses
- * once per parser and once per literal and gives up past depth 200, so a rule
- * runs out of compile depth around 99 sequential fields, well before
- * LN_FAST_MAX_FIELDS. A test built on such a chain never compiles, the walker
- * quietly does all the work, and it passes whatever the cap is set to.
+ * A chain of char-sep fields can now compile (linear chains no longer consume
+ * one C stack frame per parser), but still cannot reach the cap as a unit
+ * test without a huge rulebase; JSON is the compact way to fill the array.
  *============================================================================*/
 
 /* Build "{"k000":0,...}" with n keys, plus the matching rulebase. */
@@ -352,6 +416,8 @@ main(void)
     RUN(test_clean_rulebase_is_available);
     RUN(test_failed_compile_leaves_nothing_runnable);
     RUN(test_long_named_literal_compiles);
+    RUN(test_long_unnamed_literal_compiles);
+    RUN(test_long_sequential_chain_compiles);
     RUN(test_long_annotation_value_compiles);
     RUN(test_string_to_uses_its_delimiter);
     RUN(test_cap_is_reachable);

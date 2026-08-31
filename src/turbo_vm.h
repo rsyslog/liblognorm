@@ -49,9 +49,11 @@ typedef struct {
 	uint32_t          code_len; /**< Number of instructions */
 	const char       *name;     /**< Program name (optional) */
 	uint32_t          flags;    /**< Program flags */
-	const char       *strpool;  /**< Pool of NUL-terminated names too long to
-									 inline; instructions with LN_INSTR_F_NAME_POOL
-									 hold a byte offset into it. May be NULL. */
+	const char       *strpool;  /**< Pool of NUL-terminated names and of
+									 literals that do not fit inline.
+									 LN_INSTR_F_NAME_POOL / OP_LITERAL_EXT /
+									 OP_FIELD_STR_TO hold a byte offset here.
+									 May be NULL. */
 } ln_program_t;
 
 /*============================================================================
@@ -143,6 +145,10 @@ typedef struct {
 	/* Error info */
 	const char *error;          /**< Error message if failed */
 	char        error_buf[64];  /**< Per-instance error buffer (thread-safe) */
+
+	/* Set around a repeat parser-sub: a second add of the same name
+	 * fails the iteration instead of first-wins skip. */
+	uint8_t     fail_on_dup;
 } ln_vm_t;
 
 /*============================================================================

@@ -50,6 +50,7 @@
 #include "turbo_json.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
@@ -155,9 +156,10 @@ prsid_to_opcode(prsid_t prsid)
 	case PRSID_ISODATE:        return OP_FIELD_DATE;
 	case PRSID_TIME24HR:       return OP_FIELD_TIME;
 	case PRSID_TIME12HR:       return OP_FIELD_TIME;
-	case PRSID_DURATION:       return OP_FIELD_WORD;     /* Parse as word */
-	case PRSID_KERNEL_TIMESTAMP: return OP_FIELD_WORD;   /* Parse as word */
-	case PRSID_CISCO_IFACE:    return OP_FIELD_WORD;     /* Parse as word */
+	case PRSID_DURATION:       return OP_FIELD_TIME;
+	case PRSID_KERNEL_TIMESTAMP: return OP_FIELD_KERNEL_TS;
+	case PRSID_CISCO_IFACE:    return OP_CISCO_IFACE;
+	case PRSID_REPEAT:         return OP_REPEAT;
 	case PRSID_NAMEVALUE:      return OP_FIELD_NAME_VALUE;
 	case PRSID_V2_IPTABLES:    return OP_V2_IPTABLES;
 	case PRSID_CEE_SYSLOG:     return OP_CEE_SYSLOG;
@@ -254,11 +256,24 @@ static uint32_t
 emit_literal(compiler_t *comp, const char *lit, size_t len)
 {
 	ln_instr_t instr = {0};
-	instr.op = OP_LITERAL;
-	/* too long for the inline buffer: fall back to the standard parser */
-	if (len >= sizeof(instr.data.str)) return UINT32_MAX;
-	instr.aux = (uint16_t)len;
-	memcpy(instr.data.str, lit, len);
+	uint32_t off;
+
+	if (len < sizeof(instr.data.str)) {
+		instr.op = OP_LITERAL;
+		instr.aux = (uint16_t)len;
+		memcpy(instr.data.str, lit, len);
+		return emit(comp, &instr);
+	}
+	/* Compacted or JSON literals can be longer than the 60-byte inline
+	 * buffer. Pool them and match with OP_LITERAL_EXT; refusing here
+	 * aborted compilation of the whole rulebase. */
+	off = strpool_intern(comp, lit, len);
+	if (off == UINT32_MAX) return UINT32_MAX;
+	instr.op = OP_LITERAL_EXT;
+	instr.data.lit_pool.off = off;
+	instr.data.lit_pool.len = (uint32_t)len;
+	if (len <= UINT16_MAX)
+		instr.aux = (uint16_t)len;
 	return emit(comp, &instr);
 }
 
@@ -543,6 +558,11 @@ struct data_NameValue {
 	bool ignore_whitespaces; /* trim surrounding whitespace for key/value */
 };
 
+/* Mirrors parser.c data_OpQuotedString. */
+struct data_OpQuotedString {
+	bool escape;
+};
+
 /* Mirrors the layout-prefix of parser.c's private data_CharTo /
  * data_CharSeparated (no shared header). Both start with the same two fields;
  * types must match parser.c exactly: n_term_chars is size_t, not int (an int
@@ -631,12 +651,106 @@ turbo_date_wants_conversion(int prsid, const void *pdata)
 }
 
 /* Forward declaration for Checkpoint LEA parser data (defined in parser.c). */
+/*
+ * Layout must match struct data_String in parser.c: quoteMode, flags,
+ * matching, dashIsEmpty, qchars, then perm_chars[256]. We only read
+ * matching and perm_chars.
+ */
+struct data_String {
+	int quoteMode;
+	unsigned flags;
+	int matching; /* 0 exact, 1 lazy */
+	int dashIsEmpty;
+	char qchar_begin;
+	char qchar_end;
+	char perm_chars[256];
+};
+
+static int
+string_pdata_hexdigit_lazy(const void *pdata)
+{
+	const struct data_String *data = (const struct data_String *)pdata;
+	unsigned i;
+
+	if (data == NULL || data->matching != 1)
+		return 0;
+	for (i = 0; i < 256; i++) {
+		int want = ((i >= '0' && i <= '9') || (i >= 'a' && i <= 'f')
+			    || (i >= 'A' && i <= 'F'));
+		if (!!data->perm_chars[i] != want)
+			return 0;
+	}
+	return 1;
+}
+
 struct data_CheckpointLEA {
 	char terminator;
 };
 
+/*
+ * Compile a repeat parser: OP_REPEAT, then a JUMP over two RET-terminated
+ * subroutines (parser body, while body). Relative PCs live in the opcode.
+ */
 static int
-compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
+compile_repeat(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
+{
+	const struct data_Repeat *data;
+	const char *const fname = (prs->name != NULL) ? prs->name : "-";
+	ln_instr_t instr = {0};
+	ln_instr_t jump = {0};
+	uint32_t repeat_pc, jump_pc, parser_start, while_start, after;
+	uint32_t entry;
+	int r;
+
+	data = (const struct data_Repeat *)prs->parser_data;
+	if (data == NULL || data->parser == NULL || data->while_cond == NULL)
+		return -1;
+
+	instr.op = OP_REPEAT;
+	instr.flags = LN_INSTR_F_STORE;
+	if (data->permitMismatchInParser)
+		instr.flags |= LN_INSTR_F_REPEAT_PERMIT;
+	if (data->failOnDuplicate)
+		instr.aux = 1;
+	if (store_field_name(comp, &instr, instr.data.repeat.name,
+			     sizeof(instr.data.repeat.name), fname, strlen(fname)) != 0)
+		return -1;
+	repeat_pc = emit(comp, &instr);
+	if (repeat_pc == UINT32_MAX) return -1;
+	*out_pc = repeat_pc;
+
+	jump.op = OP_JUMP;
+	jump_pc = emit(comp, &jump);
+	if (jump_pc == UINT32_MAX) return -1;
+
+	parser_start = comp->turbo->code_len;
+	comp->in_custom_type++;
+	r = compile_node(comp, data->parser, &entry);
+	comp->in_custom_type--;
+	if (r != 0) return r;
+
+	while_start = comp->turbo->code_len;
+	comp->in_custom_type++;
+	r = compile_node(comp, data->while_cond, &entry);
+	comp->in_custom_type--;
+	if (r != 0) return r;
+
+	after = comp->turbo->code_len;
+	comp->turbo->code[jump_pc].data.jump.offset =
+		(int32_t)after - (int32_t)jump_pc;
+	comp->turbo->code[repeat_pc].data.repeat.parser_off =
+		(int32_t)parser_start - (int32_t)repeat_pc;
+	comp->turbo->code[repeat_pc].data.repeat.while_off =
+		(int32_t)while_start - (int32_t)repeat_pc;
+
+	return 0;
+}
+
+/* Emit this parser's instructions, not its pdag continuation. Custom-type
+ * and repeat bodies are separate trees and are compiled here; the sequential
+ * next node is left to compile_parser / compile_node's linear loop. */
+static int
+emit_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 {
 	uint32_t pc;
 	/*
@@ -646,6 +760,9 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	 * top level instead of discarding them.
 	 */
 	const char *const fname = (prs->name != NULL) ? prs->name : "-";
+
+	if (prs->prsid == PRSID_REPEAT)
+		return compile_repeat(comp, prs, out_pc);
 
 	/* Handle custom types with context push/pop */
 	if (prs->prsid == PRS_CUSTOM_TYPE) {
@@ -696,12 +813,6 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 			if (emit_ctx_pop(comp) == UINT32_MAX) return -1;
 		}
 
-		if (prs->node) {
-			uint32_t cont_entry;
-			int r = compile_node(comp, prs->node, &cont_entry);
-			if (r != 0) return r;
-			if (*out_pc == 0) *out_pc = cont_entry;
-		}
 		return 0;
 	}
 
@@ -800,6 +911,11 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 				delim = csdata->term_chars[0];
 				term_set = csdata->term_chars;
 				n_term = csdata->n_term_chars;
+			} else if (prs->prsid == PRSID_CHARSEP) {
+				/* Empty extra: walker has no terminator, so the
+				 * field is the rest of the input. Do not default
+				 * to space. */
+				delim = 0;
 			}
 		}
 		pc = emit_field(comp, op, fname, delim);
@@ -849,15 +965,45 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	if (pc == UINT32_MAX) return -1;
 	*out_pc = pc;
 
+	/* string{hexdigit,lazy} stops at the first non-hex byte, not at a space.
+	 * Mapping it to a whitespace word ate "01250003:5:" as one field and
+	 * the rest of the rule failed. aux 1 selects that scan on OP_FIELD_WORD. */
+	if (op == OP_FIELD_WORD && prs->prsid == PRSID_STRING
+	    && string_pdata_hexdigit_lazy(prs->parser_data))
+		comp->turbo->code[pc].aux = 1;
+	/* Alpha stops at the first non-letter. Mapping it to a whitespace
+	 * word ate "alice<NBSP>Host" as one field. aux 2 selects isalpha. */
+	if (op == OP_FIELD_WORD && prs->prsid == PRSID_ALPHA)
+		comp->turbo->code[pc].aux = 2;
+
 	/* number/float/hexnumber with format="number" emit a native JSON number
 	 * instead of the default string. */
 	if ((op == OP_FIELD_INT || op == OP_FIELD_HEX || op == OP_FIELD_FLOAT) &&
 	    turbo_numeric_wants_number(op, prs->parser_data))
 		comp->turbo->code[pc].flags |= LN_INSTR_F_NUMERIC;
 
-	/* aux selects the clock the time parser reads. */
-	if (op == OP_FIELD_TIME)
-		comp->turbo->code[pc].aux = (prs->prsid == PRSID_TIME12HR) ? 1u : 0u;
+	/* aux selects the clock the time parser reads. Duration is H:MM:SS
+	 * or HH:MM:SS with unbounded hours; it is not a 24-hour clock. */
+	if (op == OP_FIELD_TIME) {
+		if (prs->prsid == PRSID_DURATION)
+			comp->turbo->code[pc].aux = 2u;
+		else if (prs->prsid == PRSID_TIME12HR)
+			comp->turbo->code[pc].aux = 1u;
+		else
+			comp->turbo->code[pc].aux = 0u;
+	}
+
+	/* OP_FIELD_QUOTED aux: 0 = op-quoted (optional quotes, no escape),
+	 * 1 = op-quoted with escape, 2 = quoted-string (quotes required). */
+	if (op == OP_FIELD_QUOTED) {
+		if (prs->prsid == PRSID_QUOTEDSTRING)
+			comp->turbo->code[pc].aux = 2u;
+		else if (prs->parser_data
+			 && ((struct data_OpQuotedString *)prs->parser_data)->escape)
+			comp->turbo->code[pc].aux = 1u;
+		else
+			comp->turbo->code[pc].aux = 0u;
+	}
 
 	if (op == OP_FIELD_INT || op == OP_FIELD_HEX) {
 		const uint64_t maxval = turbo_numeric_maxval(op, prs->parser_data);
@@ -881,15 +1027,35 @@ compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 		comp->turbo->code[pc].flags |= LN_INSTR_F_DATE_FMT;
 		comp->turbo->code[pc].aux = (uint16_t)((fmt & 0xff) | (kind << 8));
 	}
-
-	if (prs->node) {
-		uint32_t cont_entry;
-		int r = compile_node(comp, prs->node, &cont_entry);
-		if (r != 0) return r;
-	}
+	/* Bare YYYY-MM-DD. ln_simd_timestamp wants an RFC5424/3164 clock. */
+	if (op == OP_FIELD_DATE && prs->prsid == PRSID_ISODATE
+	    && !(comp->turbo->code[pc].flags & LN_INSTR_F_DATE_FMT))
+		comp->turbo->code[pc].aux = 1;
 
 	return 0;
 }
+
+static int
+compile_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
+{
+	int r = emit_parser(comp, prs, out_pc);
+	if (r != 0) return r;
+	if (prs->node) {
+		uint32_t cont_entry;
+		r = compile_node(comp, prs->node, &cont_entry);
+		if (r != 0) return r;
+		if (*out_pc == 0) *out_pc = cont_entry;
+	}
+	return 0;
+}
+
+#ifndef LN_TURBO_MAX_COMPILE_DEPTH
+/* Recursion budget for forks, prefix-terminals and custom-type / repeat
+ * bodies. Linear field chains are compiled in a loop below, so a 250-field
+ * rule no longer consumes 250 C stack frames (the old hard cap of 200
+ * refused those rulebases outright). */
+#define LN_TURBO_MAX_COMPILE_DEPTH 1024
+#endif
 
 static int
 compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
@@ -901,13 +1067,41 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 		comp->max_depth = comp->depth;
 	}
 
-	if (comp->depth > 200) {
+	if (comp->depth > LN_TURBO_MAX_COMPILE_DEPTH) {
+		LN_DBGPRINTF(comp->ctx, "turbo: compile recursion exceeds %d "
+			     "(depth=%d)", LN_TURBO_MAX_COMPILE_DEPTH, comp->depth);
 		comp->depth--;
 		return -1;
 	}
 
 	uint32_t first = comp->turbo->code_len;
 	int r;
+
+	*entry = first;
+
+	/* Collapse a linear non-terminal chain into a loop. compile_parser
+	 * used to recurse once per field (and once per compacted literal),
+	 * so a 100-field rule blew the old depth-200 cap. Forks, prefix
+	 * terminals and custom-type bodies still recurse. */
+	while (node->nparsers == 1 && !node->flags.isTerminal) {
+		uint32_t pc;
+		r = emit_parser(comp, &node->parsers[0], &pc);
+		if (r != 0) { comp->depth--; return r; }
+		node = node->parsers[0].node;
+		if (!node) {
+			LN_DBGPRINTF(comp->ctx, "turbo: non-terminal dead-end after "
+				     "linear chain (depth=%d), emitting OP_FAIL",
+				     comp->depth);
+			ln_instr_t fail_instr = {0};
+			fail_instr.op = OP_FAIL;
+			if (emit(comp, &fail_instr) == UINT32_MAX) {
+				comp->depth--;
+				return -1;
+			}
+			comp->depth--;
+			return 0;
+		}
+	}
 
 	if (node->nparsers == 0 && node->flags.isTerminal) {
 		if (comp->in_custom_type == 0) {
@@ -1027,6 +1221,32 @@ compile_node(compiler_t *comp, struct ln_pdag *node, uint32_t *entry)
 	return 0;
 }
 
+/*
+ * Per-message reset. The 16k default covers a typical syslog line with no
+ * extra allocation. A line that needs a rewritten copy (CEF unescape, JSON
+ * strings) of up to strLen, plus names, gets 2*strLen: grow once after reset
+ * (the arena is empty, so nothing moves), then keep that size. The compare
+ * on a small line is two integers.
+ */
+static int
+turbo_reset_for_msg(ln_turbo_ctx_t *turbo, size_t strLen)
+{
+	size_t need;
+
+	ln_fast_result_clear(&turbo->result);
+	ln_arena_reset(&turbo->arena);
+	ln_vm_reset(&turbo->vm);
+
+	if (strLen > SIZE_MAX / 2) {
+		return -1;
+	}
+	need = strLen * 2;
+	if (need <= turbo->arena.capacity) {
+		return 0;
+	}
+	return ln_arena_ensure(&turbo->arena, need) == LN_ARENA_OK ? 0 : -1;
+}
+
 /*============================================================================
  * Public API
  *============================================================================*/
@@ -1123,7 +1343,8 @@ validate_strpool_refs(compiler_t *comp)
 		if (turbo->strpool == NULL) {
 			/* No pool: no instruction may claim to reference one. */
 			if ((in->flags & (LN_INSTR_F_NAME_POOL | LN_INSTR_F_KV_POOL))
-			    || in->op == OP_FIELD_STR_TO)
+			    || in->op == OP_FIELD_STR_TO
+			    || in->op == OP_LITERAL_EXT)
 				return -1;
 			continue;
 		}
@@ -1142,6 +1363,9 @@ validate_strpool_refs(compiler_t *comp)
 		if (in->op == OP_FIELD_STR_TO)
 			CHK_POOL(in->data.str_to.delim_off, in->aux,
 				 "string-to delimiter");
+		if (in->op == OP_LITERAL_EXT)
+			CHK_POOL(in->data.lit_pool.off, in->data.lit_pool.len,
+				 "pooled literal");
 	}
 	#undef CHK_POOL
 	return 0;
@@ -1264,10 +1488,10 @@ ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
 
 	ln_turbo_ctx_t *turbo = ctx->turbo;
 
-	/* Reset fast result */
-	ln_fast_result_clear(&turbo->result);
-	ln_arena_reset(&turbo->arena);
-	ln_vm_reset(&turbo->vm);
+	if (turbo_reset_for_msg(turbo, strLen) != 0) {
+		*json_str = NULL;
+		return -1;
+	}
 
 	ln_program_t prog = {
 		.code = turbo->code,
@@ -1392,10 +1616,10 @@ ln_turbo_normalize_raw(ln_ctx ctx, const char *str, size_t strLen,
 
 	ln_turbo_ctx_t *turbo = ctx->turbo;
 
-	/* Reset per-message state */
-	ln_fast_result_clear(&turbo->result);
-	ln_arena_reset(&turbo->arena);
-	ln_vm_reset(&turbo->vm);
+	if (turbo_reset_for_msg(turbo, strLen) != 0) {
+		*result = NULL;
+		return -1;
+	}
 
 	ln_program_t prog = {
 		.code = turbo->code,

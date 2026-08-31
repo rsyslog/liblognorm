@@ -44,7 +44,9 @@ typedef enum {
 	
 	/*=== Literals (0x10-0x1F) ===*/
 	OP_LITERAL      = 0x10,  /**< Match literal (inline), len in header */
-	OP_LITERAL_EXT  = 0x11,  /**< Match literal (external ptr) */
+	OP_LITERAL_EXT  = 0x11,  /**< Match literal in the string pool.
+                              *   data.lit_pool.off/len; used when the text
+                              *   does not fit in the 60-byte inline buffer. */
 	OP_LITERAL_CI   = 0x12,  /**< Match literal case-insensitive */
 	OP_CHAR         = 0x13,  /**< Match single char */
 	OP_ANY          = 0x14,  /**< Match any char (advance 1) */
@@ -114,7 +116,13 @@ typedef enum {
 	OP_CHECKPOINT_LEA = 0x75, /**< Parse Checkpoint LEA name: value; */
 	OP_FIELD_TIME   = 0x76,  /**< Extract a wall-clock time, HH:MM:SS.
                               *   aux selects the grammar: 0 reads a 24-hour
-                              *   clock, 1 a 12-hour one. */
+                              *   clock, 1 a 12-hour one, 2 a duration
+                              *   (H:MM:SS or HH:MM:SS, hours unbounded). */
+	OP_FIELD_KERNEL_TS = 0x77, /**< Extract a kernel timestamp [sec.usec]. */
+	OP_CISCO_IFACE  = 0x78,  /**< Cisco interface spec: [if:]ip/port [(ip2/port2)] [(user)]. */
+	OP_REPEAT       = 0x79,  /**< Repeat parser-sub while while-sub matches.
+                              *   data.repeat holds relative PCs; aux bit0 =
+                              *   permitMismatchInParser, bit1 = failOnDuplicate. */
 
 	/*=== Debug (0xF0-0xFF) ===*/
 	OP_NOP          = 0xF0,  /**< No operation */
@@ -191,6 +199,20 @@ typedef struct {
 			uint32_t val_len;  /**< Value length */
 			uint8_t  _pad[48];
 		} kv_pool;
+
+		/* OP_REPEAT: two relative subroutine PCs plus the array name. */
+		struct {
+			char     name[52]; /**< Field name for the JSON array */
+			int32_t  parser_off; /**< Relative PC of the parser sub */
+			int32_t  while_off;  /**< Relative PC of the while sub */
+		} repeat;
+
+		/* OP_LITERAL_EXT: text lives in the program string pool. */
+		struct {
+			uint32_t off;      /**< String-pool offset of the literal */
+			uint32_t len;      /**< Literal length in bytes */
+			uint8_t  _pad[52];
+		} lit_pool;
 	} data;
 } ln_instr_t;
 
@@ -217,6 +239,7 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 									  or "timestamp-unix-ms". aux carries the
 									  FMT_MODE in its low byte and 0=rfc3164 /
 									  1=rfc5424 in its high byte. */
+#define LN_INSTR_F_REPEAT_PERMIT 0x40 /**< repeat: option.permitMismatchInParser */
 /*
  * OP_STATIC_FIELD only ever carries LN_INSTR_F_KV_POOL, so the remaining bits
  * are free for it to reuse. This one shares its value with
@@ -284,6 +307,17 @@ static inline ln_instr_t ln_i_literal(const char *lit, uint16_t len) {
 	i.aux = len;
 	for (uint16_t j = 0; j < len && j < LN_INSTR_MAX_INLINE; j++)
 		i.data.str[j] = lit[j];
+	return i;
+}
+
+/** Create LITERAL_EXT instruction (text at strpool offset @p off). */
+static inline ln_instr_t ln_i_literal_ext(uint32_t off, uint32_t len) {
+	ln_instr_t i = {0};
+	i.op = OP_LITERAL_EXT;
+	i.data.lit_pool.off = off;
+	i.data.lit_pool.len = len;
+	if (len <= UINT16_MAX)
+		i.aux = (uint16_t)len;
 	return i;
 }
 

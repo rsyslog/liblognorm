@@ -278,6 +278,63 @@ static int test_alloc_zero_size(void)
     return 1;
 }
 
+static int test_ensure_noop_when_large_enough(void)
+{
+    ln_arena_t arena;
+    size_t cap;
+    uint8_t *base;
+
+    ln_arena_init(&arena);
+    cap = arena.capacity;
+    base = arena.base;
+    TEST_ASSERT_EQ(ln_arena_ensure(&arena, 1024), LN_ARENA_OK,
+                   "ensure below capacity is a no-op");
+    TEST_ASSERT(arena.base == base, "no-op must not move the buffer");
+    TEST_ASSERT_EQ((long long)arena.capacity, (long long)cap,
+                   "no-op must not change capacity");
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_ensure_grows_owned_empty(void)
+{
+    ln_arena_t arena;
+    void *p;
+
+    ln_arena_init_sized(&arena, 256);
+    TEST_ASSERT_EQ(ln_arena_ensure(&arena, 64 * 1024), LN_ARENA_OK,
+                   "owned empty arena can grow");
+    TEST_ASSERT(arena.capacity >= 64 * 1024, "capacity must meet the request");
+    p = ln_arena_alloc(&arena, 32 * 1024);
+    TEST_ASSERT(p != NULL, "alloc after grow must succeed");
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_ensure_static_refuses(void)
+{
+    ln_arena_t arena;
+    uint8_t buffer[256];
+
+    ln_arena_init_static(&arena, buffer, sizeof(buffer));
+    TEST_ASSERT_EQ(ln_arena_ensure(&arena, 64 * 1024), LN_ARENA_EOVERFLOW,
+                   "a static buffer cannot grow");
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_ensure_refuses_while_in_use(void)
+{
+    ln_arena_t arena;
+
+    ln_arena_init_sized(&arena, 256);
+    TEST_ASSERT(ln_arena_alloc(&arena, 16) != NULL, "seed alloc");
+    TEST_ASSERT_EQ(ln_arena_ensure(&arena, 64 * 1024), LN_ARENA_EOVERFLOW,
+                   "must not move a live buffer");
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
 static int test_alloc_exhaustion(void)
 {
     ln_arena_t arena;
@@ -871,6 +928,10 @@ int main(void)
     RUN_TEST(test_alloc_alignment);
     RUN_TEST(test_alloc_zero_size);
     RUN_TEST(test_alloc_exhaustion);
+    RUN_TEST(test_ensure_noop_when_large_enough);
+    RUN_TEST(test_ensure_grows_owned_empty);
+    RUN_TEST(test_ensure_static_refuses);
+    RUN_TEST(test_ensure_refuses_while_in_use);
     RUN_TEST(test_calloc);
     RUN_TEST(test_alloc_write_read);
     printf("\n");

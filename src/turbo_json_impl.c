@@ -532,7 +532,7 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	 * bit i is set if level i has already emitted at least one entry.
 	 */
 	uint64_t level_has_entry = 0;  /* bitmask, bit 0 = root level */
-	uint8_t si;
+	int si;
 
 	if (buflen < 3) return -1;
 
@@ -550,8 +550,28 @@ ln_fast_to_json(const ln_fast_result_t *r,
 #define SET_HAS_ENTRY(lvl)  (level_has_entry |= (1ull << (lvl)))
 #define CLEAR_ENTRY_FROM(lvl) (level_has_entry &= (uint64_t)((1ull << (lvl)) - 1))
 
-	for (si = 0; si < n_valid; si++) {
-		const ln_fast_field_t *f = &r->fields[sorted[si]];
+	for (si = 0; si < n_valid; ) {
+		int group_end = si;
+		int k;
+
+		/* Equal names stay adjacent (stable sort). libfastjson keeps
+		 * every binding and serializes newest first, so a RFC parser
+		 * that last-wins on duplicate keys sees the first-added
+		 * value, while get_ex sees the last. Emit the group that way. */
+		while (group_end + 1 < n_valid) {
+			const ln_fast_field_t *a = &r->fields[sorted[si]];
+			const ln_fast_field_t *b = &r->fields[sorted[group_end + 1]];
+
+			if (a->name_len != b->name_len || a->name == NULL
+			    || b->name == NULL
+			    || memcmp(a->name, b->name, a->name_len) != 0)
+				break;
+			group_end++;
+		}
+
+		k = group_end;
+		for (;;) {
+		const ln_fast_field_t *f = &r->fields[sorted[k]];
 		const ln_json_path_comp_t *leaf;
 		ln_json_path_comp_t comps[LN_JSON_MAX_DEPTH];
 		int n_comps, leaf_idx, new_depth, common, min_depth, d;
@@ -589,12 +609,16 @@ ln_fast_to_json(const ln_fast_result_t *r,
 			}
 			SET_HAS_ENTRY(d);
 
-			/* Write object key: "component":{ */
-			if ((size_t)(end - p) < (size_t)comps[d].len + 4) return -1;
-			*p++ = '"';
-			memcpy(p, comps[d].start, comps[d].len);
-			p += comps[d].len;
-			*p++ = '"';
+			/* Write object key: "component":{
+			 * Keys go through the same escaper as values. A
+			 * name-value-list pair can put a quote in the
+			 * extracted name; memcpy of the raw bytes then
+			 * terminates the JSON key early. */
+			n = write_escaped_string(comps[d].start, comps[d].len,
+						 p, (size_t)(end - p));
+			if (n < 0) return -1;
+			p += n;
+			if ((size_t)(end - p) < 2) return -1;
 			*p++ = ':';
 			*p++ = '{';
 
@@ -609,19 +633,25 @@ ln_fast_to_json(const ln_fast_result_t *r,
 		}
 		SET_HAS_ENTRY(open_depth);
 
-		/* Write leaf key */
+		/* Write leaf key (escaped: extracted names are not identifiers) */
 		leaf = &comps[leaf_idx];
-		if ((size_t)(end - p) < (size_t)leaf->len + 3) return -1;
-		*p++ = '"';
-		memcpy(p, leaf->start, leaf->len);
-		p += leaf->len;
-		*p++ = '"';
+		n = write_escaped_string(leaf->start, leaf->len,
+					 p, (size_t)(end - p));
+		if (n < 0) return -1;
+		p += n;
+		if (p >= end) return -1;
 		*p++ = ':';
 
 		/* Write value */
 		n = write_field_value(f, p, end - p);
 		if (n < 0) return -1;
 		p += n;
+
+		if (k == si)
+			break;
+		k--;
+		}
+		si = group_end + 1;
 	}
 
 	/* Close all remaining open objects */
