@@ -1,5 +1,5 @@
 /*
- * turbo_vm.c -- Virtual machine for executing TurboVM bytecode
+ * turbo_vm.c: Virtual machine for executing TurboVM bytecode
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -31,12 +31,17 @@
 #include "turbo_vm.h"
 #include "turbo_vm_opt.h"
 #include "turbo_simd.h"
+/* enum FMT_MODE value FMT_AS_TIMESTAMP_UX_MS; kept in lockstep with parser.c. */
+#define FMT_MODE_TIMESTAMP_UX_MS 3
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <time.h>
 #include <locale.h>
+#include <json.h>
+json_object *ln_turbo_field_json(const ln_fast_field_t *f);
 #if defined(__has_include)
 # if __has_include(<xlocale.h>)
 #  include <xlocale.h>
@@ -95,6 +100,10 @@ ln_opcode_name(ln_opcode_t op)
 	case OP_FIELD_JSON:     return "FIELD_JSON";
 	case OP_FIELD_MAC:      return "FIELD_MAC";
 	case OP_FIELD_DATE:     return "FIELD_DATE";
+	case OP_FIELD_TIME:     return "FIELD_TIME";
+	case OP_FIELD_KERNEL_TS: return "FIELD_KERNEL_TS";
+	case OP_CISCO_IFACE:    return "CISCO_IFACE";
+	case OP_REPEAT:         return "REPEAT";
 	case OP_FIELD_REGEX:    return "FIELD_REGEX";
 	case OP_FIELD_NAME_VALUE: return "FIELD_NAME_VALUE";
 	case OP_SKIP_SPACE:     return "SKIP_SPACE";
@@ -126,6 +135,36 @@ ln_opcode_name(ln_opcode_t op)
 	}
 }
 
+/**
+ * @brief string-to: find the delimiter STRING, standard-parser semantics.
+ *
+ * Mirrors PARSER_Parse(StringTo) in parser.c exactly:
+ *   - the scan starts one byte past the field start, so a delimiter sitting
+ *     at offset 0 is skipped and the value is never empty;
+ *   - the first occurrence wins and the delimiter itself is not consumed;
+ *   - a delimiter shorter than two bytes never matches (the standard parser's
+ *     inner loop cannot run for len < 2; replicated here so both engines
+ *     agree, see doc/turbo.rst "Known differences").
+ *
+ * @return 0 and *out_len = value length on success, -1 on no match.
+ */
+static inline int
+parse_string_to(const char *ip, size_t rem, const char *delim, size_t dlen,
+				size_t *out_len)
+{
+	size_t i;
+
+	if (dlen < 2 || rem <= dlen) return -1;
+
+	for (i = 1; i + dlen <= rem; i++) {
+		if (ip[i] == delim[0] && memcmp(ip + i, delim, dlen) == 0) {
+			*out_len = i;
+			return 0;
+		}
+	}
+	return -1;
+}
+
 /*============================================================================
  * Disassembly
  *============================================================================*/
@@ -145,6 +184,11 @@ ln_instr_disasm(const ln_instr_t *inst, char *buf, size_t len)
 	case OP_LITERAL:
 	case OP_LITERAL_CI:
 		n = snprintf(buf, len, "%s \"%.*s\"", name, (int)inst->aux, inst->data.str);
+		break;
+	case OP_LITERAL_EXT:
+		n = snprintf(buf, len, "%s pool+%u/%u", name,
+			     (unsigned)inst->data.lit_pool.off,
+			     (unsigned)inst->data.lit_pool.len);
 		break;
 	case OP_CHAR:
 		if (isprint((unsigned char)inst->data.str[0])) {
@@ -175,16 +219,30 @@ ln_instr_disasm(const ln_instr_t *inst, char *buf, size_t len)
 	case OP_FIELD_JSON:
 	case OP_FIELD_MAC:
 	case OP_FIELD_DATE:
+	case OP_FIELD_TIME:
+	case OP_FIELD_KERNEL_TS:
+	case OP_CISCO_IFACE:
+	case OP_REPEAT:
 	case OP_V2_IPTABLES:
 	case OP_CEE_SYSLOG:
 		n = snprintf(buf, len, "%s \"%s\"", name, inst->data.str);
 		break;
 	case OP_STATIC_FIELD:
-		n = snprintf(buf, len, "%s \"%s\"=\"%s\"", name,
-					inst->data.kv.key, inst->data.kv.val);
+		if (inst->flags & LN_INSTR_F_KV_POOL) {
+			n = snprintf(buf, len, "%s pool+%u=pool+%u", name,
+						(unsigned)inst->data.kv_pool.key_off,
+						(unsigned)inst->data.kv_pool.val_off);
+		} else {
+			n = snprintf(buf, len, "%s \"%s\"=\"%s\"", name,
+						inst->data.kv.key, inst->data.kv.val);
+		}
+		break;
+	case OP_FIELD_STR_TO:
+		n = snprintf(buf, len, "%s \"%s\" delim=+%u/%u", name,
+					inst->data.str_to.name,
+					(unsigned)inst->data.str_to.delim_off, (unsigned)inst->aux);
 		break;
 	case OP_FIELD_CHAR_TO:
-	case OP_FIELD_STR_TO:
 		if (isprint(inst->data.char_to.delim)) {
 			n = snprintf(buf, len, "%s \"%s\" delim='%c'", name,
 						inst->data.char_to.name, inst->data.char_to.delim);
@@ -252,7 +310,7 @@ ln_vm_init(ln_vm_t *vm, ln_arena_t *arena)
 	 * numbers always use '.' as the decimal point, but plain strtod() honours
 	 * LC_NUMERIC and would read "1.5" as 1.0 under a comma-decimal locale. "C"
 	 * needs no locale files, so newlocale only fails on OOM; on failure we fail
-	 * init, so the caller drops turbo and uses the locale-independent v1 path
+	 * init, so the caller drops turbo and uses the locale-independent standard path
 	 * rather than ever parsing a number under the wrong locale. Freed by
 	 * ln_vm_destroy. */
 	vm->c_locale = (void *)newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
@@ -289,6 +347,242 @@ ln_vm_reset(ln_vm_t *vm)
 	vm->backtrack_count = 0;
 	vm->matched_rule = NULL;
 	vm->error = NULL;
+	vm->fail_on_dup = 0;
+}
+
+
+/*============================================================================
+ * Date conversion for OP_FIELD_DATE with format="timestamp-unix"[-ms]
+ *
+ * Self-contained on purpose: the VM does not call into the standard parser and
+ * does not build a json_object per message. tests/turbo_test_date.c compares
+ * this against the standard parser over every accepted spelling of both
+ * formats, so the duplication is held to exact parity by test rather than by
+ * hope.
+ *==========================================================================*/
+
+typedef struct {
+	int year, month, day;
+	int hour, minute, second;
+	int secfrac, secfrac_digits;
+	int off_hour, off_minute;
+	char off_mode;
+} turbo_date_t;
+
+static inline int
+turbo_date_int(const unsigned char **buf, size_t *len)
+{
+	const unsigned char *p = *buf;
+	size_t n = *len;
+	int v = 0;
+
+	while (n > 0 && *p >= '0' && *p <= '9') {
+		v = v * 10 + (*p - '0');
+		++p; --n;
+	}
+	*buf = p; *len = n;
+	return v;
+}
+
+/* Days-from-civil; the standard parser clamps the same range and yields 0
+ * outside it. */
+static int64_t
+turbo_date_to_unix(const turbo_date_t *d, int ms)
+{
+	int64_t y, era, yoe, doy, doe, days, ts;
+
+	if (d->year < 1970 || d->year > 2100)
+		return 0;
+
+	y = d->year - (d->month <= 2);
+	era = (y >= 0 ? y : y - 399) / 400;
+	yoe = y - era * 400;
+	doy = (153 * (d->month + (d->month > 2 ? -3 : 9)) + 2) / 5 + d->day - 1;
+	doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+	days = era * 146097 + doe - 719468;
+
+	ts = days * 86400 + d->hour * 3600 + d->minute * 60 + d->second;
+	if (d->off_mode == '-')
+		ts += d->off_hour * 3600 + d->off_minute * 60;
+	else
+		ts -= d->off_hour * 3600 + d->off_minute * 60;
+
+	if (ms) {
+		int frac = d->secfrac;
+		int div = 1;
+
+		ts *= 1000;
+		if (d->secfrac_digits == 1) frac *= 100;
+		else if (d->secfrac_digits == 2) frac *= 10;
+		else if (d->secfrac_digits > 3) {
+			int i;
+			for (i = 0; i < d->secfrac_digits - 3; ++i) div *= 10;
+		}
+		ts += frac / div;
+	}
+	return ts;
+}
+
+static int
+turbo_scan_rfc3164(const unsigned char *p, size_t orglen, size_t *parsed,
+		   turbo_date_t *d)
+{
+	size_t len = orglen;
+	int v;
+
+	memset(d, 0, sizeof(*d));
+	d->off_mode = '+';
+	if (len < 3) return -1;
+
+	switch (*p++) {
+	case 'j': case 'J':
+		if (*p == 'a' || *p == 'A') { d->month = 1; p++; if(*p!='n'&&*p!='N') return -1; p++; }
+		else if (*p == 'u' || *p == 'U') {
+			p++;
+			if (*p == 'n' || *p == 'N') d->month = 6;
+			else if (*p == 'l' || *p == 'L') d->month = 7;
+			else return -1;
+			p++;
+		} else return -1;
+		break;
+	case 'f': case 'F':
+		d->month = 2; if((*p!='e'&&*p!='E')) return -1; p++; if((*p!='b'&&*p!='B')) return -1; p++; break;
+	case 'm': case 'M':
+		if (*p != 'a' && *p != 'A') return -1;
+		p++;
+		if (*p == 'r' || *p == 'R') d->month = 3;
+		else if (*p == 'y' || *p == 'Y') d->month = 5;
+		else return -1;
+		p++;
+		break;
+	case 'a': case 'A':
+		if (*p == 'p' || *p == 'P') { d->month = 4; p++; if(*p!='r'&&*p!='R') return -1; p++; }
+		else if (*p == 'u' || *p == 'U') { d->month = 8; p++; if(*p!='g'&&*p!='G') return -1; p++; }
+		else return -1;
+		break;
+	case 's': case 'S':
+		d->month = 9; if(*p!='e'&&*p!='E') return -1; p++; if(*p!='p'&&*p!='P') return -1; p++; break;
+	case 'o': case 'O':
+		d->month = 10; if(*p!='c'&&*p!='C') return -1; p++; if(*p!='t'&&*p!='T') return -1; p++; break;
+	case 'n': case 'N':
+		d->month = 11; if(*p!='o'&&*p!='O') return -1; p++; if(*p!='v'&&*p!='V') return -1; p++; break;
+	case 'd': case 'D':
+		d->month = 12; if(*p!='e'&&*p!='E') return -1; p++; if(*p!='c'&&*p!='C') return -1; p++; break;
+	default: return -1;
+	}
+	len -= 3;
+
+	if (len == 0 || *p++ != ' ') return -1;
+	--len;
+	if (len > 0 && *p == ' ') { --len; ++p; }        /* one-digit day */
+
+	d->day = turbo_date_int(&p, &len);
+	if (d->day < 1 || d->day > 31) return -1;
+	if (len == 0 || *p++ != ' ') return -1;
+	--len;
+
+	v = turbo_date_int(&p, &len);
+	if (v > 1970 && v < 2100) {                      /* Cisco year variant */
+		if (len == 0 || *p++ != ' ') return -1;
+		--len;
+		v = turbo_date_int(&p, &len);
+	}
+	d->hour = v;
+	if (d->hour < 0 || d->hour > 23) return -1;
+
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->minute = turbo_date_int(&p, &len);
+	if (d->minute < 0 || d->minute > 59) return -1;
+
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->second = turbo_date_int(&p, &len);
+	if (d->second < 0 || d->second > 60) return -1;
+
+	if (len > 0 && *p == ':') { ++p; --len; }        /* tolerated extra colon */
+
+	{
+		struct tm tm;
+		const time_t now = time(NULL);
+		gmtime_r(&now, &tm);
+		d->year = tm.tm_year + 1900;                 /* RFC3164 carries no year */
+	}
+	*parsed = orglen - len;
+	return 0;
+}
+
+static int
+turbo_scan_rfc5424(const unsigned char *p, size_t orglen, size_t *parsed,
+		   turbo_date_t *d)
+{
+	size_t len = orglen;
+
+	memset(d, 0, sizeof(*d));
+	d->year = turbo_date_int(&p, &len);
+	if (len == 0 || *p++ != '-') return -1;
+	--len;
+	d->month = turbo_date_int(&p, &len);
+	if (d->month < 1 || d->month > 12) return -1;
+	if (len == 0 || *p++ != '-') return -1;
+	--len;
+	d->day = turbo_date_int(&p, &len);
+	if (d->day < 1 || d->day > 31) return -1;
+	if (len == 0 || *p++ != 'T') return -1;
+	--len;
+	d->hour = turbo_date_int(&p, &len);
+	if (d->hour < 0 || d->hour > 23) return -1;
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->minute = turbo_date_int(&p, &len);
+	if (d->minute < 0 || d->minute > 59) return -1;
+	if (len == 0 || *p++ != ':') return -1;
+	--len;
+	d->second = turbo_date_int(&p, &len);
+	if (d->second < 0 || d->second > 60) return -1;
+
+	if (len > 0 && *p == '.') {
+		const unsigned char *start;
+		--len; ++p;
+		start = p;
+		d->secfrac = turbo_date_int(&p, &len);
+		d->secfrac_digits = (int)(p - start);
+	}
+
+	if (len == 0) return -1;
+	if (*p == 'Z') {
+		d->off_mode = '+'; --len; ++p;
+	} else if (*p == '+' || *p == '-') {
+		d->off_mode = (char)*p;
+		--len; ++p;
+		d->off_hour = turbo_date_int(&p, &len);
+		if (d->off_hour < 0 || d->off_hour > 23) return -1;
+		if (len == 0 || *p++ != ':') return -1;
+		--len;
+		d->off_minute = turbo_date_int(&p, &len);
+		if (d->off_minute < 0 || d->off_minute > 59) return -1;
+	} else {
+		return -1;                                   /* TZ is mandatory */
+	}
+
+	*parsed = orglen - len;
+	return 0;
+}
+
+int
+ln_turbo_date2unix(const int kind, const char *const str, const size_t strLen,
+	const int ms, size_t *const parsed, int64_t *const ts)
+{
+	turbo_date_t d;
+	int r;
+
+	*parsed = 0;
+	r = (kind == 1)
+	  ? turbo_scan_rfc5424((const unsigned char *)str, strLen, parsed, &d)
+	  : turbo_scan_rfc3164((const unsigned char *)str, strLen, parsed, &d);
+	if (r != 0) return -1;
+	*ts = turbo_date_to_unix(&d, ms);
+	return 0;
 }
 
 /*============================================================================
@@ -299,16 +593,85 @@ static inline bool
 vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 {
 	ln_field_ctx_t *ctx;
+	bool discard;
 
 	if (vm->field_ctx_sp >= LN_VM_MAX_FIELD_CTX) {
 		vm->error = "field context stack overflow";
 		return false;
 	}
 
+	/*
+	 * A context named ".." takes the name of the level above it: that is what
+	 * ".." means, and it is how the standard parser collapses a single-member
+	 * subtree into its parent's name. Pushing the literal instead put ".." (or
+	 * nothing) into every field path produced underneath.
+	 */
+	if (name != NULL && name[0] == '.' && name[1] == '.' && name[2] == '\0') {
+		/* Already a full path: the level above carries one. */
+		name = (vm->field_ctx_sp > 0)
+		     ? vm->field_ctx[vm->field_ctx_sp - 1].name
+		     : NULL;
+	} else if (name != NULL && name[0] != '\0'
+		   && !(name[0] == '.' && name[1] == '\0')
+		   && !(name[0] == '-' && name[1] == '\0')
+		   && vm->field_ctx_sp > 0) {
+		/*
+		 * Contexts nest: %log:@outer% containing %mid:@inner% must yield
+		 * log.mid.<field>. Only the top of the stack is consulted when a
+		 * field name is built, so each context stores the whole path rather
+		 * than its own segment; otherwise every level but the innermost was
+		 * dropped.
+		 */
+		const ln_field_ctx_t *parent = &vm->field_ctx[vm->field_ctx_sp - 1];
+
+		if (parent->name != NULL && parent->name[0] != '\0'
+		    && !(parent->name[0] == '.' && parent->name[1] == '\0')
+		    && !parent->discard) {
+			char buf[512];   /* same ceiling as the JSON key scratch */
+			size_t nl = strlen(name);
+
+			if ((size_t)parent->name_len + 1 + nl < sizeof(buf)) {
+				memcpy(buf, parent->name, parent->name_len);
+				buf[parent->name_len] = '.';
+				memcpy(buf + parent->name_len + 1, name, nl + 1);
+				{
+					const char *dup = ln_arena_strndup(vm->arena, buf,
+							parent->name_len + 1 + nl);
+					if (dup != NULL) name = dup;
+				}
+			}
+		}
+	}
+
+	/*
+	 * A field named "-" is matched but not stored, and that applies to a whole
+	 * subtree, not just a scalar: the standard parser discards the parser's
+	 * entire result. Mark the context so nothing emitted below it is kept, and
+	 * inherit the mark so an inner context cannot escape it.
+	 */
+	discard = (name != NULL && name[0] == '-' && name[1] == '\0');
+	if (vm->field_ctx_sp > 0 && vm->field_ctx[vm->field_ctx_sp - 1].discard)
+		discard = true;
+	/*
+	 * Walker json_object_object_add_ex(KEY_IS_NEW): a custom type whose
+	 * name is already a scalar is skipped whole. Children were being
+	 * stored as name.date / name.time and the serializer then replaced
+	 * the scalar with a nested object.
+	 */
+	if (!discard && name != NULL && name[0] != '\0'
+	    && vm->result != NULL && vm->result->n_fields != 0) {
+		size_t nl = strlen(name);
+		if (nl <= UINT16_MAX
+		    && ln_fast_name_taken(vm->result, name, (uint16_t)nl))
+			discard = true;
+	}
+
 	ctx = &vm->field_ctx[vm->field_ctx_sp++];
 	ctx->name = name;
 	ctx->name_len = name ? (uint16_t)strlen(name) : 0;
 	ctx->is_nested = is_nested ? 1 : 0;
+	ctx->discard = discard ? 1 : 0;
+	ctx->n_fields_at_push = vm->result ? vm->result->n_fields : 0;
 
 	TRACE("[CTX] push \"%s\" (sp=%u, nested=%d)\n",
 		  name ? name : "(null)", vm->field_ctx_sp, is_nested);
@@ -316,14 +679,37 @@ vm_push_field_ctx(ln_vm_t *vm, const char *name, bool is_nested)
 	return true;
 }
 
+static const char *vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len);
+
 static inline bool
 vm_pop_field_ctx(ln_vm_t *vm)
 {
+	const ln_field_ctx_t *closed;
+
 	if (vm->field_ctx_sp == 0) {
 		vm->error = "field context stack underflow";
 		return false;
 	}
+	closed = &vm->field_ctx[vm->field_ctx_sp - 1];
 	vm->field_ctx_sp--;
+
+	/*
+	 * A named parser that stored nothing still yields an (empty) object in the
+	 * standard parser: a custom type whose members are all "-", or one whose
+	 * matching alternative is an empty literal. Emitting nothing here would
+	 * make the field absent instead of empty. Popped first, so the name is
+	 * built against the enclosing context.
+	 */
+	if (!closed->discard && closed->name != NULL && closed->name[0] != '\0'
+	    && !(closed->name[0] == '.' && closed->name[1] == '\0')
+	    && vm->result != NULL
+	    && vm->result->n_fields == closed->n_fields_at_push) {
+		uint16_t nlen;
+		const char *full = vm_build_field_name(vm, closed->name, &nlen);
+
+		if (full != NULL && full[0] != '\0')
+			ln_fast_add_rawjson_static(vm->result, full, nlen, "{}", 2);
+	}
 
 	TRACE("[CTX] pop (sp=%u)\n", vm->field_ctx_sp);
 
@@ -415,6 +801,19 @@ vm_pop_fork(ln_vm_t *vm)
 	return true;
 }
 
+/* Walker custom types are ordered choice: a successful alternative is
+ * committed. Drop forks pushed inside the CALL we just returned from so a
+ * later parent failure cannot retry them. */
+static inline void
+vm_commit_call(ln_vm_t *vm)
+{
+	while (vm->fork_sp > 0
+	       && vm->forks[vm->fork_sp - 1].call_sp > vm->call_sp)
+		vm->fork_sp--;
+}
+
+static int vm_repeat(ln_vm_t *vm, const ln_instr_t *inst);
+
 /*============================================================================
  * Optimized Field Extraction Helpers
  *============================================================================*/
@@ -426,6 +825,24 @@ vm_pop_fork(ln_vm_t *vm)
  * produces "foo.bar". For ".." produces just "foo".
  * Uses arena for allocation.
  */
+/* Resolve a field/context name for an instruction: the inline opcode buffer, or
+ * the program string pool when the name was too long to inline
+ * (LN_INSTR_F_NAME_POOL). inline_buf is the opcode's inline name buffer, which
+ * holds a uint32 pool offset in the pooled case. Names in the pool are
+ * NUL-terminated, so callers use the returned pointer as a plain C string. */
+static inline const char *
+turbo_iname(const ln_vm_t *vm, const ln_instr_t *inst, const char *inline_buf)
+{
+	/* Pooling is the rare case (names that fit inline dominate), so keep the
+	 * common path a straight fall-through. */
+	if (UNLIKELY(inst->flags & LN_INSTR_F_NAME_POOL)) {
+		uint32_t off;
+		memcpy(&off, inline_buf, sizeof(off));
+		return vm->prog->strpool + off;
+	}
+	return inline_buf;
+}
+
 static inline const char *
 vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 {
@@ -437,6 +854,17 @@ vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 	uint16_t i;
 	uint16_t total_len;
 	char *prefixed;
+
+	/* "-" is matched but not stored, and neither is anything under a context
+	 * that carries the same name, however deep. */
+	if (name != NULL && name[0] == '-' && name[1] == '\0') {
+		*out_len = 0;
+		return NULL;
+	}
+	if (vm->field_ctx_sp > 0 && vm->field_ctx[vm->field_ctx_sp - 1].discard) {
+		*out_len = 0;
+		return NULL;
+	}
 
 	/* Handle ".." - resolve to context name only */
 	if (name && name[0] == '.' && name[1] == '.' &&
@@ -514,12 +942,257 @@ vm_build_field_name(ln_vm_t *vm, const char *name, uint16_t *out_len)
 	return prefixed;
 }
 
+/*
+ * CEF writes a delimiter that belongs to a value as "\|" or "\=", and a
+ * literal backslash as "\\". A value therefore ends at the first delimiter
+ * that is not itself escaped.
+ */
+static const char *
+cef_find_unescaped(const char *const base, const char *s,
+				   const char *const end, const char c)
+{
+	while (s < end) {
+		const size_t off = ln_simd_find_char(s, (size_t)(end - s), c);
+		const char *hit;
+		const char *b;
+		size_t nbs = 0;
+
+		if (off >= (size_t)(end - s))
+			return NULL;
+		hit = s + off;
+		b = hit;
+		while (b > base && *(b - 1) == '\\') {
+			++nbs;
+			--b;
+		}
+		if ((nbs & 1) == 0)
+			return hit;
+		s = hit + 1;
+	}
+	return NULL;
+}
+
+/*
+ * End of a CEF extension value. The walker stops at the first unescaped '='.
+ * A space before that '=' is the start of the next key. No space means the
+ * '=' sits immediately after the value (an empty next key, including a
+ * trailing '=' at EOF) and is not part of the value: "data=abc\\=" stores
+ * "abc\" and does not keep the '='.
+ */
+static void
+cef_take_extension_value(const char *val_start, const char *end,
+	size_t *val_len, const char **p_out)
+{
+	const char *next_eq;
+	const char *kstart;
+
+	next_eq = cef_find_unescaped(val_start, val_start, end, '=');
+	if (next_eq == NULL || next_eq <= val_start) {
+		*val_len = (size_t)(end - val_start);
+		*p_out = end;
+		return;
+	}
+	kstart = next_eq;
+	while (kstart > val_start && *(kstart - 1) != ' ')
+		kstart--;
+	if (kstart > val_start) {
+		/* The walker ends the value at lastword-1: every space but the
+		 * last one before the next key stays in the value. */
+		*val_len = (size_t)(kstart - val_start);
+		if (*val_len > 0 && val_start[*val_len - 1] == ' ')
+			(*val_len)--;
+		*p_out = kstart;
+	} else {
+		*val_len = (size_t)(next_eq - val_start);
+		*p_out = next_eq + 1;
+	}
+}
+
+/* Walker cefParseName: an extension name is ASCII alnum, '_' or '.'.
+ * A hyphen, quote, or anything else refuses the whole CEF parser. */
+static int
+cef_name_ok(const char *s, size_t n)
+{
+	size_t i;
+
+	for (i = 0; i < n; i++) {
+		unsigned char c = (unsigned char)s[i];
+		if (!((c >= '0' && c <= '9') ||
+		      (c >= 'A' && c <= 'Z') ||
+		      (c >= 'a' && c <= 'z') ||
+		      c == '_' || c == '.'))
+			return 0;
+	}
+	return 1;
+}
+
+/*
+ * Remove CEF escape characters. A header field escapes only the delimiter and
+ * the backslash itself; an extension value additionally spells a newline as
+ * "\n", a carriage return as "\r" and a solidus as "\/". Any other escape is
+ * not valid CEF and rejects the message, which is what the standard parser
+ * does, so an input both engines see must be accepted or refused by both.
+ *
+ * A value carrying no backslash is the common case and is returned as a span
+ * into the input, so nothing is copied. Only an escaped value is rewritten,
+ * into the arena, which keeps the per-message allocation count at zero for
+ * ordinary input.
+ *
+ * Returns 0 on success, -1 if the value carries an escape CEF does not define.
+ */
+static int
+cef_unescape(ln_vm_t *vm, const char *const s, const size_t len,
+			 const int is_ext, const char **const out,
+			 size_t *const out_len)
+{
+	char *dst;
+	size_t si, di = 0;
+
+	if (len == 0 || ln_simd_find_char(s, len, '\\') >= len) {
+		*out = s;
+		*out_len = len;
+		return 0;
+	}
+	dst = (char *)ln_arena_alloc(vm->arena, len);
+	if (dst == NULL) {
+		return -1;
+	}
+	for (si = 0; si < len; ++si) {
+		char c = s[si];
+
+		if (c != '\\') {
+			dst[di++] = c;
+			continue;
+		}
+		if (si + 1 >= len)
+			return -1;
+		c = s[++si];
+		if (is_ext) {
+			switch (c) {
+			case '=':  dst[di++] = '=';  break;
+			case '\\': dst[di++] = '\\'; break;
+			case 'n':  dst[di++] = '\n'; break;
+			case 'r':  dst[di++] = '\r'; break;
+			case '/':  dst[di++] = '/';  break;
+			default:   return -1;
+			}
+		} else {
+			if (c != '\\' && c != '|')
+				return -1;
+			dst[di++] = c;
+		}
+	}
+	*out = dst;
+	*out_len = di;
+	return 0;
+}
+
 /**
  * @brief Add string field using fast result.
  *
  * The name pointer comes from instruction data which is stable
  * for the lifetime of the program. No copying needed.
  */
+
+/*
+ * Match a wall-clock time, exactly eight characters, HH:MM:SS.
+ *
+ * The standard parser accepts a fixed shape and nothing else, so this is a
+ * bounded check rather than a scan: hours 00-23 on a 24-hour clock, 00-12 on a
+ * 12-hour one, then minutes and seconds below 60. Returns 1 on a match.
+ */
+static inline int
+vm_match_time(const char *p, size_t remaining, int is_12hr)
+{
+	if (remaining < 8)
+		return 0;
+	if (is_12hr) {
+		if (p[0] == '0') {
+			if (p[1] < '0' || p[1] > '9') return 0;
+		} else if (p[0] == '1') {
+			if (p[1] < '0' || p[1] > '2') return 0;
+		} else {
+			return 0;
+		}
+	} else {
+		if (p[0] == '0' || p[0] == '1') {
+			if (p[1] < '0' || p[1] > '9') return 0;
+		} else if (p[0] == '2') {
+			if (p[1] < '0' || p[1] > '3') return 0;
+		} else {
+			return 0;
+		}
+	}
+	if (p[2] != ':') return 0;
+	if (p[3] < '0' || p[3] > '5') return 0;
+	if (p[4] < '0' || p[4] > '9') return 0;
+	if (p[5] != ':') return 0;
+	if (p[6] < '0' || p[6] > '5') return 0;
+	if (p[7] < '0' || p[7] > '9') return 0;
+	return 1;
+}
+
+/*
+ * Duration is elapsed time, not a clock: hours are 1 or 2 digits and may
+ * exceed 23. Minutes and seconds are still 00-59. Consumed length is 7 or 8.
+ */
+static inline int
+vm_match_duration(const char *p, size_t remaining, size_t *out_len)
+{
+	size_t i;
+
+	if (remaining == 0 || !myisdigit(p[0]))
+		return 0;
+	i = 1;
+	if (i < remaining && myisdigit(p[i]))
+		i++;
+	if (i >= remaining || p[i] != ':')
+		return 0;
+	i++;
+	if (i + 5 > remaining)
+		return 0;
+	if (p[i] < '0' || p[i] > '5')
+		return 0;
+	if (!myisdigit(p[i + 1]))
+		return 0;
+	if (p[i + 2] != ':')
+		return 0;
+	if (p[i + 3] < '0' || p[i + 3] > '5')
+		return 0;
+	if (!myisdigit(p[i + 4]))
+		return 0;
+	*out_len = i + 5;
+	return 1;
+}
+
+/* [ + 5..12 digits + . + 6 digits + ]. Matches PARSER_Parse(KernelTimestamp). */
+static inline int
+parse_kernel_timestamp(const char *c, size_t len, size_t *out_len)
+{
+	size_t i;
+	int j;
+
+	if (len < 14 || c[0] != '[')
+		return -1;
+	if (!myisdigit(c[1]) || !myisdigit(c[2]) || !myisdigit(c[3])
+	    || !myisdigit(c[4]) || !myisdigit(c[5]))
+		return -1;
+	i = 6;
+	for (j = 0; j < 7 && i < len && myisdigit(c[i]); )
+		++i, ++j;
+	if (i >= len || c[i] != '.')
+		return -1;
+	++i;
+	if (i + 7 > len)
+		return -1;
+	if (!myisdigit(c[i]) || !myisdigit(c[i + 1]) || !myisdigit(c[i + 2])
+	    || !myisdigit(c[i + 3]) || !myisdigit(c[i + 4]) || !myisdigit(c[i + 5])
+	    || c[i + 6] != ']')
+		return -1;
+	*out_len = i + 7;
+	return 0;
+}
+
 static inline bool
 vm_add_string_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
 {
@@ -532,8 +1205,28 @@ vm_add_string_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
 	full_name = vm_build_field_name(vm, name, &name_len);
 	if (!full_name || !full_name[0]) return true;
 
+	if (vm->fail_on_dup && vm->result->n_fields != 0
+	    && ln_fast_name_taken(vm->result, full_name, name_len))
+		return false;
+
 	/* Direct add - name pointer is stable (from instruction or arena) */
 	return ln_fast_add_string_static(vm->result, full_name, name_len, val, len) == 0;
+}
+
+/* Last-wins string field. CEF extensions use json_object_object_add, which
+ * replaces a name already present (HTML in a value can mint a second href=). */
+static inline bool
+vm_set_string_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
+{
+	uint16_t name_len;
+	const char *full_name;
+
+	if (!vm->result) return true;
+
+	full_name = vm_build_field_name(vm, name, &name_len);
+	if (!full_name || !full_name[0]) return true;
+
+	return ln_fast_set_string_static(vm->result, full_name, name_len, val, len) == 0;
 }
 
 /**
@@ -550,7 +1243,229 @@ vm_add_int_field(ln_vm_t *vm, const char *name, int64_t val)
 	full_name = vm_build_field_name(vm, name, &name_len);
 	if (!full_name || !full_name[0]) return true;
 
+	if (vm->fail_on_dup && vm->result->n_fields != 0
+	    && ln_fast_name_taken(vm->result, full_name, name_len))
+		return false;
+
 	return ln_fast_add_int_static(vm->result, full_name, name_len, val) == 0;
+}
+
+/*
+ * JSON null field, last-wins. A valueless iptables flag is a key with a
+ * null value in the standard parser, not a key with an empty string.
+ */
+static inline bool
+vm_set_null_field(ln_vm_t *vm, const char *name)
+{
+	uint16_t name_len;
+	const char *full_name;
+
+	if (!vm->result) return true;
+
+	full_name = vm_build_field_name(vm, name, &name_len);
+	if (!full_name || !full_name[0]) return true;
+
+	return ln_fast_set_null_static(vm->result, full_name, name_len) == 0;
+}
+
+/**
+ * @brief Add a raw JSON value (emitted verbatim, without quotes) using fast
+ * result. Used for float format="number", where the matched text is already a
+ * valid JSON number and is emitted as-is to preserve its serialization.
+ */
+static inline bool
+vm_add_rawjson_field(ln_vm_t *vm, const char *name, const char *val, size_t len)
+{
+	uint16_t name_len;
+	const char *full_name;
+
+	if (!vm->result) return true;
+
+	full_name = vm_build_field_name(vm, name, &name_len);
+	if (!full_name || !full_name[0]) return true;
+
+	return ln_fast_add_rawjson_static(vm->result, full_name, name_len, val, len) == 0;
+}
+
+/*
+ * Checkpoint LEA: name: value; name: value; ...
+ *
+ * The walker stores a quoted value without the surrounding quotes, and a
+ * semicolon or a backslash inside those quotes belongs to the value. Ending
+ * the value at the first ';' instead splits a pair, leaves text the rest of
+ * the rule cannot match, and the rule fails. Keeping the quotes is a value
+ * difference on every field of a message that still matches.
+ *
+ * Extra colons after the name, a terminator that ends an unquoted value, and
+ * trailing spaces on an unquoted value are the same as the walker.
+ *
+ * Returns 1 on success (at least one pair), -1 on failure.
+ */
+static int
+vm_checkpoint_lea(ln_vm_t *vm, const char *ctx_name, char term)
+{
+	const char *p = vm->ip;
+	const char *end = vm->input_end;
+	int n_pairs = 0;
+	int pushed = 0;
+
+	if (ctx_name[0]) {
+		if (!vm_push_field_ctx(vm, ctx_name, false))
+			return -1;
+		pushed = 1;
+	}
+
+	while (p < end) {
+		const char *name_start;
+		const char *val_start;
+		size_t name_len;
+		size_t val_len;
+		char *arena_name;
+		int odd_bs;
+
+		while (p < end && *p == ' ')
+			p++;
+		if (p >= end) {
+			if (n_pairs == 0)
+				goto fail;
+			break;
+		}
+		if (term && *p == term)
+			break;
+
+		name_start = p;
+		while (p < end && *p != ':')
+			p++;
+		if (p + 1 >= end || *p != ':')
+			goto fail;
+		while (p + 1 < end && p[1] == ':')
+			p++;
+		name_len = (size_t)(p - name_start);
+		p++;
+
+		while (p < end && *p == ' ')
+			p++;
+		if (p >= end)
+			goto fail;
+
+		if (*p == '"') {
+			p++;
+			val_start = p;
+			odd_bs = 0;
+			while (p < end && (*p != '"' || (odd_bs & 1))) {
+				if (*p == '\\')
+					odd_bs++;
+				else
+					odd_bs = 0;
+				p++;
+			}
+			val_len = (size_t)(p - val_start);
+			if (p >= end)
+				goto fail;
+			p++;
+		} else {
+			val_start = p;
+			while (p < end && *p != ';' && !(term && *p == term))
+				p++;
+			val_len = (size_t)(p - val_start);
+			while (val_len > 0 && val_start[val_len - 1] == ' ')
+				val_len--;
+		}
+
+		while (p < end && *p == ' ')
+			p++;
+		if (p >= end || (*p != ';' && !(term && *p == term)))
+			goto fail;
+		if (*p == ';')
+			p++;
+
+		arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
+		if (!arena_name)
+			goto fail;
+		vm_set_string_field(vm, arena_name, val_start, val_len);
+		n_pairs++;
+	}
+
+	if (n_pairs < 1)
+		goto fail;
+	if (pushed)
+		vm_pop_field_ctx(vm);
+	vm->ip = p;
+	return 1;
+
+fail:
+	if (pushed)
+		vm_pop_field_ctx(vm);
+	return -1;
+}
+
+/*
+ * v2-iptables: uppercase names, optional =value, flags as JSON null.
+ * Walker parseIPTablesNameValue + PARSER_Parse(v2IPTables): names are A-Z
+ * only, values run to isspace, exactly one SP between pairs, the whole
+ * remainder must be pairs, at least two pairs, object_add last-wins.
+ */
+static int
+vm_v2_iptables(ln_vm_t *vm, const char *ctx_name)
+{
+	const char *p = vm->ip;
+	const char *end = vm->input_end;
+	int n_pairs = 0;
+	int pushed = 0;
+
+	if (ctx_name[0]) {
+		if (!vm_push_field_ctx(vm, ctx_name, false))
+			return -1;
+		pushed = 1;
+	}
+
+	while (p < end) {
+		const char *name_start = p;
+		size_t name_len;
+		char *arena_name;
+
+		while (p < end && *p >= 'A' && *p <= 'Z')
+			p++;
+		name_len = (size_t)(p - name_start);
+		if (name_len == 0 || (p < end && *p != '=' && *p != ' '))
+			goto fail;
+
+		arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
+		if (!arena_name)
+			goto fail;
+
+		if (p < end && *p == '=') {
+			const char *val_start;
+			size_t val_len;
+
+			p++;
+			val_start = p;
+			val_len = ln_simd_find_space(p, (size_t)(end - p));
+			p += val_len;
+			if (!vm_set_string_field(vm, arena_name, val_start, val_len))
+				goto fail;
+		} else if (!vm_set_null_field(vm, arena_name)) {
+			goto fail;
+		}
+		n_pairs++;
+
+		if (p < end && *p == ' ')
+			p++;
+		else if (p < end)
+			goto fail;
+	}
+
+	if (n_pairs < 2)
+		goto fail;
+	if (pushed)
+		vm_pop_field_ctx(vm);
+	vm->ip = p;
+	return 1;
+
+fail:
+	if (pushed)
+		vm_pop_field_ctx(vm);
+	return -1;
 }
 
 /*============================================================================
@@ -573,35 +1488,21 @@ parse_number(const char *buf, size_t len, int64_t *value, size_t *out_len)
 {
 	size_t i = 0;
 	uint64_t val = 0;
-	int neg = 0;
-	size_t start;
 
-	if (len == 0) return -1;
+	/* Walker Number is digits only. No leading '-' or '+'. */
+	if (len == 0 || !myisdigit(buf[0])) return -1;
 
-	if (buf[0] == '-') { neg = 1; i++; }
-	else if (buf[0] == '+') { i++; }
-
-	start = i;
 	while (i < len && myisdigit(buf[i])) {
 		int digit = buf[i] - '0';
 		if (val > (UINT64_MAX - (uint64_t)digit) / 10)
-			return -1;  /* overflow */
+			return -1;
 		val = val * 10 + (uint64_t)digit;
 		i++;
 	}
 
-	if (i == start) return -1;
-
-	/* Range-check before converting to signed */
-	if (neg) {
-		if (val > (uint64_t)INT64_MAX + 1)
-			return -1;  /* underflow: value more negative than INT64_MIN */
-		*value = -(int64_t)val;
-	} else {
-		if (val > (uint64_t)INT64_MAX)
-			return -1;  /* overflow: value exceeds INT64_MAX */
-		*value = (int64_t)val;
-	}
+	if (val > (uint64_t)INT64_MAX)
+		return -1;
+	*value = (int64_t)val;
 	*out_len = i;
 	return 0;
 }
@@ -703,14 +1604,145 @@ parse_ipv4(const char *buf, size_t len, size_t *out_len)
 	return 0;
 }
 
+/*
+ * Cisco interface spec: [interface:]ip/port [ (ip2/port2)] [[ ](user)]
+ * Interface name is scanned with SIMD charset (colon or whitespace).
+ * IPv4 uses the same helper as OP_FIELD_IPV4.
+ */
+static int
+vm_cisco_iface(ln_vm_t *vm, const char *ctx_name)
+{
+	const char *const end = vm->input_end;
+	const char *p = vm->ip;
+	int pushed = 0;
+	int have_iface = 0;
+	const char *iface = NULL;
+	size_t iface_len = 0;
+	const char *ip;
+	size_t ip_len;
+	const char *port;
+	size_t port_len;
+	int64_t dummy;
+	const char *ip2 = NULL;
+	size_t ip2_len = 0;
+	const char *port2 = NULL;
+	size_t port2_len = 0;
+	int have_ip2 = 0;
+	const char *user = NULL;
+	size_t user_len = 0;
+	int have_user = 0;
+
+	if (p >= end || *p == ':' || isspace((unsigned char)*p))
+		return -1;
+
+	if (parse_ipv4(p, (size_t)(end - p), &ip_len) == 0) {
+		ip = p;
+		p += ip_len;
+	} else {
+		size_t off = ln_simd_find_char_set(p, (size_t)(end - p),
+						   ":\t\n\v\f\r ");
+		if (off >= (size_t)(end - p) || p[off] != ':')
+			return -1;
+		iface = p;
+		iface_len = off;
+		have_iface = 1;
+		p += off + 1;
+		if (parse_ipv4(p, (size_t)(end - p), &ip_len) != 0)
+			return -1;
+		ip = p;
+		p += ip_len;
+	}
+
+	if (p >= end || *p != '/')
+		return -1;
+	p++;
+	if (parse_number(p, (size_t)(end - p), &dummy, &port_len) != 0)
+		return -1;
+	port = p;
+	p += port_len;
+
+	if ((size_t)(end - p) > 5 && p[0] == ' ' && p[1] == '(') {
+		const char *q = p + 2;
+
+		if (parse_ipv4(q, (size_t)(end - q), &ip2_len) == 0) {
+			q += ip2_len;
+			/* Walker: if (i < strLen || c[iTmp] == '/') skip one. */
+			if (p < end || (q < end && *q == '/')) {
+				if (q < end)
+					q++;
+				if (parse_number(q, (size_t)(end - q), &dummy,
+						 &port2_len) == 0) {
+					port2 = q;
+					q += port2_len;
+					if (q < end && *q == ')') {
+						ip2 = p + 2;
+						have_ip2 = 1;
+						p = q + 1;
+					}
+				}
+			}
+		}
+	}
+
+	{
+		int with_sp = ((size_t)(end - p) > 3 && p[0] == ' '
+			       && p[1] == '(' && !isspace((unsigned char)p[2]));
+		int no_sp = ((size_t)(end - p) > 2 && p[0] == '('
+			     && !isspace((unsigned char)p[1]));
+
+		if (with_sp || no_sp) {
+			const char *u = p + (with_sp ? 2 : 1);
+			size_t off = ln_simd_find_char_set(u, (size_t)(end - u),
+							   ")\t\n\v\f\r ");
+
+			if (off < (size_t)(end - u) && u[off] == ')') {
+				user = u;
+				user_len = off;
+				have_user = 1;
+				p = u + off + 1;
+			}
+		}
+	}
+
+	if (ctx_name[0] && !(ctx_name[0] == '.' && ctx_name[1] == '\0')) {
+		if (!vm_push_field_ctx(vm, ctx_name, false))
+			return -1;
+		pushed = 1;
+	}
+
+	if (have_iface)
+		vm_add_string_field(vm, "interface", iface, iface_len);
+	vm_add_string_field(vm, "ip", ip, ip_len);
+	vm_add_string_field(vm, "port", port, port_len);
+	if (have_ip2) {
+		vm_add_string_field(vm, "ip2", ip2, ip2_len);
+		vm_add_string_field(vm, "port2", port2, port2_len);
+	}
+	if (have_user)
+		vm_add_string_field(vm, "user", user, user_len);
+
+	if (pushed)
+		vm_pop_field_ctx(vm);
+	vm->ip = p;
+	return 1;
+}
+
 static inline int
 parse_ipv6(const char *buf, size_t len, size_t *out_len)
 {
 	size_t i = 0;
+
+	/* Walker refuses unless two bytes remain, then may consume one
+	 * hex nibble ("c" in "client..."). Consumed length 1 is valid. */
+	if (len < 2) return -1;
 	while (i < len) {
 		if (isxdigit((unsigned char)buf[i])) {
 			i++;
-		} else if (buf[i] == ':' && i > 0) {
+		} else if (buf[i] == ':') {
+			/* Walker accepts a colon at offset 0 only as "::".
+			 * "::1" and "::ffff:a.b.c.d" start that way. */
+			if (i == 0 && buf[1] != ':')
+				break;
 			i++;
 		} else if (buf[i] == '.' && i >= 2) {
 			while (i < len && (myisdigit(buf[i]) || buf[i] == '.'))
@@ -720,16 +1752,6 @@ parse_ipv6(const char *buf, size_t len, size_t *out_len)
 			break;
 		}
 	}
-	if (i < 2) return -1;
-	*out_len = i;
-	return 0;
-}
-
-static inline int
-parse_char_to(const char *buf, size_t len, char delim, size_t *out_len)
-{
-	size_t i = 0;
-	while (i < len && buf[i] != delim) i++;
 	if (i == 0) return -1;
 	*out_len = i;
 	return 0;
@@ -737,31 +1759,54 @@ parse_char_to(const char *buf, size_t len, char delim, size_t *out_len)
 
 static inline int
 parse_op_quoted(const char *buf, size_t len, size_t *start,
-				size_t *out_len, size_t *consumed)
+				size_t *out_len, size_t *consumed, unsigned mode)
 {
-	char quote;
+	/* mode 0: op-quoted, no escape. 1: op-quoted, backslash escape.
+	 * 2: quoted-string, quotes required, no escape. Walker quoted
+	 * strings use only '"' ; a leading "'" is an unquoted word. */
+	const int require_quote = (mode == 2);
+	const int escape = (mode == 1);
 
 	if (len == 0) return -1;
+	if (require_quote && len < 2) return -1;
 
-	quote = buf[0];
-	if (quote == '"' || quote == '\'') {
-		size_t i = 1;
-		while (i < len) {
-			if (buf[i] == '\\' && i + 1 < len) { i += 2; }
-			else if (buf[i] == quote) {
-				*start = 1;
-				*out_len = i - 1;
-				*consumed = i + 1;
-				return 0;
-			} else { i++; }
-		}
-		return -1;
-	} else {
+	if (buf[0] != '"') {
 		size_t wlen;
+		if (require_quote) return -1;
 		if (parse_word(buf, len, &wlen) != 0) return -1;
 		*start = 0;
 		*out_len = wlen;
 		*consumed = wlen;
+		return 0;
+	}
+
+	if (escape) {
+		size_t i = 1;
+		int odd_bs = 0;
+
+		while (i < len && (buf[i] != '"' || odd_bs)) {
+			if (buf[i] == '\\')
+				odd_bs = !odd_bs;
+			else
+				odd_bs = 0;
+			i++;
+		}
+		if (i >= len || buf[i] != '"')
+			return -1;
+		*start = 1;
+		*out_len = i - 1;
+		*consumed = i + 1;
+		return 0;
+	}
+
+	{
+		size_t off = ln_simd_find_char(buf + 1, len - 1, '"');
+
+		if (off >= len - 1)
+			return -1;
+		*start = 1;
+		*out_len = off;
+		*consumed = off + 2;
 		return 0;
 	}
 }
@@ -809,17 +1854,17 @@ parse_json(const char *buf, size_t len, size_t *out_len)
  *
  * OP_FIELD_JSON flattens a nested JSON object into the flat result store using
  * dotted keys (e.g. {"alert":{"severity":3}} -> "alert.severity"=3). The
- * dotted keys integrate with the existing flat result-tree key convention --
- * the JSON serializer re-nests them on output -- and reuse the same separator
+ * dotted keys integrate with the existing flat result-tree key convention
+ * (the JSON serializer re-nests them on output) and reuse the same separator
  * the other nested turbo fields use (vm_build_field_name '.').
  *
  * Design: a length-gated hybrid scan that REUSES the VM's existing SIMD
- * primitives (ln_simd_find_char / ln_simd_skip_space -- SSE4.2 + NEON + scalar
+ * primitives (ln_simd_find_char / ln_simd_skip_space, SSE4.2 + NEON + scalar
  * backends) rather than inventing new vector machinery, so OP_FIELD_JSON
  * inherits the dual-arch + scalar fallback contract for free.
  *
  *   - Structural walk (scalar recursive descent): typical log JSON is
- *     structurally DENSE -- structural bytes sit only a few bytes apart -- so a
+ *     structurally DENSE (structural bytes sit only a few bytes apart) so a
  *     16-wide vector structural-set scan loses its per-chunk setup cost against
  *     a tight scalar dispatch on the next byte. A pure-SIMD structural-set scan
  *     measured slower than the scalar walk on representative log corpora, so we
@@ -839,8 +1884,14 @@ parse_json(const char *buf, size_t len, size_t *out_len)
  * Keys are built in a small stack buffer then arena-duped.
  */
 
-#define LN_JSON_MAX_DEPTH  64           /* matches LN_FAST_MAX_FIELDS ceiling */
+/* LN_JSON_MAX_DEPTH is defined in turbo_result_fast.h so the flattener here and
+ * the JSON serializer in turbo_json_impl.c share one ceiling. */
 #define LN_JSON_KEYBUF     512          /* dotted-path scratch (stack) */
+
+/* Maximum object/array nesting accepted in a JSON field value. Matches json-c's
+ * JSON_TOKENER_DEFAULT_DEPTH so a %field:json% value is accepted or rejected at
+ * the same nesting as the standard parser. */
+#define LN_JSON_INPUT_MAX_DEPTH  32
 
 typedef struct {
 	ln_vm_t      *vm;
@@ -850,7 +1901,10 @@ typedef struct {
 	char          key[LN_JSON_KEYBUF];  /* current dotted prefix */
 	size_t        key_len;      /* bytes used in key[] */
 	int           n_emitted;    /* leaves added to the flat store */
-	bool          full;         /* hit LN_FAST_MAX_FIELDS -- stop adding */
+	bool          full;         /* hit LN_FAST_MAX_FIELDS: stop adding */
+	bool          validate_only;/* when set, the parser only checks that the JSON
+	                             * is well-formed and measures its byte span; it
+	                             * stores no fields */
 } ln_json_ctx_t;
 
 /*
@@ -865,14 +1919,54 @@ json_skip_ws(ln_json_ctx_t *c)
 }
 
 /*
+ * Validate that every backslash escape in a JSON string body is well-formed:
+ * one of \" \\ \/ \b \f \n \r \t, or \u followed by four hex digits. Returns 0
+ * if all escapes are valid, -1 otherwise. The caller skips this pass for bodies
+ * with no backslash.
+ */
+static int
+json_validate_escapes(const char *s, size_t n)
+{
+	size_t i = 0;
+
+	while (i < n) {
+		if (s[i] != '\\') { i++; continue; }
+		if (n - i < 2) return -1;           /* trailing backslash */
+		switch (s[i + 1]) {
+		case '"': case '\'': case '\\': case '/': case 'b':
+		case 'f': case 'n': case 'r': case 't':
+			i += 2;
+			break;
+		case 'u': {
+			size_t k;
+			if (n - i < 6) return -1;       /* need \uXXXX */
+			for (k = 2; k < 6; k++) {
+				char h = s[i + k];
+				if (!((h >= '0' && h <= '9') ||
+				      (h >= 'a' && h <= 'f') ||
+				      (h >= 'A' && h <= 'F')))
+					return -1;
+			}
+			i += 6;
+			break;
+		}
+		default:
+			return -1;                      /* unknown escape */
+		}
+	}
+	return 0;
+}
+
+/*
  * Stage-1 SIMD scan of a JSON string body starting just AFTER the opening
  * quote. Uses ln_simd_find_char() to leap to the next '"' and corrects for
  * backslash escapes scalarly (escapes are rare in typical log JSON, so the SIMD
  * leap dominates). On return str/slen describe the raw (still-escaped) body
- * and ctx->pos points just past the closing quote. Returns -1 if unterminated.
+ * and ctx->pos points just past the closing quote. Returns -1 if unterminated
+ * or if the body contains a malformed escape.
  */
 static int
-json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
+json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen, char quote)
 {
 	size_t start = c->pos;          /* first byte of body */
 	size_t p = c->pos;
@@ -886,15 +1980,15 @@ json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
 		 * string bodies, structural bytes a few bytes apart) so a 16-wide
 		 * vector scan loses its per-chunk setup cost against a tight scalar
 		 * loop on short bodies. We only pay for SIMD once a long body
-		 * (>= 2 vector widths) is plausible -- that captures the long values
+		 * (>= 2 vector widths) is plausible: that captures the long values
 		 * (URLs, long identifiers) where the leap actually pays off. Net:
 		 * scalar-or-better on dense JSON, SIMD win on long values, zero
 		 * regression elsewhere. */
 		if (rem >= 2 * LN_SIMD_WIDTH) {
-			off = ln_simd_find_char(c->buf + p, rem, '"');
+			off = ln_simd_find_char(c->buf + p, rem, quote);
 		} else {
 			off = 0;
-			while (off < rem && c->buf[p + off] != '"') off++;
+			while (off < rem && c->buf[p + off] != quote) off++;
 		}
 		if (off >= rem) return -1;  /* no closing quote */
 		p += off;
@@ -905,6 +1999,11 @@ json_scan_string(ln_json_ctx_t *c, const char **str, size_t *slen)
 			*str = c->buf + start;
 			*slen = p - start;
 			c->pos = p + 1;         /* consume closing quote */
+			/* A captured JSON value is emitted verbatim, so any escape it
+			 * contains must be well-formed for the output to stay valid. */
+			if (memchr(*str, '\\', *slen) &&
+			    json_validate_escapes(*str, *slen) != 0)
+				return -1;
 			return 0;
 		}
 		p++;                        /* escaped quote, keep scanning */
@@ -930,7 +2029,7 @@ json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
 		if (dup) *out_len = n;
 		return dup;
 	}
-	/* n is an input-derived length; guard n+1 against size_t wrap -- n ==
+	/* n is an input-derived length; guard n+1 against size_t wrap: n ==
 	 * SIZE_MAX would make ln_arena_alloc see 0 and round it up to a 1-byte
 	 * buffer, which the unescape loop below would then overflow. */
 	if (n == SIZE_MAX) return NULL;
@@ -942,6 +2041,7 @@ json_unescape_arena(ln_vm_t *vm, const char *s, size_t n, size_t *out_len)
 			char e = s[++i];
 			switch (e) {
 			case '"':  dst[o++] = '"';  break;
+			case '\'': dst[o++] = '\''; break;
 			case '\\': dst[o++] = '\\'; break;
 			case '/':  dst[o++] = '/';  break;
 			case 'n':  dst[o++] = '\n'; break;
@@ -1000,8 +2100,13 @@ json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
 	size_t vlen;
 	const char *key;
 	const char *val;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	val = json_unescape_arena(c->vm, raw, raw_len, &vlen);
 	if (!key || !val) return;
@@ -1010,12 +2115,49 @@ json_emit_string(ln_json_ctx_t *c, const char *raw, size_t raw_len)
 		c->n_emitted++;
 }
 
+/*
+ * Emit a nested array verbatim, tagged LN_FFIELD_RAW_JSON.
+ *
+ * Flattening an array to .0/.1/... keys loses the fact that it was an array:
+ * both the JSON serializer and any consumer of the fast result can only rebuild
+ * an object with numeric keys, and "0" is indistinguishable from a genuine
+ * object key. Keeping the array as a raw JSON span is what %field:json% already
+ * does for a whole object, so consumers that handle RAW_JSON need no change.
+ */
+static int
+json_emit_rawjson(ln_json_ctx_t *c, const char *raw, size_t raw_len)
+{
+	const char *key;
+	const char *val;
+
+	if (c->validate_only) return 0;
+	if (c->full || c->vm->result == NULL) return 0;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return 0;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	val = ln_arena_strndup(c->vm->arena, raw, raw_len);
+	if (!key || !val) return -1;   /* arena exhausted: caller flattens instead */
+	if (ln_fast_add_rawjson_static(c->vm->result, key, (uint16_t)c->key_len,
+				       val, (uint32_t)raw_len) != 0)
+		return -1;
+	c->n_emitted++;
+	return 0;
+}
+
 static void
 json_emit_int(ln_json_ctx_t *c, int64_t v)
 {
 	const char *key;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	if (!key) return;
 	if (ln_fast_add_int_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
@@ -1026,8 +2168,13 @@ static void
 json_emit_double(ln_json_ctx_t *c, double v)
 {
 	const char *key;
+	if (c->validate_only) return;
 	if (c->full || c->vm->result == NULL) return;
-	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) { c->full = true; return; }
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
 	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
 	if (!key) return;
 	if (ln_fast_add_double_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
@@ -1040,16 +2187,26 @@ json_emit_double(ln_json_ctx_t *c, double v)
  * in full via the VM arena, because truncating to the stack buffer could cut a
  * trailing 'eNN' exponent and silently corrupt the magnitude. Parsing goes
  * through the VM's private C locale (strtod_l), so the decimal point is always
- * '.' regardless of the process LC_NUMERIC -- matching the locale-independent v1
+ * '.' regardless of the process LC_NUMERIC, matching the locale-independent standard
  * path; out-of-range values saturate to +/-HUGE_VAL per C, acceptable here. The
  * locale is guaranteed valid here: ln_vm_init fails if it cannot be created, so
- * the turbo context is never built and the v1 path is used instead.
+ * the turbo context is never built and the standard path is used instead.
  */
 static void
 json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 {
 	char stackbuf[64];
 	const char *num;
+
+	/*
+	 * libfastjson keeps the source spelling of a number: 1.50 stays 1.50,
+	 * 100.0 stays 100.0, 1e3 stays 1e3. Storing the span verbatim is
+	 * therefore what matches the standard parser byte for byte, and it
+	 * skips strtod entirely. The parse below is only the fallback for a
+	 * span the arena could not take.
+	 */
+	if (json_emit_rawjson(c, s, len) == 0)
+		return;
 
 	if (len < sizeof(stackbuf)) {
 		memcpy(stackbuf, s, len);
@@ -1062,11 +2219,42 @@ json_emit_double_span(ln_json_ctx_t *c, const char *s, size_t len)
 	json_emit_double(c, strtod_l(num, NULL, (locale_t)c->vm->c_locale));
 }
 
-/* bool emitted as the STRING "true"/"false" (string-store convention). */
 static void
 json_emit_bool(ln_json_ctx_t *c, bool v)
 {
-	json_emit_string(c, v ? "true" : "false", v ? 4 : 5);
+	const char *key;
+
+	if (c->validate_only) return;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_bool_static(c->vm->result, key, (uint16_t)c->key_len, v) == 0)
+		c->n_emitted++;
+}
+
+/* A null member is part of the document; dropping it would make the field
+ * absent, which is not what the standard parser produces. */
+static void
+json_emit_null(ln_json_ctx_t *c)
+{
+	const char *key;
+
+	if (c->validate_only) return;
+	if (c->full || c->vm->result == NULL) return;
+	if (c->vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		c->full = true;
+		c->vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return;
+	}
+	key = ln_arena_strndup(c->vm->arena, c->key, c->key_len);
+	if (!key) return;
+	if (ln_fast_add_null_static(c->vm->result, key, (uint16_t)c->key_len) == 0)
+		c->n_emitted++;
 }
 
 static int json_parse_value(ln_json_ctx_t *c, int depth);
@@ -1138,26 +2326,44 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 	size_t saved_len = c->key_len;
 
 	json_skip_ws(c);
-	if (c->pos < c->len && c->buf[c->pos] == '}') { c->pos++; return 0; }
+	if (c->pos < c->len && c->buf[c->pos] == '}') {
+		c->pos++;
+		/* The walker stores an empty object as {}. skipempty is the only
+		 * way to drop it, and this path is not skipempty. A nested empty
+		 * array already emits its span (including []); objects did not. */
+		if (c->key_len > 0)
+			return json_emit_rawjson(c, "{}", 2);
+		return 0;
+	}
 
 	for (;;) {
 		const char *kstr; size_t klen;
 
 		json_skip_ws(c);
-		if (c->pos >= c->len || c->buf[c->pos] != '"') return -1;
+		if (c->pos >= c->len) return -1;
+		/* libfastjson accepts single-quoted keys; the walker uses that
+		 * tokener, so turbo must too or a following literal never sees
+		 * the remainder. */
+		if (c->buf[c->pos] != '"' && c->buf[c->pos] != '\'') return -1;
 		c->pos++;                                   /* opening quote */
-		if (json_scan_string(c, &kstr, &klen) != 0) return -1;
+		if (json_scan_string(c, &kstr, &klen, c->buf[c->pos - 1]) != 0)
+			return -1;
 
 		/* append ".<key>" to dotted path; fail (backtrack the line) on
 		 * overflow rather than silently dropping the segment, which would
 		 * mislabel this leaf under the parent/root key = silent corruption. */
 		c->key_len = saved_len;
-		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF)
-			return -1;   /* klen is input-derived: reject it alone first so the
-			              * sum below cannot size_t-wrap past the bound */
-		if (saved_len > 0) c->key[c->key_len++] = '.';
-		memcpy(c->key + c->key_len, kstr, klen);
-		c->key_len += klen;
+		if (klen >= LN_JSON_KEYBUF || saved_len + 1 + klen >= LN_JSON_KEYBUF) {
+			/* klen is input-derived: reject it alone first so the sum below
+			 * cannot wrap past the bound. In validate-only mode the dotted key
+			 * is unused, so an over-long path is not a reason to reject
+			 * otherwise-valid JSON; the key is simply not built. */
+			if (!c->validate_only) return -1;
+		} else {
+			if (saved_len > 0) c->key[c->key_len++] = '.';
+			memcpy(c->key + c->key_len, kstr, klen);
+			c->key_len += klen;
+		}
 
 		json_skip_ws(c);
 		if (c->pos >= c->len || c->buf[c->pos] != ':') return -1;
@@ -1176,10 +2382,9 @@ json_parse_object(ln_json_ctx_t *c, int depth)
 }
 
 /*
- * Parse a JSON array. Arrays are uncommon in flat log JSON, so we keep this
- * minimal: scalar elements get an index-suffix key.N; object/array elements are
- * structurally skipped (consumed but not flattened). This keeps the span
- * consumption correct for v1 parity without object-array flattening.
+ * Parse a JSON array body (pos is just past '['). Each element is parsed in
+ * turn to validate it and advance the cursor. In flatten mode scalar elements
+ * are keyed by their index (.0, .1, ...).
  */
 static int
 json_parse_array(ln_json_ctx_t *c, int depth)
@@ -1201,9 +2406,13 @@ json_parse_array(ln_json_ctx_t *c, int depth)
 		 * on overflow rather than silently mislabelling the element. */
 		c->key_len = saved_len;
 		n = snprintf(ib, sizeof(ib), ".%d", idx);
-		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) return -1;
-		memcpy(c->key + c->key_len, ib, (size_t)n);
-		c->key_len += (size_t)n;
+		if (n <= 0 || saved_len + (size_t)n >= LN_JSON_KEYBUF) {
+			/* validate-only: dotted key unused, over-long path is not fatal */
+			if (!c->validate_only) return -1;
+		} else {
+			memcpy(c->key + c->key_len, ib, (size_t)n);
+			c->key_len += (size_t)n;
+		}
 
 		if (json_parse_value(c, depth + 1) != 0) return -1;
 		c->key_len = saved_len;
@@ -1219,7 +2428,7 @@ json_parse_array(ln_json_ctx_t *c, int depth)
 static int
 json_parse_value(ln_json_ctx_t *c, int depth)
 {
-	if (depth > LN_JSON_MAX_DEPTH) return -1;
+	if (depth >= LN_JSON_INPUT_MAX_DEPTH) return -1;
 	json_skip_ws(c);
 	if (c->pos >= c->len) return -1;
 
@@ -1227,29 +2436,71 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 	case '{':
 		c->pos++;
 		return json_parse_object(c, depth);
-	case '[':
+	case '[': {
+		size_t start = c->pos;
+		bool saved_validate_only = c->validate_only;
+		int rc;
+
+		/* A top-level array has no key to hang the value on; merging one
+		 * into the parent object is not meaningful, so leave that case on
+		 * the original path. */
+		if (c->key_len == 0) {
+			c->pos++;
+			return json_parse_array(c, depth);
+		}
+		/* Walk the array to validate it and find its end without emitting
+		 * per-element fields, then store the whole span. */
+		c->validate_only = true;
 		c->pos++;
+		rc = json_parse_array(c, depth);
+		c->validate_only = saved_validate_only;
+		if (rc != 0) return -1;
+		if (json_emit_rawjson(c, c->buf + start, c->pos - start) == 0)
+			return 0;
+		/* The span did not fit the per-message arena (it is sized for a
+		 * whole message, and a large array can exceed what is left).
+		 * Fall back to per-element flattening, which allocates in small
+		 * pieces: the array shape is lost, but no data is. */
+		c->pos = start + 1;
 		return json_parse_array(c, depth);
-	case '"': {
+	}
+	case '"':
+	case '\'': {
 		const char *s; size_t sl;
+		char quote = c->buf[c->pos];
 		c->pos++;
-		if (json_scan_string(c, &s, &sl) != 0) return -1;
+		if (json_scan_string(c, &s, &sl, quote) != 0) return -1;
 		json_emit_string(c, s, sl);
 		return 0;
 	}
 	case 't':
-		if (c->len - c->pos >= 4 && memcmp(c->buf + c->pos, "true", 4) == 0) {
+	case 'T':
+		/* libfastjson matches these case-insensitively. */
+		if (c->len - c->pos >= 4
+		    && (c->buf[c->pos + 1] | 32) == 'r'
+		    && (c->buf[c->pos + 2] | 32) == 'u'
+		    && (c->buf[c->pos + 3] | 32) == 'e') {
 			json_emit_bool(c, true); c->pos += 4; return 0;
 		}
 		return -1;
 	case 'f':
-		if (c->len - c->pos >= 5 && memcmp(c->buf + c->pos, "false", 5) == 0) {
+	case 'F':
+		if (c->len - c->pos >= 5
+		    && (c->buf[c->pos + 1] | 32) == 'a'
+		    && (c->buf[c->pos + 2] | 32) == 'l'
+		    && (c->buf[c->pos + 3] | 32) == 's'
+		    && (c->buf[c->pos + 4] | 32) == 'e') {
 			json_emit_bool(c, false); c->pos += 5; return 0;
 		}
 		return -1;
 	case 'n':
-		if (c->len - c->pos >= 4 && memcmp(c->buf + c->pos, "null", 4) == 0) {
-			c->pos += 4; return 0;        /* null -> skip (no field) */
+	case 'N':
+		if (c->len - c->pos >= 4
+		    && (c->buf[c->pos + 1] | 32) == 'u'
+		    && (c->buf[c->pos + 2] | 32) == 'l'
+		    && (c->buf[c->pos + 3] | 32) == 'l') {
+			json_emit_null(c);
+			c->pos += 4; return 0;
 		}
 		return -1;
 	default:
@@ -1258,12 +2509,19 @@ json_parse_value(ln_json_ctx_t *c, int depth)
 }
 
 /*
- * Top-level JSON flatten entry. Parses one JSON value (object or array) at buf,
- * flattens leaves under field_name into vm->result, and reports the consumed
- * byte span. Returns 0 on success (valid JSON), -1 on parse error.
+ * Handle a JSON field. Three name contracts, matching the standard parser
+ * (doc/configuration.rst "Special field names"):
  *
- * The flat keys are "<field_name>.<dotted.path>" so the serializer re-nests
- * them under field_name -- matching the v1 parser's nested output.
+ *   "-" / empty  matched, not stored (same as any other discarded field).
+ *   "."          inline: object keys become leaves at the current context
+ *                (root at top level). This is the v1 merge for parsers that
+ *                return a set of fields. Turbo walks the object once into
+ *                the arena so mmenrich/mmwake can ln_fast_result_get_string.
+ *   other        store the value as one LN_FFIELD_RAW_JSON field so arrays,
+ *                booleans, nulls and full-precision numbers round-trip like v1.
+ *
+ * Malformed JSON fails the rule. Returns 0 on success, -1 on parse error.
+ * *out_consumed is the byte span of the JSON value.
  */
 static int
 vm_json_flatten(ln_vm_t *vm, const char *field_name,
@@ -1271,16 +2529,17 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 {
 	ln_json_ctx_t c;
 	uint16_t fn_len;
-	const char *full_name;
+	const char *name;
+	const char *val;
+	size_t start, vlen;
+	int discarded, inlined;
 
 	if (len == 0) return -1;
 
-	/* peek first significant byte: must be object or array */
-	{
-		size_t lead = ln_simd_skip_space(buf, len);
-		if (lead >= len) return -1;
-		if (buf[lead] != '{' && buf[lead] != '[') return -1;
-	}
+	discarded = (field_name == NULL || field_name[0] == '\0'
+	    || (field_name[0] == '-' && field_name[1] == '\0'));
+	inlined = (field_name != NULL && field_name[0] == '.'
+	    && field_name[1] == '\0');
 
 	memset(&c, 0, sizeof(c));
 	c.vm  = vm;
@@ -1288,22 +2547,76 @@ vm_json_flatten(ln_vm_t *vm, const char *field_name,
 	c.len = len;
 	c.pos = 0;
 
-	/* Seed the dotted prefix with the (context-resolved) field name so the
-	 * flattened leaves nest under it, exactly like vm_add_string_field. */
-	full_name = vm_build_field_name(vm, field_name, &fn_len);
-	if (full_name && full_name[0]) {
-		/* Fail (backtrack the line) if the seed prefix alone overflows the
-		 * key buffer rather than emitting every leaf under a truncated /
-		 * empty root = silent corruption. */
-		if (fn_len >= LN_JSON_KEYBUF) return -1;
-		memcpy(c.key, full_name, fn_len);
-		c.key_len = fn_len;
+	json_skip_ws(&c);
+	start = c.pos;
+	if (start >= len || (buf[start] != '{' && buf[start] != '[')) return -1;
+
+	if (discarded) {
+		c.validate_only = true;
+		if (json_parse_value(&c, 0) != 0) return -1;
+		/* json-c treats whitespace after the value as part of the
+		 * parse (parser.c JSON). Consume it so a following literal
+		 * sees the same remainder. */
+		json_skip_ws(&c);
+		*out_consumed = c.pos;
+		return 0;
 	}
 
-	if (json_parse_value(&c, 0) != 0) return -1;
+	if (inlined) {
+		/* v1 "." : emit dotted leaves at the current context (root here). */
+		c.validate_only = false;
+		if (json_parse_value(&c, 0) != 0) return -1;
+		json_skip_ws(&c);
+		*out_consumed = c.pos;
+		return 0;
+	}
 
-	/* trailing insignificant whitespace inside the consumed span is fine */
+	/* Named %field:json%: validate, then store as one RAW JSON field. */
+	c.validate_only = true;
+	if (json_parse_value(&c, 0) != 0) return -1;
+	vlen = c.pos - start;
+	json_skip_ws(&c);
 	*out_consumed = c.pos;
+
+	if (vm->result == NULL) return 0;
+	if (vm->result->n_fields >= LN_FAST_MAX_FIELDS) {
+		vm->result->flags |= LN_FRESULT_TRUNCATED;
+		return 0;
+	}
+
+	name = vm_build_field_name(vm, field_name, &fn_len);
+	if (name == NULL || fn_len == 0) return 0;
+
+	name = ln_arena_strndup(vm->arena, name, fn_len);
+	/* libfastjson accepts single-quoted keys/strings. Store those via a
+	 * json-c dump so the output is RFC JSON, matching the walker. The
+	 * RFC-quoted path stays a memcpy. */
+	if (vlen > 0 && memchr(buf + start, '\'', vlen) != NULL) {
+		struct json_tokener *tok;
+		struct json_object *obj;
+		const char *dump;
+		size_t dlen;
+
+		tok = json_tokener_new();
+		if (tok == NULL) return 0;
+		obj = json_tokener_parse_ex(tok, buf + start, (int)vlen);
+		json_tokener_free(tok);
+		if (obj == NULL) return -1;
+		dump = json_object_to_json_string(obj);
+		if (dump == NULL) {
+			json_object_put(obj);
+			return 0;
+		}
+		dlen = strlen(dump);
+		val = ln_arena_strndup(vm->arena, dump, dlen);
+		json_object_put(obj);
+		vlen = dlen;
+	} else {
+		val = ln_arena_strndup(vm->arena, buf + start, vlen);
+	}
+	if (name == NULL || val == NULL) return 0;
+
+	ln_fast_add_rawjson_static(vm->result, name, fn_len, val, (uint32_t)vlen);
 	return 0;
 }
 
@@ -1336,7 +2649,7 @@ parse_mac48(const char *buf, size_t len, size_t *out_len)
 }
 
 /*============================================================================
- * Instruction Execution (legacy switch-based — kept for reference/fallback)
+ * Instruction Execution (legacy switch-based, kept for reference/fallback)
  *============================================================================
  *
  * NOTE: The primary execution path is now ln_vm_continue() below, which
@@ -1412,13 +2725,14 @@ vm_exec_instr(ln_vm_t *vm)
 			return -1;
 		}
 		vm->pc = vm->calls[--vm->call_sp];
+		vm_commit_call(vm);
 		return 1;
 	}
 
 	/*=== Field Context ===*/
 
 	case OP_CTX_PUSH: {
-		if (!vm_push_field_ctx(vm, inst->data.str, false)) return -1;
+		if (!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), false)) return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -1430,7 +2744,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_CTX_NEST: {
-		if (!vm_push_field_ctx(vm, inst->data.str, true)) return -1;
+		if (!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), true)) return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -1449,6 +2763,19 @@ vm_exec_instr(ln_vm_t *vm)
 		if (len > LN_INSTR_MAX_INLINE) return -1;
 		if (remaining < len) return -1;
 		if (memcmp(vm->ip, inst->data.str, len) != 0) return -1;
+		vm->ip += len;
+		vm->pc++;
+		return 1;
+	}
+
+	case OP_LITERAL_EXT: {
+		uint32_t len = inst->data.lit_pool.len;
+		const char *lit;
+
+		if (vm->prog == NULL || vm->prog->strpool == NULL) return -1;
+		if (remaining < len) return -1;
+		lit = vm->prog->strpool + inst->data.lit_pool.off;
+		if (!ln_simd_memeq(vm->ip, lit, len)) return -1;
 		vm->ip += len;
 		vm->pc++;
 		return 1;
@@ -1488,8 +2815,32 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Fields ===*/
 
 	case OP_FIELD_WORD: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		ln_span_t span;
+
+		if (UNLIKELY(inst->aux != 0)) {
+			size_t n = 0;
+			if (inst->aux == 1) {
+				while (n < remaining) {
+					unsigned char c = (unsigned char)vm->ip[n];
+					if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+					      || (c >= 'A' && c <= 'F')))
+						break;
+					n++;
+				}
+			} else if (inst->aux == 2) {
+				while (n < remaining
+				       && isalpha((unsigned char)vm->ip[n]))
+					n++;
+			} else {
+				return -1;
+			}
+			if (n == 0) return -1;
+			vm_add_string_field(vm, name, vm->ip, n);
+			vm->ip += n;
+			vm->pc++;
+			return 1;
+		}
 
 		if (ln_simd_word(vm->ip, remaining, &span) != LN_SIMD_OK) return -1;
 
@@ -1500,20 +2851,29 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_INT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
 		if (parse_number(vm->ip, remaining, &value, &len) != 0) return -1;
+		/* aux carries "maxval"; 0 means unconstrained. */
+		if (inst->aux != 0
+		    && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))
+			return -1;
 
-		vm_add_int_field(vm, name, value);
+		/* Native JSON integer with format="number", the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC) {
+			if (!vm_add_int_field(vm, name, value)) return -1;
+		} else if (!vm_add_string_field(vm, name, vm->ip, len)) {
+			return -1;
+		}
 		vm->ip += len;
 		vm->pc++;
 		return 1;
 	}
 
 	case OP_FIELD_UINT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
@@ -1527,19 +2887,23 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_FLOAT: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_float(vm->ip, remaining, &len) != 0) return -1;
 
-		vm_add_string_field(vm, name, vm->ip, len);
+		/* Native JSON number (verbatim) with format="number", string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_rawjson_field(vm, name, vm->ip, len);
+		else
+			vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
 	}
 
 	case OP_FIELD_IPV4: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_ipv4(vm->ip, remaining, &len) != 0) return -1;
@@ -1551,7 +2915,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_IPV6: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_ipv6(vm->ip, remaining, &len) != 0) return -1;
@@ -1563,23 +2927,32 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_HEX: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		int64_t value;
 		size_t len;
 
 		if (parse_hex(vm->ip, remaining, &value, &len) != 0) return -1;
+		if (inst->aux != 0
+		    && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))
+			return -1;
 
-		vm_add_int_field(vm, name, value);
+		/* Native JSON integer (decimal) with format="number", the matched hex
+		 * literal as a string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, name, value);
+		else
+			vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
 		vm->pc++;
 		return 1;
 	}
 
 	case OP_FIELD_QUOTED: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t start, len, consumed;
 
-		if (parse_op_quoted(vm->ip, remaining, &start, &len, &consumed) != 0) return -1;
+		if (parse_op_quoted(vm->ip, remaining, &start, &len, &consumed,
+				    inst->aux) != 0) return -1;
 
 		vm_add_string_field(vm, name, vm->ip + start, len);
 		vm->ip += consumed;
@@ -1588,12 +2961,37 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_CHAR_TO: {
-		const char *name = inst->data.char_to.name;
+		const char *name = turbo_iname(vm, inst, inst->data.char_to.name);
 		char delim = (char)inst->data.char_to.delim;
 		ln_span_t span;
+		int rc;
 
-		if (ln_simd_char_to(vm->ip, remaining, delim, &span) != LN_SIMD_OK)
+		/* Empty extra on char-sep: no terminator, the field is the rest. */
+		if ((inst->flags & LN_INSTR_F_CHARSEP) && delim == 0
+		    && !(inst->flags & LN_INSTR_F_CHARSET)) {
+			span.start = vm->ip;
+			span.len = remaining;
+			span.consumed = remaining;
+			rc = LN_SIMD_OK;
+		} else if (UNLIKELY(inst->flags & LN_INSTR_F_CHARSET)) {
+			if (vm->prog->strpool == NULL) return -1;
+			rc = ln_simd_char_to_set(vm->ip, remaining,
+						 vm->prog->strpool + inst->data.char_to.set_off,
+						 &span);
+		} else {
+			rc = ln_simd_char_to(vm->ip, remaining, delim, &span);
+		}
+		if (rc != LN_SIMD_OK) {
+			/* char-sep matches whatever is left when no terminator is in
+			 * range; char-to refuses. */
+			if (!(inst->flags & LN_INSTR_F_CHARSEP)) return -1;
+			span.start = vm->ip;
+			span.len = remaining;
+			span.consumed = remaining;
+		} else if (span.len == 0 && !(inst->flags & LN_INSTR_F_CHARSEP)) {
+			/* char-to refuses an empty field. */
 			return -1;
+		}
 
 		vm_add_string_field(vm, name, span.start, span.len);
 		vm->ip += span.consumed;
@@ -1602,11 +3000,17 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_STR_TO: {
-		const char *name = inst->data.char_to.name;
-		char delim = (char)inst->data.char_to.delim;
+		const char *name = turbo_iname(vm, inst, inst->data.str_to.name);
+		const char *delim;
 		size_t len;
 
-		if (parse_char_to(vm->ip, remaining, delim, &len) != 0) return -1;
+		/* Test the pool before indexing it: forming strpool + off on a
+		 * NULL pool is undefined even when the result is never read, and
+		 * lets a compiler drop the check that follows. */
+		if (!vm->prog->strpool) return -1;
+		delim = vm->prog->strpool + inst->data.str_to.delim_off;
+		if (parse_string_to(vm->ip, remaining, delim, inst->aux, &len) != 0)
+			return -1;
 
 		vm_add_string_field(vm, name, vm->ip, len);
 		vm->ip += len;
@@ -1615,18 +3019,84 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_REST: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		vm_add_string_field(vm, name, vm->ip, remaining);
 		vm->ip += remaining;
 		vm->pc++;
 		return 1;
 	}
 
-	case OP_FIELD_DATE: {
-		const char *name = inst->data.str;
-		ln_span_t span;
+	case OP_FIELD_TIME: {
+		const char *name = turbo_iname(vm, inst, inst->data.str);
+		size_t n;
 
-		int rc = ln_simd_timestamp(vm->ip, remaining, &span, NULL);
+		if (inst->aux == 2) {
+			if (!vm_match_duration(vm->ip, remaining, &n)) return -1;
+			vm_add_string_field(vm, name, vm->ip, n);
+			vm->ip += n;
+		} else {
+			if (!vm_match_time(vm->ip, remaining, inst->aux != 0)) return -1;
+			vm_add_string_field(vm, name, vm->ip, 8);
+			vm->ip += 8;
+		}
+		vm->pc++;
+		return 1;
+	}
+
+	case OP_FIELD_KERNEL_TS: {
+		size_t n;
+
+		if (parse_kernel_timestamp(vm->ip, remaining, &n) != 0) return -1;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str),
+				    vm->ip, n);
+		vm->ip += n;
+		vm->pc++;
+		return 1;
+	}
+
+	case OP_CISCO_IFACE: {
+		if (vm_cisco_iface(vm, turbo_iname(vm, inst, inst->data.str)) != 1)
+			return -1;
+		vm->pc++;
+		return 1;
+	}
+
+	case OP_REPEAT: {
+		int rr = vm_repeat(vm, inst);
+		if (rr != 1) return rr;
+		vm->pc++;
+		return 1;
+	}
+
+	case OP_FIELD_DATE: {
+		const char *name = turbo_iname(vm, inst, inst->data.str);
+		ln_span_t span;
+		int rc;
+
+		if (inst->flags & LN_INSTR_F_DATE_FMT) {
+			size_t dparsed = 0;
+			int64_t ts = 0;
+
+			if (ln_turbo_date2unix((int)(inst->aux >> 8), vm->ip, remaining,
+					(inst->aux & 0xff) == FMT_MODE_TIMESTAMP_UX_MS,
+					&dparsed, &ts) != 0 || dparsed == 0)
+				return -1;
+			vm_add_int_field(vm, name, ts);
+			vm->ip += dparsed;
+			vm->pc++;
+			return 1;
+		}
+
+		if (inst->aux == 1) {
+			if (ln_simd_iso_date(vm->ip, remaining, &span) != LN_SIMD_OK)
+				return -1;
+			vm_add_string_field(vm, name, span.start, span.len);
+			vm->ip += span.consumed;
+			vm->pc++;
+			return 1;
+		}
+
+		rc = ln_simd_timestamp(vm->ip, remaining, &span, NULL);
 		if (rc != LN_SIMD_OK) return -1;
 
 		vm_add_string_field(vm, name, span.start, span.len);
@@ -1636,7 +3106,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_JSON: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		/* SIMD-flatten nested JSON into dotted flat keys. */
@@ -1649,7 +3119,7 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 
 	case OP_FIELD_MAC: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		size_t len;
 
 		if (parse_mac48(vm->ip, remaining, &len) != 0) return -1;
@@ -1674,7 +3144,7 @@ vm_exec_instr(ln_vm_t *vm)
 		 *
 		 * Uses SIMD primitives for scanning where possible.
 		 */
-		const char *ctx_name = inst->data.char_to.name;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		const char sep = (char)inst->data.char_to.delim;  /* 0 = whitespace */
 		const char ass = (char)inst->data.char_to.ass;     /* 0 = '=' */
 		const char ass_char = ass ? ass : '=';
@@ -1713,7 +3183,7 @@ vm_exec_instr(ln_vm_t *vm)
 			/* Scan for assignator char using SIMD find_char */
 			name_end_off = ln_simd_find_char(p, (size_t)(end - p), ass_char);
 			if (name_end_off >= (size_t)(end - p)) {
-				/* No more assignator found — done */
+				/* No more assignator found: done */
 				break;
 			}
 
@@ -1770,7 +3240,7 @@ vm_exec_instr(ln_vm_t *vm)
 				if (p < end && *p == quote) {
 					p++; /* skip closing quote */
 				} else {
-					/* Unterminated quote — fail */
+					/* Unterminated quote: fail */
 					break;
 				}
 			} else {
@@ -1781,7 +3251,7 @@ vm_exec_instr(ln_vm_t *vm)
 					size_t off = ln_simd_find_char(p, (size_t)(end - p), sep);
 					val_len = (off < (size_t)(end - p)) ? off : (size_t)(end - p);
 				} else {
-					/* Whitespace separator — scan to first whitespace */
+					/* Whitespace separator: scan to first whitespace */
 					val_len = 0;
 					while (p + val_len < end && !isspace((unsigned char)p[val_len]))
 						val_len++;
@@ -1798,12 +3268,12 @@ vm_exec_instr(ln_vm_t *vm)
 
 			/* --- Store the field --- */
 			/* Arena-allocate name so it outlives this stack frame */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 
-			/* Add field directly (context prefix handled by vm_add_string_field) */
-			vm_add_string_field(vm, arena_name, val_start, val_len);
+			/* Replacing add: the walker uses json_object_object_add, so a
+			 * second pair with the same name overwrites the first. */
+			vm_set_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
 			/* --- Advance to the next pair ---
@@ -1841,7 +3311,11 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Skipping ===*/
 
 	case OP_SKIP_SPACE: {
-		vm->ip += ln_simd_skip_space(vm->ip, remaining);
+		size_t ws = ln_simd_skip_space(vm->ip, remaining);
+		if (ws == 0) return -1;   /* whitespace field requires one or more */
+		if (inst->flags & LN_INSTR_F_STORE)
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), vm->ip, ws);
+		vm->ip += ws;
 		vm->pc++;
 		return 1;
 	}
@@ -1916,12 +3390,38 @@ vm_exec_instr(ln_vm_t *vm)
 		 * key is in data.kv.key (null-terminated), key length in aux.
 		 * value is in data.kv.val (null-terminated).
 		 * Zero per-message cost beyond the ln_fast_add_string_static call. */
-		if (vm->result && inst->data.kv.key[0]) {
-			uint16_t klen = inst->aux;
-			size_t vlen = strlen(inst->data.kv.val);
-			ln_fast_add_string_static(vm->result,
-									  inst->data.kv.key, klen,
-									  inst->data.kv.val, (uint32_t)vlen);
+		if (vm->result) {
+			const int annot = (inst->flags & LN_INSTR_F_ANNOT) != 0;
+
+			if (inst->flags & LN_INSTR_F_KV_POOL) {
+				if (vm->prog->strpool) {
+					const char *const k = vm->prog->strpool
+							    + inst->data.kv_pool.key_off;
+					const char *const v = vm->prog->strpool
+							    + inst->data.kv_pool.val_off;
+
+					if (annot)
+						ln_fast_set_string_static(vm->result, k,
+								inst->aux, v,
+								inst->data.kv_pool.val_len);
+					else
+						ln_fast_add_string_static(vm->result, k,
+								inst->aux, v,
+								inst->data.kv_pool.val_len);
+				}
+			} else if (inst->data.kv.key[0]) {
+				const uint32_t vlen =
+					(uint32_t)strlen(inst->data.kv.val);
+
+				if (annot)
+					ln_fast_set_string_static(vm->result,
+							inst->data.kv.key, inst->aux,
+							inst->data.kv.val, vlen);
+				else
+					ln_fast_add_string_static(vm->result,
+							inst->data.kv.key, inst->aux,
+							inst->data.kv.val, vlen);
+			}
 		}
 		vm->pc++;
 		return 1;
@@ -1990,110 +3490,10 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== iptables name=value ===*/
 
 	case OP_V2_IPTABLES: {
-		const char *ctx_name = inst->data.str;
-		const char *p = vm->ip;
-		const char *end = vm->input_end;
-		int n_pairs = 0;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.str);
 
-		if (ctx_name[0]) {
-			vm_push_field_ctx(vm, ctx_name, false);
-		}
-
-		while (p < end) {
-			const char *name_start;
-			size_t name_len;
-			size_t eq_off;
-			const char *val_start;
-			size_t val_len;
-			char *arena_name;
-
-			/* Skip leading spaces */
-			while (p < end && *p == ' ') p++;
-			if (p >= end) break;
-
-			name_start = p;
-
-			/* Scan for '=' or space (flag without value) */
-			eq_off = ln_simd_find_char(p, (size_t)(end - p), '=');
-
-			/* Check if a space comes before '=' (flag) */
-			{
-				size_t sp_off;
-				sp_off = ln_simd_find_char(p, (size_t)(end - p), ' ');
-				if (sp_off < eq_off) {
-					/* Flag: name without '=' — store as null */
-					name_len = sp_off;
-					if (name_len == 0) break;
-					if (name_len > 63) name_len = 63;
-					arena_name = ln_arena_strndup(vm->arena,
-								name_start, name_len);
-					if (!arena_name) break;
-					vm_add_string_field(vm, arena_name, "", 0);
-					n_pairs++;
-					p += sp_off;
-					continue;
-				}
-			}
-
-			if (eq_off >= (size_t)(end - p)) {
-				/* No '=' found — check if rest is a flag */
-				name_len = (size_t)(end - p);
-				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
-				arena_name = ln_arena_strndup(vm->arena,
-							name_start, name_len);
-				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
-				n_pairs++;
-				p = end;
-				break;
-			}
-
-			name_len = eq_off;
-			if (name_len == 0) break;
-
-			/* Validate name: alphanumeric + underscore */
-			{
-				int valid = 1;
-				size_t k;
-				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
-					if (!(isalnum(c) || c == '_')) {
-						valid = 0;
-						break;
-					}
-				}
-				if (!valid) break;
-			}
-
-			p += name_len + 1; /* skip name + '=' */
-
-			/* Parse value: everything until space or end */
-			val_start = p;
-			{
-				size_t sp_off;
-				sp_off = ln_simd_find_char(p, (size_t)(end - p), ' ');
-				val_len = (sp_off < (size_t)(end - p))
-						  ? sp_off : (size_t)(end - p);
-			}
-			p += val_len;
-
-			/* Store field */
-			if (name_len > 63) name_len = 63;
-			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
-			if (!arena_name) break;
-			vm_add_string_field(vm, arena_name, val_start, val_len);
-			n_pairs++;
-		}
-
-		if (ctx_name[0]) {
-			vm_pop_field_ctx(vm);
-		}
-
-		/* Require minimum 2 pairs */
-		if (n_pairs < 2) return -1;
-
-		vm->ip = p;
+		if (vm_v2_iptables(vm, ctx_name) != 1)
+			return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -2101,7 +3501,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== CEE-syslog ===*/
 
 	case OP_CEE_SYSLOG: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		const char *p = vm->ip;
 		size_t rem = remaining;
 		size_t json_len;
@@ -2136,74 +3536,11 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== Checkpoint LEA ===*/
 
 	case OP_CHECKPOINT_LEA: {
-		const char *ctx_name = inst->data.char_to.name;
+		const char *ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		const char term = (char)inst->data.char_to.delim;
-		const char *p = vm->ip;
-		const char *end = vm->input_end;
-		int n_pairs = 0;
 
-		if (ctx_name[0]) {
-			vm_push_field_ctx(vm, ctx_name, false);
-		}
-
-		while (p < end) {
-			const char *name_start;
-			size_t name_len;
-			size_t colon_off;
-			const char *val_start;
-			size_t val_len;
-			size_t semi_off;
-			char *arena_name;
-
-			/* Skip leading spaces */
-			while (p < end && *p == ' ') p++;
-			if (p >= end) break;
-
-			/* Check for early terminator */
-			if (term && *p == term) break;
-
-			name_start = p;
-
-			/* Scan for ':' */
-			colon_off = ln_simd_find_char(p, (size_t)(end - p), ':');
-			if (colon_off >= (size_t)(end - p)) break;
-
-			name_len = colon_off;
-			if (name_len == 0) break;
-
-			p += name_len + 1; /* skip name + ':' */
-
-			/* Skip spaces after ':' */
-			while (p < end && *p == ' ') p++;
-
-			/* Scan for ';' */
-			val_start = p;
-			semi_off = ln_simd_find_char(p, (size_t)(end - p), ';');
-			if (semi_off >= (size_t)(end - p)) {
-				/* No semicolon — take rest as value */
-				val_len = (size_t)(end - p);
-				p = end;
-			} else {
-				val_len = semi_off;
-				p += val_len + 1; /* skip value + ';' */
-			}
-
-			/* Store field */
-			if (name_len > 63) name_len = 63;
-			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
-			if (!arena_name) break;
-			vm_add_string_field(vm, arena_name, val_start, val_len);
-			n_pairs++;
-		}
-
-		if (ctx_name[0]) {
-			vm_pop_field_ctx(vm);
-		}
-
-		/* Require minimum 1 pair */
-		if (n_pairs < 1) return -1;
-
-		vm->ip = p;
+		if (vm_checkpoint_lea(vm, ctx_name, term) != 1)
+			return -1;
 		vm->pc++;
 		return 1;
 	}
@@ -2211,7 +3548,7 @@ vm_exec_instr(ln_vm_t *vm)
 	/*=== CEF header ===*/
 
 	case OP_CEF_HDR: {
-		const char *name = inst->data.str;
+		const char *name = turbo_iname(vm, inst, inst->data.str);
 		const char *p = vm->ip;
 		const char *end = vm->input_end;
 		size_t rem = remaining;
@@ -2235,6 +3572,7 @@ vm_exec_instr(ln_vm_t *vm)
 		/* Parse 6 pipe-delimited header fields with escape handling */
 		for (hdr_idx = 0; hdr_idx < 6; hdr_idx++) {
 			const char *field_start = p;
+			const char *field_val;
 			size_t field_len;
 
 			/* Scan for unescaped '|' or end of input */
@@ -2248,8 +3586,13 @@ vm_exec_instr(ln_vm_t *vm)
 			}
 
 			field_len = (size_t)(p - field_start);
+			if (cef_unescape(vm, field_start, field_len, 0,
+							 &field_val, &field_len) != 0) {
+				if (name[0]) vm_pop_field_ctx(vm);
+				return -1;
+			}
 			vm_add_string_field(vm, hdr_names[hdr_idx],
-								field_start, field_len);
+								field_val, field_len);
 
 			if (hdr_idx < 5) {
 				/* Expect pipe separator between fields */
@@ -2267,9 +3610,13 @@ vm_exec_instr(ln_vm_t *vm)
 		/* Parse extensions: key=value pairs separated by spaces.
 		 * Push "Extensions" sub-context. */
 		if (p < end) {
+			/* Extensions nest under the field, so compose "<field>.Extensions"
+			 * (the context stack tracks only the top level). */
 			const char *ext_ctx = "Extensions";
 			int n_ext;
 
+			/* Push the plain segment: the context stack composes the
+			 * full path itself. */
 			vm_push_field_ctx(vm, ext_ctx, false);
 			n_ext = 0;
 
@@ -2279,8 +3626,8 @@ vm_exec_instr(ln_vm_t *vm)
 				size_t key_len;
 				const char *val_start;
 				size_t val_len;
-				const char *next_eq;
-				const char *scan;
+				const char *key_eq;
+				const char *val_span;
 				char *arena_key;
 
 				/* Skip spaces */
@@ -2290,55 +3637,34 @@ vm_exec_instr(ln_vm_t *vm)
 				key_start = p;
 
 				/* Find '=' */
-				eq_off = ln_simd_find_char(p, (size_t)(end - p), '=');
-				if (eq_off >= (size_t)(end - p)) break;
+				key_eq = cef_find_unescaped(p, p, end, '=');
+				if (key_eq == NULL) break;
+				eq_off = (size_t)(key_eq - p);
 
 				key_len = eq_off;
 				if (key_len == 0) break;
+				if (!cef_name_ok(key_start, key_len)) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					return -1;
+				}
 
 				p += key_len + 1; /* skip key + '=' */
 
-				/* Value: greedy — take everything until next key=
-				 * Scan backwards from next '=' to find the space
-				 * before the next key. */
 				val_start = p;
-				next_eq = NULL;
-				scan = p;
-				while (scan < end) {
-					size_t off = ln_simd_find_char(scan,
-								(size_t)(end - scan), '=');
-					if (off >= (size_t)(end - scan)) break;
-					next_eq = scan + off;
-					break;
-				}
+				cef_take_extension_value(val_start, end, &val_len, &p);
 
-				if (next_eq && next_eq > val_start) {
-					/* Walk back from '=' to find space before key */
-					const char *kstart = next_eq;
-					while (kstart > val_start && *(kstart - 1) != ' ')
-						kstart--;
-					if (kstart > val_start) {
-						val_len = (size_t)(kstart - val_start);
-						/* Trim trailing space */
-						while (val_len > 0 &&
-							   val_start[val_len - 1] == ' ')
-							val_len--;
-						p = kstart;
-					} else {
-						val_len = (size_t)(end - val_start);
-						p = end;
-					}
-				} else {
-					val_len = (size_t)(end - val_start);
-					p = end;
-				}
-
-				if (key_len > 63) key_len = 63;
 				arena_key = ln_arena_strndup(vm->arena,
 							key_start, key_len);
 				if (!arena_key) break;
-				vm_add_string_field(vm, arena_key,
-									val_start, val_len);
+				if (cef_unescape(vm, val_start, val_len, 1,
+								 &val_span, &val_len) != 0) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					return -1;
+				}
+				vm_set_string_field(vm, arena_key,
+									val_span, val_len);
 				n_ext++;
 			}
 
@@ -2375,6 +3701,265 @@ vm_exec_instr(ln_vm_t *vm)
 	}
 }
 
+#define VM_PC_SUBDONE UINT32_MAX
+
+/*
+ * Run a RET-terminated subroutine starting at target_pc. Isolates forks
+ * pushed inside the sub: exhausting them fails the sub without touching
+ * outer forks. Repeat is not the hot path, so this uses the switch
+ * interpreter even when the outer loop is computed-goto.
+ */
+static int
+vm_exec_sub(ln_vm_t *vm, uint32_t target_pc)
+{
+	uint8_t call0 = (uint8_t)vm->call_sp;
+	uint8_t fork0 = (uint8_t)vm->fork_sp;
+	uint8_t ctx0 = (uint8_t)vm->field_ctx_sp;
+	uint8_t nf0 = vm->result ? vm->result->n_fields : 0;
+	uint8_t nt0 = vm->result ? vm->result->n_tags : 0;
+	const char *ip0 = vm->ip;
+	const uint64_t MAX_INSTRUCTIONS = 100000000;
+
+	if (vm->call_sp >= LN_VM_MAX_CALLS) {
+		vm->error = "call stack overflow";
+		return -1;
+	}
+	if (target_pc >= vm->prog->code_len) {
+		vm->error = "repeat sub out of bounds";
+		return -1;
+	}
+
+	vm->calls[vm->call_sp++] = VM_PC_SUBDONE;
+	vm->pc = target_pc;
+
+	while (vm->call_sp > call0) {
+		int r;
+
+		if (UNLIKELY(vm->instr_count > MAX_INSTRUCTIONS)) {
+			vm->error = "instruction limit exceeded";
+			return -1;
+		}
+		r = vm_exec_instr(vm);
+		if (r < 0) {
+			if (vm->fork_sp <= fork0) {
+				vm->call_sp = call0;
+				vm->fork_sp = fork0;
+				vm->field_ctx_sp = ctx0;
+				vm->ip = ip0;
+				if (vm->result) {
+					vm->result->n_fields = nf0;
+					vm->result->n_tags = nt0;
+				}
+				return -1;
+			}
+			if (!vm_pop_fork(vm)) {
+				vm->call_sp = call0;
+				return -1;
+			}
+		}
+	}
+	return 0;
+}
+
+/*
+ * Length-bounded reparse of a RAW_JSON span. write_field_value emits the
+ * same span verbatim; a named repeat has to reify it as a json_object.
+ * Fall back to the raw string if the span is not valid JSON, so the field
+ * is never silently dropped to null.
+ */
+static json_object *
+vm_parse_raw_json(const char *s, uint32_t slen)
+{
+	json_object *jval = NULL;
+	struct json_tokener *jtok;
+
+	if (s == NULL)
+		return json_object_new_string("");
+	jtok = json_tokener_new();
+	if (jtok != NULL) {
+		jval = json_tokener_parse_ex(jtok, s, (int)slen);
+		json_tokener_free(jtok);
+	}
+	if (jval != NULL)
+		return jval;
+	return json_object_new_string_len(s, (int)slen);
+}
+
+static json_object *
+vm_field_json(const ln_fast_field_t *f)
+{
+	switch (f->type) {
+	case LN_FTYPE_STRING:
+		if (f->flags & LN_FFIELD_RAW_JSON)
+			return vm_parse_raw_json(f->v.str.ptr, f->v.str.len);
+		return json_object_new_string_len(f->v.str.ptr, (int)f->v.str.len);
+	case LN_FTYPE_STRING_INLINE:
+		if (f->flags & LN_FFIELD_RAW_JSON)
+			return vm_parse_raw_json(f->v.inl, (uint32_t)strlen(f->v.inl));
+		return json_object_new_string(f->v.inl);
+	case LN_FTYPE_INT:
+		return json_object_new_int64(f->v.i);
+	case LN_FTYPE_BOOL:
+		return json_object_new_boolean(f->v.b);
+	case LN_FTYPE_DOUBLE:
+		return json_object_new_double(f->v.d);
+	case LN_FTYPE_NULL:
+		return NULL;
+	default:
+		return json_object_new_string("");
+	}
+}
+
+json_object *
+ln_turbo_field_json(const ln_fast_field_t *f)
+{
+	return vm_field_json(f);
+}
+
+static json_object *
+vm_pack_iter(ln_fast_result_t *res, uint8_t n0)
+{
+	json_object *obj;
+	json_object *dot_val = NULL;
+	uint8_t i;
+
+	obj = json_object_new_object();
+	if (obj == NULL) return NULL;
+	for (i = n0; i < res->n_fields; i++) {
+		const ln_fast_field_t *f = &res->fields[i];
+		json_object *val;
+		const char *key;
+		char keybuf[256];
+
+		if (f->name == NULL || f->name_len == 0)
+			continue;
+		if (f->name_len == 1 && f->name[0] == '.') {
+			if (dot_val != NULL)
+				json_object_put(dot_val);
+			dot_val = vm_field_json(f);
+			continue;
+		}
+		if (f->name_len >= sizeof(keybuf))
+			continue;
+		memcpy(keybuf, f->name, f->name_len);
+		keybuf[f->name_len] = '\0';
+		key = keybuf;
+		val = vm_field_json(f);
+		json_object_object_add(obj, key, val);
+	}
+	if (dot_val != NULL) {
+		json_object_put(obj);
+		return dot_val;
+	}
+	return obj;
+}
+
+static int
+vm_repeat(ln_vm_t *vm, const ln_instr_t *inst)
+{
+	uint32_t parser_pc, while_pc, repeat_pc;
+	const char *name;
+	uint16_t name_len = 0;
+	int merge;
+	int permit;
+	int n_iter = 0;
+	json_object *arr = NULL;
+	const char *js;
+	char *copy;
+	size_t jslen;
+
+	repeat_pc = vm->pc;
+	parser_pc = (uint32_t)((int32_t)repeat_pc + inst->data.repeat.parser_off);
+	while_pc = (uint32_t)((int32_t)repeat_pc + inst->data.repeat.while_off);
+	if (parser_pc >= vm->prog->code_len || while_pc >= vm->prog->code_len) {
+		vm->error = "repeat sub out of bounds";
+		return -1;
+	}
+
+	name = turbo_iname(vm, inst, inst->data.repeat.name);
+	merge = (name != NULL && name[0] == '.' && name[1] == '\0');
+	permit = (inst->flags & LN_INSTR_F_REPEAT_PERMIT) != 0;
+	{
+		uint16_t nlen = 0;
+		const char *full = vm_build_field_name(vm, name, &nlen);
+		/* Discarded under "-": still consume, do not store. */
+		if (!merge && (full == NULL || nlen == 0)) {
+			name = NULL;
+			name_len = 0;
+		} else if (!merge && full != NULL) {
+			name = full;
+			name_len = nlen;
+		}
+	}
+
+	for (;;) {
+		uint8_t n0 = vm->result ? vm->result->n_fields : 0;
+		int pr;
+
+		vm->fail_on_dup = (inst->aux & 1) != 0;
+		pr = vm_exec_sub(vm, parser_pc);
+		vm->fail_on_dup = 0;
+		if (pr != 0) {
+			/* Walker: a parser miss fails the whole repeat unless
+			 * permitMismatchInParser, which keeps what was collected. */
+			if (permit)
+				break;
+			goto fail;
+		}
+		n_iter++;
+		if (!merge && name != NULL && vm->result) {
+			json_object *elem = vm_pack_iter(vm->result, n0);
+			if (elem == NULL)
+				goto fail;
+			if (arr == NULL) {
+				arr = json_object_new_array();
+				if (arr == NULL) {
+					json_object_put(elem);
+					goto fail;
+				}
+			}
+			json_object_array_add(arr, elem);
+			vm->result->n_fields = n0;
+		}
+
+		if (!vm_push_field_ctx(vm, "-", false))
+			goto fail;
+		pr = vm_exec_sub(vm, while_pc);
+		vm_pop_field_ctx(vm);
+		if (pr != 0)
+			break;
+	}
+
+	vm->pc = repeat_pc;
+	if (merge || name == NULL)
+		return 1;
+	if (arr == NULL) {
+		if (permit && n_iter == 0)
+			return 1;
+		goto fail;
+	}
+	js = json_object_to_json_string_ext(arr, JSON_C_TO_STRING_PLAIN);
+	if (js == NULL)
+		goto fail;
+	jslen = strlen(js);
+	copy = ln_arena_alloc(vm->arena, jslen + 1);
+	if (copy == NULL)
+		goto fail;
+	memcpy(copy, js, jslen + 1);
+	json_object_put(arr);
+	arr = NULL;
+	if (ln_fast_add_rawjson_static(vm->result, name, name_len,
+				       copy, (uint32_t)jslen) != 0)
+		return -1;
+	return 1;
+
+fail:
+	if (arr != NULL)
+		json_object_put(arr);
+	vm->pc = repeat_pc;
+	return -1;
+}
+
 /*============================================================================
  * Main Execution Loop
  *============================================================================
@@ -2383,7 +3968,7 @@ vm_exec_instr(ln_vm_t *vm)
  *
  * 1. COMPUTED GOTO (GCC/Clang): Flat dispatch loop with direct jumps
  *    between opcode handlers. Each handler ends with NEXT() which
- *    increments pc and jumps directly to the next handler — no loop
+ *    increments pc and jumps directly to the next handler, no loop
  *    overhead, no switch bounds check. Failed handlers jump to
  *    backtrack: which pops the fork stack or returns NOMATCH.
  *
@@ -2396,7 +3981,6 @@ ln_vm_exec(ln_vm_t *vm, const ln_program_t *prog,
 		   const char *input, size_t len,
 		   ln_fast_result_t *result)
 {
-	size_t leading_ws;
 
 	if (UNLIKELY(!vm || !prog || !prog->code || !input)) {
 		return LN_VM_ERROR;
@@ -2415,10 +3999,11 @@ ln_vm_exec(ln_vm_t *vm, const ln_program_t *prog,
 	vm->backtrack_count = 0;
 	vm->matched_rule = NULL;
 	vm->error = NULL;
+	vm->fail_on_dup = 0;
 
-	/* Skip leading whitespace */
-	leading_ws = ln_simd_skip_space(vm->ip, (size_t)(vm->input_end - vm->ip));
-	vm->ip += leading_ws;
+	/* The standard parser starts at the first byte. A leading space is
+	 * either part of the first field (char-to keeps it) or makes that
+	 * field refuse (word, number). Do not trim it here. */
 
 	return ln_vm_continue(vm);
 }
@@ -2559,6 +4144,7 @@ ln_vm_continue(ln_vm_t *vm)
 		}
 		/* Validate the popped return target (security audit #5). */
 		VALIDATE_TARGET(pc, (int64_t)vm->calls[--vm->call_sp]);
+		vm_commit_call(vm);
 		DISPATCH();
 	}
 
@@ -2568,7 +4154,7 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_push) {
 		const ln_instr_t *inst = INST();
-		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, false))) {
+		if (UNLIKELY(!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), false))) {
 			WRITEBACK();
 			BACKTRACK();
 		}
@@ -2586,7 +4172,7 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(ctx_nest) {
 		const ln_instr_t *inst = INST();
-		if (UNLIKELY(!vm_push_field_ctx(vm, inst->data.str, true))) {
+		if (UNLIKELY(!vm_push_field_ctx(vm, turbo_iname(vm, inst, inst->data.str), true))) {
 			WRITEBACK();
 			BACKTRACK();
 		}
@@ -2631,10 +4217,27 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(literal_ext) {
-		/* External literal — same as LITERAL but data is a pointer.
-		 * Currently unused in compiled programs, but reserved. */
-		WRITEBACK();
-		BACKTRACK();
+		const ln_instr_t *inst = INST();
+		uint32_t len;
+		const char *lit;
+
+		if (UNLIKELY(prog->strpool == NULL)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		len = inst->data.lit_pool.len;
+		if (UNLIKELY(REMAINING() < len)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		lit = prog->strpool + inst->data.lit_pool.off;
+		if (UNLIKELY(!ln_simd_memeq(ip, lit, len))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		ip += len;
+		pc++;
+		DISPATCH();
 	}
 
 	CASE(literal_ci) {
@@ -2687,7 +4290,7 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(charset) {
-		/* External charset bitmap — reserved but not yet used */
+		/* External charset bitmap: reserved but not yet used */
 		WRITEBACK();
 		BACKTRACK();
 	}
@@ -2699,12 +4302,40 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_word) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
+		if (UNLIKELY(inst->aux != 0)) {
+			size_t n = 0;
+			size_t rem = REMAINING();
+			if (inst->aux == 1) {
+				while (n < rem) {
+					unsigned char c = (unsigned char)ip[n];
+					if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+					      || (c >= 'A' && c <= 'F')))
+						break;
+					n++;
+				}
+			} else if (inst->aux == 2) {
+				while (n < rem && isalpha((unsigned char)ip[n]))
+					n++;
+			} else {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			if (UNLIKELY(n == 0)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			vm->ip = ip;
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, n);
+			ip += n;
+			pc++;
+			DISPATCH();
+		}
 		if (UNLIKELY(ln_simd_word(ip, REMAINING(), &span) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip; /* vm_add reads vm->ip */
-		vm_add_string_field(vm, inst->data.str, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2718,8 +4349,23 @@ ln_vm_continue(ln_vm_t *vm)
 			WRITEBACK();
 			BACKTRACK();
 		}
+		/* aux carries "maxval"; 0 means unconstrained. */
+		if (UNLIKELY(inst->aux != 0
+			     && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		/* Native JSON integer with format="number", the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC) {
+			if (UNLIKELY(!vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value))) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+		} else if (UNLIKELY(!vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2738,7 +4384,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2752,7 +4398,12 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		/* Native JSON number with format="number" (emitted verbatim to preserve
+		 * the serialization), the matched string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_rawjson_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
+		else
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2766,7 +4417,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2780,7 +4431,7 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2794,8 +4445,18 @@ ln_vm_continue(ln_vm_t *vm)
 			WRITEBACK();
 			BACKTRACK();
 		}
+		if (UNLIKELY(inst->aux != 0
+			     && (value < 0 || (uint64_t)value > (uint64_t)inst->aux))) {
+			WRITEBACK();
+			BACKTRACK();
+		}
 		vm->ip = ip;
-		vm_add_int_field(vm, inst->data.str, value);
+		/* Native JSON integer (decimal) with format="number", the matched hex
+		 * literal as a string otherwise. */
+		if (inst->flags & LN_INSTR_F_NUMERIC)
+			vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), value);
+		else
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2804,12 +4465,13 @@ ln_vm_continue(ln_vm_t *vm)
 	CASE(field_quoted) {
 		const ln_instr_t *inst = INST();
 		size_t start, len, consumed;
-		if (UNLIKELY(parse_op_quoted(ip, REMAINING(), &start, &len, &consumed) != 0)) {
+		if (UNLIKELY(parse_op_quoted(ip, REMAINING(), &start, &len, &consumed,
+					     inst->aux) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip + start, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip + start, len);
 		ip += consumed;
 		pc++;
 		DISPATCH();
@@ -2819,13 +4481,42 @@ ln_vm_continue(ln_vm_t *vm)
 		const ln_instr_t *inst = INST();
 		char delim;
 		ln_span_t span;
+		int rc;
 		delim = (char)inst->data.char_to.delim;
-		if (UNLIKELY(ln_simd_char_to(ip, REMAINING(), delim, &span) != LN_SIMD_OK)) {
+		if ((inst->flags & LN_INSTR_F_CHARSEP) && delim == 0
+		    && !(inst->flags & LN_INSTR_F_CHARSET)) {
+			span.start = ip;
+			span.len = REMAINING();
+			span.consumed = REMAINING();
+			rc = LN_SIMD_OK;
+		} else if (UNLIKELY(inst->flags & LN_INSTR_F_CHARSET)) {
+			if (UNLIKELY(prog->strpool == NULL)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			rc = ln_simd_char_to_set(ip, REMAINING(),
+						 prog->strpool + inst->data.char_to.set_off,
+						 &span);
+		} else {
+			rc = ln_simd_char_to(ip, REMAINING(), delim, &span);
+		}
+		if (UNLIKELY(rc != LN_SIMD_OK)) {
+			/* char-sep matches whatever is left when no terminator is in
+			 * range; char-to refuses. */
+			if (!(inst->flags & LN_INSTR_F_CHARSEP)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			span.start = ip;
+			span.len = REMAINING();
+			span.consumed = REMAINING();
+		} else if (UNLIKELY(span.len == 0 && !(inst->flags & LN_INSTR_F_CHARSEP))) {
+			/* char-to refuses an empty field. */
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.char_to.name, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.char_to.name), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2833,15 +4524,19 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(field_str_to) {
 		const ln_instr_t *inst = INST();
-		char delim;
+		const char *delim;
 		size_t len;
-		delim = (char)inst->data.char_to.delim;
-		if (UNLIKELY(parse_char_to(ip, REMAINING(), delim, &len) != 0)) {
+		if (UNLIKELY(prog->strpool == NULL)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		delim = prog->strpool + inst->data.str_to.delim_off;
+		if (UNLIKELY(parse_string_to(ip, REMAINING(), delim, inst->aux, &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.char_to.name, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str_to.name), ip, len);
 		ip += len;
 		pc++;
 		DISPATCH();
@@ -2852,7 +4547,7 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t rem;
 		rem = REMAINING();
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, rem);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, rem);
 		ip += rem;
 		pc++;
 		DISPATCH();
@@ -2865,7 +4560,7 @@ ln_vm_continue(ln_vm_t *vm)
 		/* SIMD stage-1 structural scan + scalar stage-2 flatten.
 		 * On parse failure BACKTRACK restores result->n_fields from the
 		 * fork snapshot, rolling back any partially-emitted leaves. */
-		if (UNLIKELY(vm_json_flatten(vm, inst->data.str, ip,
+		if (UNLIKELY(vm_json_flatten(vm, turbo_iname(vm, inst, inst->data.str), ip,
 					     REMAINING(), &len) != 0)) {
 			WRITEBACK();
 			BACKTRACK();
@@ -2883,21 +4578,122 @@ ln_vm_continue(ln_vm_t *vm)
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, ip, len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, len);
 		ip += len;
 		pc++;
+		DISPATCH();
+	}
+
+	CASE(field_time) {
+		const ln_instr_t *inst = INST();
+		const char *name = turbo_iname(vm, inst, inst->data.str);
+		size_t n;
+
+		if (inst->aux == 2) {
+			if (UNLIKELY(!vm_match_duration(ip, REMAINING(), &n))) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+		} else {
+			if (UNLIKELY(!vm_match_time(ip, REMAINING(), inst->aux != 0))) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			n = 8;
+		}
+		vm->ip = ip;
+		vm_add_string_field(vm, name, ip, n);
+		ip += n;
+		pc++;
+		DISPATCH();
+	}
+
+	CASE(field_kernel_ts) {
+		const ln_instr_t *inst = INST();
+		size_t n;
+
+		if (UNLIKELY(parse_kernel_timestamp(ip, REMAINING(), &n) != 0)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		vm->ip = ip;
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, n);
+		ip += n;
+		pc++;
+		DISPATCH();
+	}
+
+	CASE(cisco_iface) {
+		const ln_instr_t *inst = INST();
+
+		vm->ip = ip;
+		vm->pc = pc;
+		if (UNLIKELY(vm_cisco_iface(vm, turbo_iname(vm, inst, inst->data.str)) != 1)) {
+			WRITEBACK();
+			BACKTRACK();
+		}
+		ip = vm->ip;
+		pc++;
+		DISPATCH();
+	}
+
+	CASE(repeat) {
+		const ln_instr_t *inst = INST();
+
+		WRITEBACK();
+		if (UNLIKELY(vm_repeat(vm, inst) != 1)) {
+			BACKTRACK();
+		}
+		ip = vm->ip;
+		pc = vm->pc + 1;
 		DISPATCH();
 	}
 
 	CASE(field_date) {
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
+		/*
+		 * format="timestamp-unix"[-ms] turns the date into an epoch integer.
+		 * ln_turbo_date2unix() runs the standard parser's own scan and
+		 * conversion and returns a plain int64_t, so the grammar and the
+		 * leap-year/offset/sub-second arithmetic exist once while the fast
+		 * path still allocates nothing per message.
+		 */
+		if (UNLIKELY(inst->flags & LN_INSTR_F_DATE_FMT)) {
+			size_t dparsed = 0;
+			int64_t ts = 0;
+
+			if (UNLIKELY(ln_turbo_date2unix((int)(inst->aux >> 8), ip,
+						REMAINING(),
+						(inst->aux & 0xff) == FMT_MODE_TIMESTAMP_UX_MS,
+						&dparsed, &ts) != 0 || dparsed == 0)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			vm->ip = ip;
+			vm_add_int_field(vm, turbo_iname(vm, inst, inst->data.str), ts);
+			ip += dparsed;
+			pc++;
+			DISPATCH();
+		}
+		if (UNLIKELY(inst->aux == 1)) {
+			if (UNLIKELY(ln_simd_iso_date(ip, REMAINING(), &span) != LN_SIMD_OK)) {
+				WRITEBACK();
+				BACKTRACK();
+			}
+			vm->ip = ip;
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str),
+					    span.start, span.len);
+			ip += span.consumed;
+			pc++;
+			DISPATCH();
+		}
 		if (UNLIKELY(ln_simd_timestamp(ip, REMAINING(), &span, NULL) != LN_SIMD_OK)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
 		vm->ip = ip;
-		vm_add_string_field(vm, inst->data.str, span.start, span.len);
+		vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), span.start, span.len);
 		ip += span.consumed;
 		pc++;
 		DISPATCH();
@@ -2929,7 +4725,7 @@ ln_vm_continue(ln_vm_t *vm)
 		vm->ip = ip;
 		vm->pc = pc;
 
-		ctx_name = inst->data.char_to.name;
+		ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		sep = (char)inst->data.char_to.delim;
 		ass = (char)inst->data.char_to.ass;
 		ass_char = ass ? ass : '=';
@@ -3031,11 +4827,10 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 
 			/* Arena-allocate name so it outlives this stack frame */
-			if (name_len > 63) name_len = 63;
 			arena_name = ln_arena_strndup(vm->arena, name_start, name_len);
 			if (!arena_name) break;
 
-			vm_add_string_field(vm, arena_name, val_start, val_len);
+			vm_set_string_field(vm, arena_name, val_start, val_len);
 			n_pairs++;
 
 			/* Advance to the next pair (see scalar handler for rationale). */
@@ -3071,7 +4866,17 @@ ln_vm_continue(ln_vm_t *vm)
 	 *=================================================================*/
 
 	CASE(skip_space) {
-		ip += ln_simd_skip_space(ip, REMAINING());
+		const ln_instr_t *inst = INST();
+		size_t ws = ln_simd_skip_space(ip, REMAINING());
+		if (UNLIKELY(ws == 0)) {   /* whitespace field requires one or more */
+			WRITEBACK();
+			BACKTRACK();
+		}
+		if (inst->flags & LN_INSTR_F_STORE) {
+			vm->ip = ip;
+			vm_add_string_field(vm, turbo_iname(vm, inst, inst->data.str), ip, ws);
+		}
+		ip += ws;
 		pc++;
 		DISPATCH();
 	}
@@ -3173,12 +4978,38 @@ ln_vm_continue(ln_vm_t *vm)
 
 	CASE(static_field) {
 		const ln_instr_t *inst = INST();
-		if (vm->result && inst->data.kv.key[0]) {
-			uint16_t klen = inst->aux;
-			size_t vlen = strlen(inst->data.kv.val);
-			ln_fast_add_string_static(vm->result,
-									  inst->data.kv.key, klen,
-									  inst->data.kv.val, (uint32_t)vlen);
+		if (vm->result) {
+			const char *key = NULL;
+			const char *val = NULL;
+			uint32_t vlen = 0;
+
+			if (inst->flags & LN_INSTR_F_KV_POOL) {
+				if (prog->strpool) {
+					key = prog->strpool + inst->data.kv_pool.key_off;
+					val = prog->strpool + inst->data.kv_pool.val_off;
+					vlen = inst->data.kv_pool.val_len;
+				}
+			} else if (inst->data.kv.key[0]) {
+				key = inst->data.kv.key;
+				val = inst->data.kv.val;
+				vlen = (uint32_t)strlen(inst->data.kv.val);
+			}
+			/* Resolve like any other field: a static field inside a context
+			 * takes its prefix, ".." takes the enclosing name, and "-" stores
+			 * nothing. Adding it raw skipped all three. */
+			if (key != NULL) {
+				uint16_t nlen;
+				const char *full = vm_build_field_name(vm, key, &nlen);
+
+				if (full != NULL && full[0] != '\0') {
+					if (inst->flags & LN_INSTR_F_ANNOT)
+						ln_fast_set_string_static(vm->result, full,
+									  nlen, val, vlen);
+					else
+						ln_fast_add_string_static(vm->result, full,
+									  nlen, val, vlen);
+				}
+			}
 		}
 		pc++;
 		DISPATCH();
@@ -3251,7 +5082,7 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(syslog_ts) {
-		/* OP_SYSLOG_TS: parse syslog timestamp — delegates to SIMD */
+		/* OP_SYSLOG_TS: parse syslog timestamp; delegates to SIMD */
 		const ln_instr_t *inst = INST();
 		ln_span_t span;
 		const char *name;
@@ -3302,6 +5133,7 @@ ln_vm_continue(ln_vm_t *vm)
 		/* Parse 6 pipe-delimited header fields */
 		for (hdr_idx = 0; hdr_idx < 6; hdr_idx++) {
 			const char *field_start = p;
+			const char *field_val;
 			size_t field_len;
 
 			while (p < input_end) {
@@ -3314,8 +5146,14 @@ ln_vm_continue(ln_vm_t *vm)
 			}
 
 			field_len = (size_t)(p - field_start);
+			if (cef_unescape(vm, field_start, field_len, 0,
+							 &field_val, &field_len) != 0) {
+				if (name[0]) vm_pop_field_ctx(vm);
+				WRITEBACK();
+				BACKTRACK();
+			}
 			vm_add_string_field(vm, cef_hdr_names[hdr_idx],
-								field_start, field_len);
+								field_val, field_len);
 
 			if (hdr_idx < 5) {
 				if (UNLIKELY(p >= input_end || *p != '|')) {
@@ -3331,9 +5169,13 @@ ln_vm_continue(ln_vm_t *vm)
 
 		/* Parse extensions: key=value pairs */
 		if (p < input_end) {
+			/* Extensions nest under the field, so compose "<field>.Extensions"
+			 * (the context stack tracks only the top level). */
 			const char *ext_ctx = "Extensions";
 			int n_ext = 0;
 
+			/* Push the plain segment: the context stack composes the
+			 * full path itself. */
 			vm_push_field_ctx(vm, ext_ctx, false);
 
 			while (p < input_end) {
@@ -3342,58 +5184,44 @@ ln_vm_continue(ln_vm_t *vm)
 				size_t key_len;
 				const char *val_start;
 				size_t val_len;
-				const char *next_eq;
-				const char *scan;
+				const char *key_eq;
+				const char *val_span;
 				char *arena_key;
 
 				while (p < input_end && *p == ' ') p++;
 				if (p >= input_end) break;
 
 				key_start = p;
-				eq_off = ln_simd_find_char(p, (size_t)(input_end - p), '=');
-				if (eq_off >= (size_t)(input_end - p)) break;
+				key_eq = cef_find_unescaped(p, p, input_end, '=');
+				if (key_eq == NULL) break;
+				eq_off = (size_t)(key_eq - p);
 
 				key_len = eq_off;
 				if (key_len == 0) break;
+				if (!cef_name_ok(key_start, key_len)) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					WRITEBACK();
+					BACKTRACK();
+				}
 
 				p += key_len + 1;
 
 				val_start = p;
-				next_eq = NULL;
-				scan = p;
-				while (scan < input_end) {
-					size_t off = ln_simd_find_char(scan,
-								(size_t)(input_end - scan), '=');
-					if (off >= (size_t)(input_end - scan)) break;
-					next_eq = scan + off;
-					break;
-				}
+				cef_take_extension_value(val_start, input_end, &val_len, &p);
 
-				if (next_eq && next_eq > val_start) {
-					const char *kstart = next_eq;
-					while (kstart > val_start && *(kstart - 1) != ' ')
-						kstart--;
-					if (kstart > val_start) {
-						val_len = (size_t)(kstart - val_start);
-						while (val_len > 0 &&
-							   val_start[val_len - 1] == ' ')
-							val_len--;
-						p = kstart;
-					} else {
-						val_len = (size_t)(input_end - val_start);
-						p = input_end;
-					}
-				} else {
-					val_len = (size_t)(input_end - val_start);
-					p = input_end;
-				}
-
-				if (key_len > 63) key_len = 63;
 				arena_key = ln_arena_strndup(vm->arena,
 							key_start, key_len);
 				if (!arena_key) break;
-				vm_add_string_field(vm, arena_key,
-									val_start, val_len);
+				if (cef_unescape(vm, val_start, val_len, 1,
+								 &val_span, &val_len) != 0) {
+					vm_pop_field_ctx(vm);
+					if (name[0]) vm_pop_field_ctx(vm);
+					WRITEBACK();
+					BACKTRACK();
+				}
+				vm_set_string_field(vm, arena_key,
+									val_span, val_len);
 				n_ext++;
 			}
 
@@ -3411,123 +5239,17 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(v2_iptables) {
-		/*
-		 * Parse iptables-format name=value pairs.
-		 * Minimum 2 pairs required.  Flags (names without '=')
-		 * stored as empty string values.
-		 */
 		const ln_instr_t *inst = INST();
 		const char *ctx_name;
-		const char *p;
-		int n_pairs;
 
 		vm->ip = ip;
 		vm->pc = pc;
-
-		ctx_name = inst->data.str;
-
-		if (ctx_name[0]) {
-			vm_push_field_ctx(vm, ctx_name, false);
-		}
-
-		p = ip;
-		n_pairs = 0;
-
-		while (p < input_end) {
-			const char *name_start;
-			size_t eq_off;
-			size_t sp_off;
-			size_t name_len;
-			const char *val_start;
-			size_t val_len;
-			char *arena_name;
-
-			/* Skip leading spaces */
-			while (p < input_end && *p == ' ') p++;
-			if (p >= input_end) break;
-
-			name_start = p;
-
-			/* Scan for '=' */
-			eq_off = ln_simd_find_char(p, (size_t)(input_end - p), '=');
-
-			/* Check if space comes before '=' (flag) */
-			sp_off = ln_simd_find_char(p, (size_t)(input_end - p), ' ');
-			if (sp_off < eq_off) {
-				/* Flag: name without value */
-				name_len = sp_off;
-				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
-				arena_name = ln_arena_strndup(vm->arena,
-							name_start, name_len);
-				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
-				n_pairs++;
-				p += sp_off;
-				continue;
-			}
-
-			if (eq_off >= (size_t)(input_end - p)) {
-				/* No '=' — rest is a flag */
-				name_len = (size_t)(input_end - p);
-				if (name_len == 0) break;
-				if (name_len > 63) name_len = 63;
-				arena_name = ln_arena_strndup(vm->arena,
-							name_start, name_len);
-				if (!arena_name) break;
-				vm_add_string_field(vm, arena_name, "", 0);
-				n_pairs++;
-				p = input_end;
-				break;
-			}
-
-			name_len = eq_off;
-			if (name_len == 0) break;
-
-			/* Validate name: alphanumeric + underscore */
-			{
-				int valid = 1;
-				size_t k;
-				for (k = 0; k < name_len; k++) {
-					unsigned char c = (unsigned char)p[k];
-					if (!(isalnum(c) || c == '_')) {
-						valid = 0;
-						break;
-					}
-				}
-				if (!valid) break;
-			}
-
-			p += name_len + 1; /* skip name + '=' */
-
-			/* Value: everything until space or end */
-			val_start = p;
-			{
-				size_t off;
-				off = ln_simd_find_char(p, (size_t)(input_end - p), ' ');
-				val_len = (off < (size_t)(input_end - p))
-						  ? off : (size_t)(input_end - p);
-			}
-			p += val_len;
-
-			if (name_len > 63) name_len = 63;
-			arena_name = ln_arena_strndup(vm->arena,
-						name_start, name_len);
-			if (!arena_name) break;
-			vm_add_string_field(vm, arena_name, val_start, val_len);
-			n_pairs++;
-		}
-
-		if (ctx_name[0]) {
-			vm_pop_field_ctx(vm);
-		}
-
-		if (UNLIKELY(n_pairs < 2)) {
+		ctx_name = turbo_iname(vm, inst, inst->data.str);
+		if (UNLIKELY(vm_v2_iptables(vm, ctx_name) != 1)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
-
-		ip = p;
+		ip = vm->ip;
 		pc++;
 		DISPATCH();
 	}
@@ -3544,7 +5266,7 @@ ln_vm_continue(ln_vm_t *vm)
 		size_t json_len;
 
 
-		fname = inst->data.str;
+		fname = turbo_iname(vm, inst, inst->data.str);
 		rem = REMAINING();
 
 		/* Must start with "@cee:" (5 chars) + at least '{' */
@@ -3588,91 +5310,19 @@ ln_vm_continue(ln_vm_t *vm)
 	}
 
 	CASE(checkpoint_lea) {
-		/*
-		 * Parse Checkpoint LEA format: name: value; name: value; ...
-		 * Minimum 1 field required.
-		 */
 		const ln_instr_t *inst = INST();
 		const char *ctx_name;
 		char term;
-		const char *p;
-		int n_pairs;
 
 		vm->ip = ip;
 		vm->pc = pc;
-
-		ctx_name = inst->data.char_to.name;
+		ctx_name = turbo_iname(vm, inst, inst->data.char_to.name);
 		term = (char)inst->data.char_to.delim;
-
-		if (ctx_name[0]) {
-			vm_push_field_ctx(vm, ctx_name, false);
-		}
-
-		p = ip;
-		n_pairs = 0;
-
-		while (p < input_end) {
-			const char *name_start;
-			size_t colon_off;
-			size_t name_len;
-			const char *val_start;
-			size_t val_len;
-			size_t semi_off;
-			char *arena_name;
-
-			/* Skip leading spaces */
-			while (p < input_end && *p == ' ') p++;
-			if (p >= input_end) break;
-
-			/* Check for early terminator */
-			if (term && *p == term) break;
-
-			name_start = p;
-
-			/* Scan for ':' */
-			colon_off = ln_simd_find_char(p,
-						(size_t)(input_end - p), ':');
-			if (colon_off >= (size_t)(input_end - p)) break;
-
-			name_len = colon_off;
-			if (name_len == 0) break;
-
-			p += name_len + 1; /* skip name + ':' */
-
-			/* Skip spaces after ':' */
-			while (p < input_end && *p == ' ') p++;
-
-			/* Scan for ';' */
-			val_start = p;
-			semi_off = ln_simd_find_char(p,
-						(size_t)(input_end - p), ';');
-			if (semi_off >= (size_t)(input_end - p)) {
-				val_len = (size_t)(input_end - p);
-				p = input_end;
-			} else {
-				val_len = semi_off;
-				p += val_len + 1; /* skip value + ';' */
-			}
-
-			if (name_len > 63) name_len = 63;
-			arena_name = ln_arena_strndup(vm->arena,
-						name_start, name_len);
-			if (!arena_name) break;
-			vm_add_string_field(vm, arena_name,
-								val_start, val_len);
-			n_pairs++;
-		}
-
-		if (ctx_name[0]) {
-			vm_pop_field_ctx(vm);
-		}
-
-		if (UNLIKELY(n_pairs < 1)) {
+		if (UNLIKELY(vm_checkpoint_lea(vm, ctx_name, term) != 1)) {
 			WRITEBACK();
 			BACKTRACK();
 		}
-
-		ip = p;
+		ip = vm->ip;
 		pc++;
 		DISPATCH();
 	}
@@ -3727,7 +5377,7 @@ backtrack:
 	#undef VALIDATE_TARGET
 }
 
-#else /* !LN_VM_COMPUTED_GOTO — switch-based fallback */
+#else /* !LN_VM_COMPUTED_GOTO: switch-based fallback */
 
 int
 ln_vm_continue(ln_vm_t *vm)

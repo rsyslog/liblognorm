@@ -44,7 +44,7 @@
 
 /*
  * OP_COUNT must cover the full opcode byte range (0x00-0xFF).
- * Sparse opcodes are fine — unused slots point to op_invalid.
+ * Sparse opcodes are fine: unused slots point to op_invalid.
  * 256 × 8 bytes = 2KB table, fits in L1d cache.
  */
 #define OP_COUNT 256
@@ -130,6 +130,10 @@
 		dispatch_table[OP_V2_IPTABLES]     = &&op_v2_iptables; \
 		dispatch_table[OP_CEE_SYSLOG]      = &&op_cee_syslog; \
 		dispatch_table[OP_CHECKPOINT_LEA]   = &&op_checkpoint_lea; \
+		dispatch_table[OP_FIELD_TIME]      = &&op_field_time; \
+		dispatch_table[OP_FIELD_KERNEL_TS] = &&op_field_kernel_ts; \
+		dispatch_table[OP_CISCO_IFACE]     = &&op_cisco_iface; \
+		dispatch_table[OP_REPEAT]          = &&op_repeat; \
 		/* Debug (0xF0-0xFF) */ \
 		dispatch_table[OP_NOP]             = &&op_nop; \
 		dispatch_table[OP_DEBUG]           = &&op_debug; \

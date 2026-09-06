@@ -1,5 +1,5 @@
 /*
- * turbo_json_impl.c -- Ultra-fast JSON serialization with nested object support
+ * turbo_json_impl.c: Ultra-fast JSON serialization with nested object support
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -32,7 +32,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* JSON escaping needs only SSE2/NEON, not SSE4.2 — separate from LN_SIMD_* in simd.h */
+/* JSON escaping needs only SSE2/NEON, not SSE4.2; separate from LN_SIMD_* in simd.h */
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 #define HAS_SIMD 1
@@ -182,8 +182,8 @@ find_escape_needed(const char *s, size_t len)
 	__m128i v_bslash = _mm_set1_epi8('\\');
 
 	while (i + 16 <= len) {
-		/* _mm_loadu_si128 is the unaligned load intrinsic
-		 *  — it explicitly does NOT require 16-byte alignment.
+		/* _mm_loadu_si128 is the unaligned load intrinsic:
+		 * it explicitly does NOT require 16-byte alignment.
 		 * The cast to const __m128i * is just how Intel's intrinsic API is designed;
 		 * clang's -Wcast-align doesn't understand this semantic.
 		 * So we cast through const void * to break the alignment chain */
@@ -286,14 +286,16 @@ write_escaped_string(const char *s, size_t len, char *out, size_t outlen)
  * Multi-Depth Nested Object Serialization
  *============================================================================*/
 
-/**
- * Maximum nesting depth for ECS-style dotted field names.
- * ECS rarely exceeds 3 levels (e.g., user.group.name).
- * 8 levels provides generous headroom with minimal stack cost.
+/*
+ * Maximum nesting depth for ECS-style dotted field names (e.g.
+ * user.group.name). LN_JSON_MAX_DEPTH is defined in turbo_result_fast.h so the
+ * serializer here matches the VM flattener's ceiling; if they disagreed, the
+ * flattener could emit dotted names deeper than the serializer can render,
+ * silently collapsing or mis-keying the extra levels. The level_has_entry
+ * comma-tracking bitmask below is a uint64_t, so the ceiling must fit in it.
  */
-#define LN_JSON_MAX_DEPTH 8
-_Static_assert(LN_JSON_MAX_DEPTH <= 8,
-	"level_has_entry bitmask requires LN_JSON_MAX_DEPTH <= 8");
+_Static_assert(LN_JSON_MAX_DEPTH <= 64,
+	"level_has_entry bitmask (uint64_t) requires LN_JSON_MAX_DEPTH <= 64");
 
 /**
  * Path component for tracking open JSON objects.
@@ -387,12 +389,24 @@ write_field_value(const ln_fast_field_t *f, char *out, size_t outlen)
 
 	switch (f->type) {
 	case LN_FTYPE_STRING:
+		/* Value is already well-formed JSON: emit it verbatim so arrays,
+		 * booleans, nulls and numbers keep their JSON type. */
+		if (f->flags & LN_FFIELD_RAW_JSON) {
+			if ((size_t)(end - p) < (size_t)f->v.str.len) return -1;
+			memcpy(p, f->v.str.ptr, f->v.str.len);
+			return (int)f->v.str.len;
+		}
 		n = write_escaped_string(f->v.str.ptr, f->v.str.len, p, end - p);
 		if (n < 0) return -1;
 		return n;
 
 	case LN_FTYPE_STRING_INLINE: {
 		size_t len = strlen(f->v.inl);
+		if (f->flags & LN_FFIELD_RAW_JSON) {
+			if ((size_t)(end - p) < len) return -1;
+			memcpy(p, f->v.inl, len);
+			return (int)len;
+		}
 		n = write_escaped_string(f->v.inl, len, p, end - p);
 		if (n < 0) return -1;
 		return n;
@@ -465,7 +479,7 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
 
 	/* Tags array */
 	if (r->n_tags > 0) {
-		est += 20;  /* "event":{"tags":[ or "tags":[ + closing */
+		est += 20;  /* "tags":[ + closing */
 		for (uint8_t i = 0; i < r->n_tags; i++) {
 			if (r->tags[i].tag)
 				/* Tags also go through write_escaped_string:
@@ -496,7 +510,8 @@ ln_fast_json_estimate(const ln_fast_result_t *r)
  *   - user.name:    close "group", emit "name"
  *   → {"source":{"ip":"...","port":443},"user":{"group":{"name":"..."},"name":"..."}}
  *
- * Tags are emitted under "event.tags" as a JSON array, nested under "event".
+ * Tags are emitted at the root as "tags", the ECS spelling. The recursive
+ * walker uses a flat "event.tags" key instead; see doc/turbo.rst.
  */
 int
 ln_fast_to_json(const ln_fast_result_t *r,
@@ -516,8 +531,8 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	 * whether a comma is needed at that parent level. We use a bitmask:
 	 * bit i is set if level i has already emitted at least one entry.
 	 */
-	uint8_t level_has_entry = 0;  /* bitmask, bit 0 = root level */
-	uint8_t si;
+	uint64_t level_has_entry = 0;  /* bitmask, bit 0 = root level */
+	int si;
 
 	if (buflen < 3) return -1;
 
@@ -531,12 +546,32 @@ ln_fast_to_json(const ln_fast_result_t *r,
 
 	*p++ = '{';
 
-#define NEED_COMMA_AT(lvl)  (level_has_entry & (1u << (lvl)))
-#define SET_HAS_ENTRY(lvl)  (level_has_entry |= (1u << (lvl)))
-#define CLEAR_ENTRY_FROM(lvl) (level_has_entry &= (uint8_t)((1u << (lvl)) - 1))
+#define NEED_COMMA_AT(lvl)  (level_has_entry & (1ull << (lvl)))
+#define SET_HAS_ENTRY(lvl)  (level_has_entry |= (1ull << (lvl)))
+#define CLEAR_ENTRY_FROM(lvl) (level_has_entry &= (uint64_t)((1ull << (lvl)) - 1))
 
-	for (si = 0; si < n_valid; si++) {
-		const ln_fast_field_t *f = &r->fields[sorted[si]];
+	for (si = 0; si < n_valid; ) {
+		int group_end = si;
+		int k;
+
+		/* Equal names stay adjacent (stable sort). libfastjson keeps
+		 * every binding and serializes newest first, so a RFC parser
+		 * that last-wins on duplicate keys sees the first-added
+		 * value, while get_ex sees the last. Emit the group that way. */
+		while (group_end + 1 < n_valid) {
+			const ln_fast_field_t *a = &r->fields[sorted[si]];
+			const ln_fast_field_t *b = &r->fields[sorted[group_end + 1]];
+
+			if (a->name_len != b->name_len || a->name == NULL
+			    || b->name == NULL
+			    || memcmp(a->name, b->name, a->name_len) != 0)
+				break;
+			group_end++;
+		}
+
+		k = group_end;
+		for (;;) {
+		const ln_fast_field_t *f = &r->fields[sorted[k]];
 		const ln_json_path_comp_t *leaf;
 		ln_json_path_comp_t comps[LN_JSON_MAX_DEPTH];
 		int n_comps, leaf_idx, new_depth, common, min_depth, d;
@@ -574,12 +609,16 @@ ln_fast_to_json(const ln_fast_result_t *r,
 			}
 			SET_HAS_ENTRY(d);
 
-			/* Write object key: "component":{ */
-			if ((size_t)(end - p) < (size_t)comps[d].len + 4) return -1;
-			*p++ = '"';
-			memcpy(p, comps[d].start, comps[d].len);
-			p += comps[d].len;
-			*p++ = '"';
+			/* Write object key: "component":{
+			 * Keys go through the same escaper as values. A
+			 * name-value-list pair can put a quote in the
+			 * extracted name; memcpy of the raw bytes then
+			 * terminates the JSON key early. */
+			n = write_escaped_string(comps[d].start, comps[d].len,
+						 p, (size_t)(end - p));
+			if (n < 0) return -1;
+			p += n;
+			if ((size_t)(end - p) < 2) return -1;
 			*p++ = ':';
 			*p++ = '{';
 
@@ -594,19 +633,25 @@ ln_fast_to_json(const ln_fast_result_t *r,
 		}
 		SET_HAS_ENTRY(open_depth);
 
-		/* Write leaf key */
+		/* Write leaf key (escaped: extracted names are not identifiers) */
 		leaf = &comps[leaf_idx];
-		if ((size_t)(end - p) < (size_t)leaf->len + 3) return -1;
-		*p++ = '"';
-		memcpy(p, leaf->start, leaf->len);
-		p += leaf->len;
-		*p++ = '"';
+		n = write_escaped_string(leaf->start, leaf->len,
+					 p, (size_t)(end - p));
+		if (n < 0) return -1;
+		p += n;
+		if (p >= end) return -1;
 		*p++ = ':';
 
 		/* Write value */
 		n = write_field_value(f, p, end - p);
 		if (n < 0) return -1;
 		p += n;
+
+		if (k == si)
+			break;
+		k--;
+		}
+		si = group_end + 1;
 	}
 
 	/* Close all remaining open objects */
@@ -619,7 +664,19 @@ ln_fast_to_json(const ln_fast_result_t *r,
 	}
 	open_depth = 0;
 
-	/* Tags array — emit as "tags":[...] at root level (ECS standard) */
+	/* Tags array, at the root as "tags".
+	 *
+	 * NOT "event.tags", which is what the recursive walker adds in
+	 * ln_normalize().  Two reasons.  ECS puts tags at the top level and has
+	 * no event.tags field, and this serializer exists to emit ECS-shaped
+	 * documents.  And an "event.tags" key here would sit *beside* the
+	 * "event" object that dotted field names build, so a rulebase carrying
+	 * event.kind would produce {"event":{"kind":...},"event.tags":[...]},
+	 * with the same logical path both inside and outside the object.
+	 *
+	 * The two engines therefore use different keys for tags, as they
+	 * already do for every dotted field name: turbo nests, the walker keeps
+	 * the flat key.  See doc/turbo.rst "Known differences". */
 	if (r->n_tags > 0) {
 		int tag_first = 1;
 		uint8_t ti;

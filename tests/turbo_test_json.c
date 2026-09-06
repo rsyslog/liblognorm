@@ -14,7 +14,7 @@
  *   mixed flat+nested, sibling nesting (source.ip + source.port)
  * - Tag serialization: single, multiple, empty
  * - JSON escaping: quotes, backslash, newline, tab, carriage return,
- *   backspace, formfeed, control chars (\u00XX)
+ *   backspace, formfeed, control chars (\u00XX), quotes inside keys
  * - Buffer overflow: small buffer rejection
  * - Estimate function: ln_fast_json_estimate accuracy
  * - Allocating version: ln_fast_to_json_alloc
@@ -689,6 +689,76 @@ static int test_json_escape_backspace_formfeed(void)
     return 1;
 }
 
+static int test_json_duplicate_name_newest_first(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    char buf[256];
+    size_t len;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* Walker/libfastjson keeps every binding and serializes newest first:
+     * {"f":"1","f":"15"} for add 15 then 1. get_ex is last-wins. */
+    ln_fast_add_string_static(&result, "f", 1, "15", 2);
+    ln_fast_add_string_static(&result, "f", 1, "1", 1);
+
+    int r = ln_fast_to_json(&result, buf, sizeof(buf), &len);
+    TEST_ASSERT_EQ(r, 0, "should succeed");
+    TEST_ASSERT(strcmp(buf, "{\"f\":\"1\",\"f\":\"15\"}") == 0,
+                "duplicate keys, newest binding first");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_json_escape_key_quotes(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    char buf[256];
+    size_t len;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* name-value-list can extract a name that contains a quote */
+    ln_fast_add_string_static(&result, "alice \"/lab", 11, "1", 1);
+
+    int r = ln_fast_to_json(&result, buf, sizeof(buf), &len);
+    TEST_ASSERT_EQ(r, 0, "should succeed");
+    TEST_ASSERT(json_is_object(buf, len), "should be a JSON object");
+    TEST_ASSERT(json_contains(buf, "\"alice \\\"/lab\""),
+                "should escape quote inside the key");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
+static int test_json_escape_nested_key_quotes(void)
+{
+    ln_arena_t arena;
+    ln_fast_result_t result;
+    char buf[256];
+    size_t len;
+
+    ln_arena_init(&arena);
+    ln_fast_result_init(&result, &arena);
+
+    /* Dotted name: the quote sits in a nested object key */
+    ln_fast_add_string_static(&result, "src.alice \"/lab", 15, "1", 1);
+
+    int r = ln_fast_to_json(&result, buf, sizeof(buf), &len);
+    TEST_ASSERT_EQ(r, 0, "should succeed");
+    TEST_ASSERT(json_is_object(buf, len), "should be a JSON object");
+    TEST_ASSERT(json_contains(buf, "\"alice \\\"/lab\""),
+                "should escape quote inside the nested key");
+
+    ln_arena_destroy(&arena);
+    return 1;
+}
+
 static int test_json_clean_ascii(void)
 {
     ln_arena_t arena;
@@ -1087,6 +1157,9 @@ int main(void)
     RUN_TEST(test_json_escape_carriage_return);
     RUN_TEST(test_json_escape_control_chars);
     RUN_TEST(test_json_escape_backspace_formfeed);
+    RUN_TEST(test_json_duplicate_name_newest_first);
+    RUN_TEST(test_json_escape_key_quotes);
+    RUN_TEST(test_json_escape_nested_key_quotes);
     RUN_TEST(test_json_clean_ascii);
     printf("\n");
 

@@ -1,5 +1,5 @@
 /*
- * turbo_result_fast.c -- Optimized result structure for maximum performance
+ * turbo_result_fast.c: Optimized result structure for maximum performance
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *

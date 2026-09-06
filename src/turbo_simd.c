@@ -1,5 +1,5 @@
 /*
- * turbo_simd.c -- SIMD-accelerated parsing primitives
+ * turbo_simd.c: SIMD-accelerated parsing primitives
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -243,6 +243,32 @@ ln_simd_skip_space(const char *buf, size_t len)
 	}
 
 	return i;
+}
+
+size_t
+ln_simd_find_space(const char *buf, size_t len)
+{
+	__m128i ranges;
+	size_t i;
+
+	if (!buf || len == 0) return 0;
+
+	ranges = _mm_setr_epi8(0x09, 0x0D, 0x20, 0x20, 0,0,0,0,0,0,0,0,0,0,0,0);
+	i = 0;
+	while (i + 16 <= len) {
+		__m128i chunk = _mm_loadu_si128((const __m128i *)(const void *)(buf + i));
+		int index = _mm_cmpestri(ranges, 4, chunk, 16,
+			_SIDD_UBYTE_OPS | _SIDD_CMP_RANGES);
+		if (index < 16) return i + index;
+		i += 16;
+	}
+	while (i < len) {
+		unsigned char c = (unsigned char)buf[i];
+		if (c == ' ' || (c >= 0x09 && c <= 0x0D))
+			return i;
+		i++;
+	}
+	return len;
 }
 
 #elif defined(LN_SIMD_NEON)
@@ -597,6 +623,43 @@ ln_simd_skip_space(const char *buf, size_t len)
 	return i;
 }
 
+size_t
+ln_simd_find_space(const char *buf, size_t len)
+{
+	uint8x16_t space;
+	uint8x16_t tab_range_lo;
+	uint8x16_t tab_range_hi;
+	const uint8x16_t bit_weights = {1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128};
+	size_t i = 0;
+
+	if (!buf || len == 0) return 0;
+	space = vdupq_n_u8(' ');
+	tab_range_lo = vdupq_n_u8(0x09);
+	tab_range_hi = vdupq_n_u8(0x0D);
+
+	while (i + 16 <= len) {
+		uint8x16_t chunk = vld1q_u8((const uint8_t *)(buf + i));
+		uint8x16_t is_space = vceqq_u8(chunk, space);
+		uint8x16_t in_tab_range = vandq_u8(vcgeq_u8(chunk, tab_range_lo),
+						   vcleq_u8(chunk, tab_range_hi));
+		uint8x16_t is_ws = vorrq_u8(is_space, in_tab_range);
+		uint8x16_t matched_bits = vandq_u8(is_ws, bit_weights);
+		uint16_t mask = (uint16_t)vaddv_u8(vget_low_u8(matched_bits)) |
+				((uint16_t)vaddv_u8(vget_high_u8(matched_bits)) << 8);
+
+		if (mask != 0)
+			return i + __builtin_ctz(mask);
+		i += 16;
+	}
+	while (i < len) {
+		unsigned char c = (unsigned char)buf[i];
+		if (c == ' ' || (c >= 0x09 && c <= 0x0D))
+			return i;
+		i++;
+	}
+	return len;
+}
+
 #else
 
 /*============================================================================
@@ -623,7 +686,7 @@ ln_simd_skip_space(const char *buf, size_t len)
 #elif defined(_MSC_VER)
 #define THREAD_LOCAL __declspec(thread)
 #else
-#define THREAD_LOCAL /* nothing — falls back to rebuild every time */
+#define THREAD_LOCAL /* nothing: falls back to rebuild every time */
 #endif
 
 static THREAD_LOCAL const char *s_cached_chars = NULL;
@@ -639,7 +702,7 @@ static inline const uint8_t *
 get_char_class(const char *chars)
 {
 	if (chars == s_cached_chars && s_cached_chars != NULL) {
-		return s_cached_table;  /* Cache hit — same pointer, same data */
+		return s_cached_table;  /* Cache hit: same pointer, same data */
 	}
 	/* Cache miss: build and cache */
 	build_char_class(chars, s_cached_table);
@@ -705,6 +768,20 @@ ln_simd_skip_space(const char *buf, size_t len)
 	return i;
 }
 
+size_t
+ln_simd_find_space(const char *buf, size_t len)
+{
+	size_t i;
+
+	if (!buf || len == 0) return 0;
+	for (i = 0; i < len; i++) {
+		unsigned char c = (unsigned char)buf[i];
+		if (c == ' ' || (c >= 0x09 && c <= 0x0D))
+			return i;
+	}
+	return len;
+}
+
 #endif /* Architecture selection */
 
 /*============================================================================
@@ -728,24 +805,19 @@ ln_simd_word(const char *buf, size_t len, ln_span_t *span)
 
 	 if (!buf || !span) return LN_SIMD_EINVAL;
 
-	 /* STRICT COMPLIANCE: Do NOT skip leading whitespace.
-	  * The VM handles skipping via OP_SKIP_SPACE.
-	  * If we start on a space, it's an empty word (or error).
+	 /* Do NOT skip leading whitespace: the VM skips it with OP_SKIP_SPACE.
+	  *
+	  * The standard parser ends the word at a space and at nothing else, so a
+	  * tab or a newline belongs to the word. Ending at those too would cut the
+	  * word short, and the rule would then fail on the text left behind.
 	  */
-	 if (len > 0 && ln_is_space(buf[0])) {
-		  /* Legacy behavior: if starting on space, return error or empty.
-		   * parser.c ln_v2_parseWord returns -1 if i==0.
-		   */
+	 word_len = ln_simd_find_char(buf, len, ' ');
+
+	 /* The standard parser refuses an empty word, which is what it reports
+	  * when the field starts on a space or at the end of the input. A rule
+	  * alternative behind such a field is reached only through that refusal. */
+	 if (word_len == 0)
 		  return LN_SIMD_ENOTFOUND;
-	 }
-
-	 /* Find end of word (next whitespace) */
-	 word_len = ln_simd_find_char_set(buf, len, " \t\n\r");
-
-	 if (word_len == 0 && len > 0 && !ln_is_space(buf[0])) {
-		  /* No separators found, word is entire buffer */
-		  word_len = len;
-	 }
 
 	 span->start = buf;
 	 span->len = word_len;
@@ -777,6 +849,28 @@ ln_simd_char_to(const char *buf, size_t len, char delim, ln_span_t *span)
 		span->consumed = len;
 		return LN_SIMD_ENOTFOUND;
 	}
+}
+
+int
+ln_simd_char_to_set(const char *buf, size_t len, const char *chars, ln_span_t *span)
+{
+	size_t pos;
+
+	if (!buf || !span || !chars) return LN_SIMD_EINVAL;
+
+	pos = ln_simd_find_char_set(buf, len, chars);
+
+	span->start = buf;
+	span->len = pos;
+
+	if (pos < len) {
+		/* Stop AT the terminator, as ln_simd_char_to() does, so the next
+		 * instruction can match and consume it. */
+		span->consumed = pos;
+		return LN_SIMD_OK;
+	}
+	span->consumed = len;
+	return LN_SIMD_ENOTFOUND;
 }
 
 int
@@ -1193,11 +1287,216 @@ ln_simd_ipv4_port(const char *buf, size_t len,
  * Timestamp Parsing
  *============================================================================*/
 
-/* Month name lookup */
-static const char *months[] = {
-	"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-	"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+/* Digit lanes for YYYY-MM-DD (first 10 of RFC5424 and the whole ISO date). */
+static const uint8_t iso_digit_need[16] = {
+	0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0x00,
+	0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
+static const uint8_t iso_dash_need[16] = {
+	0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+/* RFC5424 first 16: YYYY-MM-DDTHH:MM  (T or space at 10, colon at 13). */
+static const uint8_t rfc5424_digit_need[16] = {
+	0xff, 0xff, 0xff, 0xff, 0x00, 0xff, 0xff, 0x00,
+	0xff, 0xff, 0x00, 0xff, 0xff, 0x00, 0xff, 0xff
+};
+
+/* Walker ISODate month 01-12, day 01-31. Digits already proven. */
+static int
+iso_ymd_range(const char *buf)
+{
+	if (buf[5] == '0') {
+		if (buf[6] < '1' || buf[6] > '9') return 0;
+	} else if (buf[5] == '1') {
+		if (buf[6] < '0' || buf[6] > '2') return 0;
+	} else {
+		return 0;
+	}
+	if (buf[8] == '0') {
+		if (buf[9] < '1' || buf[9] > '9') return 0;
+	} else if (buf[8] == '1' || buf[8] == '2') {
+		if (!ln_is_digit(buf[9])) return 0;
+	} else if (buf[8] == '3') {
+		if (buf[9] != '0' && buf[9] != '1') return 0;
+	} else {
+		return 0;
+	}
+	return 1;
+}
+
+static int
+iso_layout10_scalar(const char *buf)
+{
+	int i;
+
+	if (buf[4] != '-' || buf[7] != '-')
+		return 0;
+	for (i = 0; i < 10; i++) {
+		if (i == 4 || i == 7)
+			continue;
+		if (!ln_is_digit(buf[i]))
+			return 0;
+	}
+	return 1;
+}
+
+#if defined(LN_SIMD_NEON)
+static int
+layout16_digits_neon(const uint8_t *buf, const uint8_t need[16])
+{
+	uint8x16_t v = vld1q_u8(buf);
+	uint8x16_t ge0 = vcgeq_u8(v, vdupq_n_u8((uint8_t)'0'));
+	uint8x16_t le9 = vcleq_u8(v, vdupq_n_u8((uint8_t)'9'));
+	uint8x16_t dig = vandq_u8(ge0, le9);
+	uint8x16_t miss = vbicq_u8(vld1q_u8(need), dig);
+	uint64x2_t u = vreinterpretq_u64_u8(miss);
+
+	return (vgetq_lane_u64(u, 0) | vgetq_lane_u64(u, 1)) == 0;
+}
+
+static int
+iso_layout10_neon(const uint8_t *buf)
+{
+	uint8x16_t v = vld1q_u8(buf);
+	uint8x16_t dash = vceqq_u8(v, vdupq_n_u8((uint8_t)'-'));
+	uint8x16_t miss_h = vbicq_u8(vld1q_u8(iso_dash_need), dash);
+	uint64x2_t u = vreinterpretq_u64_u8(miss_h);
+
+	if ((vgetq_lane_u64(u, 0) | vgetq_lane_u64(u, 1)) != 0)
+		return 0;
+	return layout16_digits_neon(buf, iso_digit_need);
+}
+
+static int
+rfc5424_prefix16_neon(const uint8_t *buf)
+{
+	uint8x16_t v = vld1q_u8(buf);
+	uint8x16_t is_t = vceqq_u8(v, vdupq_n_u8((uint8_t)'T'));
+	uint8x16_t is_sp = vceqq_u8(v, vdupq_n_u8((uint8_t)' '));
+	uint8x16_t is_col = vceqq_u8(v, vdupq_n_u8((uint8_t)':'));
+	uint8x16_t dash = vceqq_u8(v, vdupq_n_u8((uint8_t)'-'));
+
+	if (vgetq_lane_u8(dash, 4) == 0 || vgetq_lane_u8(dash, 7) == 0)
+		return 0;
+	if ((vgetq_lane_u8(is_t, 10) | vgetq_lane_u8(is_sp, 10)) == 0)
+		return 0;
+	if (vgetq_lane_u8(is_col, 13) == 0)
+		return 0;
+	return layout16_digits_neon(buf, rfc5424_digit_need);
+}
+#elif defined(LN_SIMD_SSE42)
+static int
+layout16_digits_sse(const char *buf, const uint8_t need[16])
+{
+	__m128i v = _mm_loadu_si128((const __m128i *)(const void *)buf);
+	__m128i ge0 = _mm_cmpeq_epi8(_mm_max_epu8(v, _mm_set1_epi8('0')), v);
+	__m128i le9 = _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8('9')), v);
+	__m128i dig = _mm_and_si128(ge0, le9);
+	__m128i needv = _mm_loadu_si128((const __m128i *)(const void *)need);
+	__m128i miss = _mm_andnot_si128(dig, needv);
+
+	return _mm_movemask_epi8(miss) == 0;
+}
+
+static int
+iso_layout10_sse(const char *buf)
+{
+	__m128i v = _mm_loadu_si128((const __m128i *)(const void *)buf);
+	__m128i dash = _mm_cmpeq_epi8(v, _mm_set1_epi8('-'));
+	__m128i need_h = _mm_loadu_si128((const __m128i *)(const void *)iso_dash_need);
+	__m128i miss_h = _mm_andnot_si128(dash, need_h);
+
+	if (_mm_movemask_epi8(miss_h) != 0)
+		return 0;
+	return layout16_digits_sse(buf, iso_digit_need);
+}
+
+static int
+rfc5424_prefix16_sse(const char *buf)
+{
+	__m128i v = _mm_loadu_si128((const __m128i *)(const void *)buf);
+	int mask;
+	__m128i t_or_sp = _mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8('T')),
+				       _mm_cmpeq_epi8(v, _mm_set1_epi8(' ')));
+	__m128i dash = _mm_cmpeq_epi8(v, _mm_set1_epi8('-'));
+	__m128i col = _mm_cmpeq_epi8(v, _mm_set1_epi8(':'));
+
+	mask = _mm_movemask_epi8(dash);
+	if ((mask & ((1 << 4) | (1 << 7))) != ((1 << 4) | (1 << 7)))
+		return 0;
+	if ((_mm_movemask_epi8(t_or_sp) & (1 << 10)) == 0)
+		return 0;
+	if ((_mm_movemask_epi8(col) & (1 << 13)) == 0)
+		return 0;
+	return layout16_digits_sse(buf, rfc5424_digit_need);
+}
+#endif
+
+int
+ln_simd_iso_date(const char *buf, size_t len, ln_span_t *span)
+{
+	int ok;
+
+	if (!buf || !span)
+		return LN_SIMD_EINVAL;
+	if (len < 10)
+		return LN_SIMD_EFORMAT;
+
+#if defined(LN_SIMD_NEON)
+	if (len >= 16)
+		ok = iso_layout10_neon((const uint8_t *)buf);
+	else
+		ok = iso_layout10_scalar(buf);
+#elif defined(LN_SIMD_SSE42)
+	if (len >= 16)
+		ok = iso_layout10_sse(buf);
+	else
+		ok = iso_layout10_scalar(buf);
+#else
+	ok = iso_layout10_scalar(buf);
+#endif
+	if (!ok || !iso_ymd_range(buf))
+		return LN_SIMD_EFORMAT;
+
+	span->start = buf;
+	span->len = 10;
+	span->consumed = 10;
+	return LN_SIMD_OK;
+}
+
+/* First letter buckets the 12 English month abbreviations. */
+static int
+rfc3164_month(const char *buf)
+{
+	switch ((unsigned char)buf[0]) {
+	case 'J':
+		if (buf[1] == 'a' && buf[2] == 'n') return 0;
+		if (buf[1] == 'u' && buf[2] == 'n') return 5;
+		if (buf[1] == 'u' && buf[2] == 'l') return 6;
+		return -1;
+	case 'F':
+		return (buf[1] == 'e' && buf[2] == 'b') ? 1 : -1;
+	case 'M':
+		if (buf[1] == 'a' && buf[2] == 'r') return 2;
+		if (buf[1] == 'a' && buf[2] == 'y') return 4;
+		return -1;
+	case 'A':
+		if (buf[1] == 'p' && buf[2] == 'r') return 3;
+		if (buf[1] == 'u' && buf[2] == 'g') return 7;
+		return -1;
+	case 'S':
+		return (buf[1] == 'e' && buf[2] == 'p') ? 8 : -1;
+	case 'O':
+		return (buf[1] == 'c' && buf[2] == 't') ? 9 : -1;
+	case 'N':
+		return (buf[1] == 'o' && buf[2] == 'v') ? 10 : -1;
+	case 'D':
+		return (buf[1] == 'e' && buf[2] == 'c') ? 11 : -1;
+	default:
+		return -1;
+	}
+}
 
 /**
  * @brief Parse RFC 3164 timestamp: "Jan 15 10:30:45"
@@ -1205,22 +1504,12 @@ static const char *months[] = {
 static int
 parse_rfc3164(const char *buf, size_t len, ln_span_t *span)
 {
-	int month = -1;
-	int m;
 	size_t i;
 
 	/* Minimum length: "Jan  1 0:0:0" = 12 */
 	if (len < 12) return LN_SIMD_EFORMAT;
 
-	/* Check month */
-	for (m = 0; m < 12; m++) {
-		if (memcmp(buf, months[m], 3) == 0) {
-			month = m;
-			break;
-		}
-	}
-
-	if (month < 0) return LN_SIMD_EFORMAT;
+	if (rfc3164_month(buf) < 0) return LN_SIMD_EFORMAT;
 
 	/* Skip month and space(s) */
 	i = 3;
@@ -1233,6 +1522,21 @@ parse_rfc3164(const char *buf, size_t len, ln_span_t *span)
 	/* Space before time */
 	if (i >= len || buf[i] != ' ') return LN_SIMD_EFORMAT;
 	i++;
+
+	/* An optional year sits between the day and the time on Cisco-style
+	 * stamps ("Jun 26 2019 09:22:07").  The standard parser reads the field,
+	 * treats 1971..2099 as a year and then re-reads the hour behind it; do
+	 * the same so both engines accept the same inputs. */
+	{
+		size_t j = i;
+		unsigned v = 0;
+		while (j < len && j - i < 4 && ln_is_digit(buf[j])) {
+			v = v * 10 + (unsigned)(buf[j] - '0');
+			j++;
+		}
+		if (j - i == 4 && v > 1970 && v < 2100 && j < len && buf[j] == ' ')
+			i = j + 1;
+	}
 
 	/* Parse time HH:MM:SS */
 
@@ -1267,27 +1571,46 @@ parse_rfc3164(const char *buf, size_t len, ln_span_t *span)
 /**
  * @brief Parse RFC 5424 / ISO 8601 timestamp: "2024-01-15T10:30:45.123Z"
  */
+#if !defined(LN_SIMD_NEON) && !defined(LN_SIMD_SSE42)
+static int
+rfc5424_prefix16_scalar(const char *buf)
+{
+	int j;
+
+	if (buf[4] != '-' || buf[7] != '-' ||
+	    (buf[10] != 'T' && buf[10] != ' ') ||
+	    buf[13] != ':')
+		return 0;
+	for (j = 0; j < 16; j++) {
+		if (j == 4 || j == 7 || j == 10 || j == 13)
+			continue;
+		if (!ln_is_digit(buf[j]))
+			return 0;
+	}
+	return 1;
+}
+#endif
+
 static int
 parse_rfc5424(const char *buf, size_t len, ln_span_t *span)
 {
-	int j;
 	size_t i;
+	int prefix_ok;
 
 	/* Minimum: "2024-01-15T10:30:45" = 19 */
 	if (len < 19) return LN_SIMD_EFORMAT;
 
-	/* Quick validation of format */
-	if (buf[4] != '-' || buf[7] != '-' ||
-		(buf[10] != 'T' && buf[10] != ' ') ||
-		buf[13] != ':' || buf[16] != ':') {
+#if defined(LN_SIMD_NEON)
+	prefix_ok = rfc5424_prefix16_neon((const uint8_t *)buf);
+#elif defined(LN_SIMD_SSE42)
+	prefix_ok = rfc5424_prefix16_sse(buf);
+#else
+	prefix_ok = rfc5424_prefix16_scalar(buf);
+#endif
+	if (!prefix_ok)
 		return LN_SIMD_EFORMAT;
-	}
-
-	/* Validate digits */
-	for (j = 0; j < 19; j++) {
-		if (j == 4 || j == 7 || j == 10 || j == 13 || j == 16) continue;
-		if (!ln_is_digit(buf[j])) return LN_SIMD_EFORMAT;
-	}
+	if (buf[16] != ':' || !ln_is_digit(buf[17]) || !ln_is_digit(buf[18]))
+		return LN_SIMD_EFORMAT;
 
 	i = 19;
 

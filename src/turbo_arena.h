@@ -24,8 +24,10 @@ extern "C" {
 
 /**
  * Default arena capacity (bytes).
- * Sized for typical log messages with 20-30 extracted fields.
- * 16KB fits in L1 cache on most modern CPUs.
+ * Starting size for a typical syslog line (rsyslog's own default is 8k).
+ * A line that needs a rewritten copy (CEF unescape, JSON strings) larger
+ * than this grows the arena once via ln_arena_ensure(); it does not shrink.
+ * 16KB fits in L1 on most CPUs, so the common path stays in cache.
  */
 #define LN_ARENA_DEFAULT_CAPACITY  16384
 
@@ -183,6 +185,17 @@ int ln_arena_init_sized(ln_arena_t *arena, size_t capacity);
  * @endcode
  */
 int ln_arena_init_static(ln_arena_t *arena, void *buffer, size_t capacity);
+
+/**
+ * @brief Grow an owned, empty arena so capacity is at least min_capacity.
+ *
+ * No-op when the arena is already large enough (the per-message hot path).
+ * Never shrinks. Refuses a static buffer and refuses a non-empty arena:
+ * live field pointers would dangle if the backing store moved.
+ *
+ * @return LN_ARENA_OK, LN_ARENA_EINVAL, LN_ARENA_ENOMEM, or LN_ARENA_EOVERFLOW
+ */
+int ln_arena_ensure(ln_arena_t *arena, size_t min_capacity);
 
 /**
  * @brief Destroy an arena and free its resources.

@@ -2,7 +2,12 @@ check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary
 TESTS_TURBO_SHELLS = \
 	turbo_smoke.sh \
 	field_name_value_whitespace_turbo.sh \
-	field_json_turbo.sh
+	field_json_turbo.sh \
+	field_json_turbo_depth.sh \
+	field_json_turbo_fieldcap.sh \
+	field_turbo_long_name.sh \
+	field_turbo_types.sh \
+	turbo_parity.sh
 
 # re-enable if we really need the c program check check_PROGRAMS = json_eq user_test
 json_eq_self_sources = json_eq.c
@@ -192,6 +197,7 @@ REGEXP_TESTS = \
 EXTRA_DIST = exec.sh \
 	$(TESTS_SHELLSCRIPTS) \
 	$(TESTS_TURBO_SHELLS) \
+	turbo_parity.py \
 	$(REGEXP_TESTS) \
 	err_callback_cookie.sh \
 	unparsed_data_binary.c \
@@ -206,7 +212,7 @@ endif
 if ENABLE_TURBO
 TESTS += $(TESTS_TURBO_SHELLS)
 
-check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
+check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint
 
 turbo_test_arena_SOURCES = turbo_test_arena.c
 turbo_test_arena_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
@@ -223,15 +229,70 @@ turbo_test_simd_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS) $(TURBO_CFLAGS)
 turbo_test_simd_LDADD = ../src/liblognorm.la
 turbo_test_simd_LDFLAGS = -no-install
 
+turbo_test_date_SOURCES = turbo_test_date.c
+turbo_test_date_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_date_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_date_LDFLAGS = -no-install
+
+turbo_test_dupfield_SOURCES = turbo_test_dupfield.c
+turbo_test_dupfield_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_dupfield_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_dupfield_LDFLAGS = -no-install
+
+turbo_test_cef_SOURCES = turbo_test_cef.c
+turbo_test_cef_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_cef_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_cef_LDFLAGS = -no-install
+
+turbo_test_checkpoint_SOURCES = turbo_test_checkpoint.c
+turbo_test_checkpoint_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_checkpoint_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_checkpoint_LDFLAGS = -no-install
+
+turbo_test_annot_SOURCES = turbo_test_annot.c
+turbo_test_annot_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_annot_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_annot_LDFLAGS = -no-install
+
+turbo_test_maxval_SOURCES = turbo_test_maxval.c
+turbo_test_maxval_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_maxval_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_maxval_LDFLAGS = -no-install
+
+turbo_test_time_SOURCES = turbo_test_time.c
+turbo_test_time_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_time_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_time_LDFLAGS = -no-install
+
+turbo_test_charset_SOURCES = turbo_test_charset.c
+turbo_test_charset_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_charset_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_charset_LDFLAGS = -no-install
+
+turbo_test_word_SOURCES = turbo_test_word.c
+turbo_test_word_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_word_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_word_LDFLAGS = -no-install
+
+turbo_test_leadws_SOURCES = turbo_test_leadws.c
+turbo_test_leadws_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+turbo_test_leadws_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS) -lm
+turbo_test_leadws_LDFLAGS = -no-install
+
 turbo_test_vm_SOURCES = turbo_test_vm.c
 turbo_test_vm_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_vm_LDADD = ../src/liblognorm.la
 turbo_test_vm_LDFLAGS = -no-install
+
+turbo_test_compile_SOURCES = turbo_test_compile.c
+turbo_test_compile_CPPFLAGS = $(JSON_C_CFLAGS) -I$(top_srcdir)/src $(WARN_CFLAGS)
+turbo_test_compile_LDADD = ../src/liblognorm.la $(JSON_C_LIBS)
+turbo_test_compile_LDFLAGS = -no-install
 
 turbo_test_json_SOURCES = turbo_test_json.c
 turbo_test_json_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_json_LDADD = ../src/liblognorm.la -lm
 turbo_test_json_LDFLAGS = -no-install
 
-TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json
+TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint
 endif

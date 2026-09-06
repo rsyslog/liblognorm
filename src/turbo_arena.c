@@ -1,5 +1,5 @@
 /*
- * turbo_arena.c -- High-performance arena allocator
+ * turbo_arena.c: High-performance arena allocator
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -159,6 +159,40 @@ ln_arena_init_sized(ln_arena_t *arena, size_t capacity)
 	arena->alloc_count = 0;
 	arena->flags = LN_ARENA_FLAG_OWNED;
 
+	return LN_ARENA_OK;
+}
+
+int
+ln_arena_ensure(ln_arena_t *arena, size_t min_capacity)
+{
+	uint8_t *nb;
+	size_t cap;
+
+	if (!arena || !arena->base) {
+		return LN_ARENA_EINVAL;
+	}
+	if (min_capacity <= arena->capacity) {
+		return LN_ARENA_OK;
+	}
+	if (!(arena->flags & LN_ARENA_FLAG_OWNED) || arena->used != 0) {
+		return LN_ARENA_EOVERFLOW;
+	}
+
+	cap = clamp_capacity(min_capacity);
+	cap = align_up(cap, LN_ARENA_CACHE_LINE);
+	if (cap < min_capacity) {
+		return LN_ARENA_EOVERFLOW;
+	}
+
+	nb = (uint8_t *)system_aligned_alloc(cap, LN_ARENA_CACHE_LINE);
+	if (!nb) {
+		return LN_ARENA_ENOMEM;
+	}
+	system_aligned_free(arena->base);
+	arena->base = nb;
+	arena->capacity = cap;
+	arena->used = 0;
+	arena->alloc_count = 0;
 	return LN_ARENA_OK;
 }
 

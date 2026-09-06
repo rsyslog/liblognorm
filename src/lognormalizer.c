@@ -361,6 +361,8 @@ handle_generic_option(const char* opt) {
 	} else if (strcmp("addRuleLocation", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_ADD_RULE_LOCATION);
 #ifdef ENABLE_TURBO
+	} else if (strcmp("turbostrict", opt) == 0) {
+		ln_setCtxOpts(ctx, LN_CTXOPT_TURBO | LN_CTXOPT_TURBO_STRICT);
 	} else if (strcmp("turbo", opt) == 0) {
 		ln_setCtxOpts(ctx, LN_CTXOPT_TURBO);
 #endif
@@ -390,6 +392,8 @@ fprintf(stderr,
 	"    -oaddOriginalMsg Always add original message to output, not just in error case\n"
 #ifdef ENABLE_TURBO
 	"    -oturbo      Enable TurboVM fast path for JSON output\n"
+	"    -oturbostrict Like -oturbo, but report a failure instead of silently\n"
+	"                 falling back to the standard parser (diagnostics)\n"
 #endif
 	"    -p           Print back only if the message has been parsed successfully\n"
 	"    -P           Print back only if the message has NOT been parsed successfully\n"

@@ -2,7 +2,7 @@
  * @file turbo.h
  * @brief liblognorm integration for TurboVM bytecode engine (internal).
  *
- * INTERNAL header — not installed. The public, opaque Turbo API lives in
+ * INTERNAL header: not installed. The public, opaque Turbo API lives in
  * lognorm-turbo.h (which this header includes); only internal lifecycle,
  * legacy and debug entry points are declared here.
  *//*
@@ -69,7 +69,7 @@ void ln_turbo_ctx_free(ln_turbo_ctx_t *turbo);
 int ln_turbo_compile(ln_ctx ctx);
 
 /*============================================================================
- * Legacy normalization (libfastjson object output) — internal
+ * Legacy normalization (libfastjson object output): internal
  *============================================================================*/
 
 /**

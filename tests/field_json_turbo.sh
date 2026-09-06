@@ -1,118 +1,147 @@
 #!/bin/bash
-# TurboVM OP_FIELD_JSON flatten parity
+# TurboVM JSON field parity
 # This file is part of the liblognorm project, released under ASL 2.0
 #
-# Proves the TurboVM JSON field handler flattens into the flat store and
-# round-trips through the serializer to the SAME nested JSON the v1 parser
-# produces (no more whole-object stringification).
+# The TurboVM JSON field handler validates a JSON value and stores it verbatim,
+# so arrays, booleans, nulls and full-precision numbers round-trip to the same
+# JSON the v1 parser produces. Malformed JSON fails to match, exactly as v1.
 srcdir="${srcdir:-.}"
 # shellcheck disable=SC1091
 . "$srcdir"/exec.sh
 
 export ln_opts='-oturbo'
 
-test_def "$0" "TurboVM JSON field flatten + parity"
+test_def "$0" "TurboVM JSON field parity"
 add_rule 'version=2'
 add_rule 'rule=:%field:json%'
 
-# Simple object: keys + types preserved (int 2, not "2").
+# Object: keys and value types preserved (int 2, not "2").
 execute '{"f1": "1", "f2": 2}'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 
-# Nested object: dotted flat keys re-nest; int leaf stays int.
+# Nested object.
 execute '{"outer": {"num": 3, "name": "value"}}'
 assert_output_json_eq '{ "field": { "outer": { "num": 3, "name": "value" } } }'
 
-# Mixed scalar types: int / double / bool / string.
-# NOTE: bool is emitted as the STRING "true"/"false" by design (string-store
-# convention); double compares with json_eq's 0.001 tolerance so 1.5 == 1.50.
-execute '{"i": 42, "d": 1.5, "b": true, "s": "x"}'
-assert_output_json_eq '{ "field": { "i": 42, "d": 1.5, "b": "true", "s": "x" } }'
+# Booleans stay boolean, not quoted strings. Double compares with json_eq's
+# tolerance so 1.5 == 1.50.
+execute '{"i": 42, "d": 1.5, "b": true, "f": false, "s": "x"}'
+assert_output_json_eq '{ "field": { "i": 42, "d": 1.5, "b": true, "f": false, "s": "x" } }'
 
-# Trailing data tolerated (v1 parity): parser consumes only the JSON span.
+# JSON null is preserved, not dropped.
+execute '{"n": null, "x": 1}'
+assert_output_json_eq '{ "field": { "n": null, "x": 1 } }'
+
+# Arrays stay arrays, not index-keyed objects.
+execute '["A", "B"]'
+assert_output_json_eq '{ "field": ["A", "B"] }'
+
+# Array nested in an object, and an array of objects.
+execute '{"arr": [1, 2, 3], "nested": {"k": "v"}}'
+assert_output_json_eq '{ "field": { "arr": [1, 2, 3], "nested": { "k": "v" } } }'
+execute '[{"a": 1}, {"b": 2}]'
+assert_output_json_eq '{ "field": [ { "a": 1 }, { "b": 2 } ] }'
+
+# Trailing data: the field consumes only the JSON value, the rest matches on.
 add_rule 'rule=:%field:json%end'
 execute '{"f1": "1", "f2": 2}end'
 assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
 
-# Parse failure must NOT match (backtrack): the JSON field rejects malformed
-# input just like v1 (turbo's no-match path emits only unparsed-data).
+# json-c includes whitespace after the value in the parse. A following
+# literal must still see "end", not " end".
+execute '{"f1": "1", "f2": 2} end'
+assert_output_json_eq '{ "field": { "f1": "1", "f2": 2 } }'
+
+# libfastjson accepts single-quoted keys/strings; so must turbo.
+execute "{'f1': 1}end"
+assert_output_json_eq '{ "field": { "f1": 1 } }'
+
+# A non-JSON body does not match; only unparsed-data is emitted.
 reset_rules
 add_rule 'version=2'
 add_rule 'rule=:%field:json%'
 execute '{"f1": "1", f2: 2}'
 assert_output_json_eq '{ "unparsed-data": "{\"f1\": \"1\", f2: 2}" }'
 
-# Strict JSON-number validation: malformed numbers must FAIL the turbo parse
-# (return -1 -> backtrack) rather than mis-consume invalid bytes as a single
-# number. Pre-fix the turbo scanner silently consumed "1+2-3" as one number
-# (strtod -> 1.0), MATCHING with a corrupt value and mis-parsing what followed;
-# lone "-"/"." became 0.0. Turbo now rejects these. lognormalizer's v1 walker
-# also rejects the forms tested below, so the end-to-end result is unparsed-data.
-# (A few turbo-rejected forms like "1." / "1e" / "01" are accepted by the
-# lenient v1 path and would still match here, so this test uses only forms
-# rejected by both paths.)
-reset_rules
-add_rule 'version=2'
-add_rule 'rule=:%field:json%'
-
-# multiple sign/operator characters mid-number -> reject (was mis-consumed)
+# Malformed numbers make the value fail to match, matching v1. Only forms that
+# the v1 parser also rejects are used, so the end-to-end result is unparsed-data.
 execute '{"n": 1+2-3}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": 1+2-3}" }'
-
-# lone '-' is not a valid number -> reject (was 0.0)
 execute '{"n": -}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": -}" }'
-
-# lone '.' is not a valid number -> reject (was 0.0)
 execute '{"n": .}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": .}" }'
-
-# leading '+' is not valid JSON -> reject
 execute '{"n": +5}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": +5}" }'
-
-# bare '.' before fraction digits -> reject
 execute '{"n": .5}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": .5}" }'
-
-# two decimal points -> reject
 execute '{"n": 1.2.3}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": 1.2.3}" }'
-
-# double leading sign -> reject
 execute '{"n": --5}'
 assert_output_json_eq '{ "unparsed-data": "{\"n\": --5}" }'
 
-# Valid edge forms still parse correctly: negative int, fraction, signed exp.
+# Valid edge forms parse: negative int, fraction, signed exponent.
 execute '{"a": -3, "b": 2.50, "c": 6.022e23}'
 assert_output_json_eq '{ "field": { "a": -3, "b": 2.5, "c": 6.022e23 } }'
 
-# Long number (span > the 64-byte stack buffer): must reach strtod IN FULL via
-# the arena path. The old code copied only the first 63 bytes before strtod, so
-# a long mantissa could be cut short of its trailing exponent and the magnitude
-# silently corrupted. This 70-digit integer overflows int64 -> kept as a double;
-# the value must round-trip to ~1e69, not the ~1e62 a 63-char truncation gives.
-big=$(python3 -c 'print("1" + "0"*69)')
-execute "{\"big\": $big}"
-assert_output_json_eq '{ "field": { "big": 1e69 } }'
+# Doubles keep full precision, with no fixed-decimal rounding.
+execute '{"pi": 3.141592653589793}'
+assert_output_json_eq '{ "field": { "pi": 3.141592653589793 } }'
 
-# Locale-independence: the decimal separator is always '.' regardless of the
-# process LC_NUMERIC. Under a comma-decimal locale, plain strtod() would parse
-# "1.5" as 1.0; turbo parses via a private C locale (strtod_l) so it stays 1.5.
-# (Falls back to the C locale itself if de_DE is not installed -> still 1.5.)
+# The decimal separator is always '.', regardless of the process LC_NUMERIC.
 LC_ALL=de_DE.UTF-8 LC_NUMERIC=de_DE.UTF-8 execute '{"v": 1.5}'
 assert_output_json_eq '{ "field": { "v": 1.5 } }'
 
-# Malformed \u escape must be emitted literally INCLUDING its backslash (the old
-# code dropped the '\' and emitted only "u1z34"). The 'z' makes \u non-hex.
+# A malformed \u escape is not valid JSON, so the value fails to match (the 'z'
+# makes \u non-hex). A well-formed \u escape parses (json_eq reads A as "A").
 execute '{"s": "\u1z34"}'
-assert_output_json_eq '{ "field": { "s": "\\u1z34" } }'
+assert_output_contains 'unparsed-data'
+execute '{"s": "\u0041"}'
+assert_output_json_eq '{ "field": { "s": "A" } }'
 
-# Key-buffer overflow must FAIL the parse (backtrack), not silently mislabel the
-# leaf under a truncated key. A deeply-nested path whose dotted key exceeds the
-# 512-byte scratch buffer must not match.
-deep=$(python3 -c 'print("".join("{\"aaaaaaaaaaaaaaaa%d\":"%i for i in range(40)) + "1" + "}"*40)')
-execute "$deep"
+# Nesting is bounded to json-c's limit for v1 parity: 31 levels parse, 32 do not.
+d31=$(python3 -c 'print("["*31 + "1" + "]"*31)')
+execute "$d31"
+assert_output_contains 'field'
+d32=$(python3 -c 'print("["*32 + "1" + "]"*32)')
+execute "$d32"
+assert_output_contains 'unparsed-data'
+
+# Special names, matching configuration.rst:
+#   "-"  matched, not stored
+#   "."  inlined at the current context (root here)
+#   name nested object (already covered above)
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%-:json%'
+execute '{"timestamp":"T","src_ip":"1.2.3.4"}'
+assert_output_json_eq '{ }'
+
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%.:json%'
+execute '{"timestamp":"2026-08-20T12:00:00.1+0000","src_ip":"1.2.3.4","alert":{"severity":1}}'
+assert_output_json_eq '{ "timestamp": "2026-08-20T12:00:00.1+0000", "src_ip": "1.2.3.4", "alert": { "severity": 1 } }'
+
+# Empty nested objects are stored (skipempty is the only way to drop them).
+# An empty array was already kept as a raw span; an empty object was not.
+execute '{"dns":{"grouped":{}}}'
+assert_output_json_eq '{ "dns": { "grouped": { } } }'
+execute '{"a":1,"b":{}}'
+assert_output_json_eq '{ "a": 1, "b": { } }'
+execute '{"b":[]}'
+assert_output_json_eq '{ "b": [ ] }'
+
+# Named repeat of json: each iteration nests an object, not a quoted string.
+# Under 48 bytes is STRING_INLINE; over it is the pointer path.
+reset_rules
+add_rule 'version=2'
+add_rule 'rule=:%{"name":"items","type":"repeat","parser":{"name":"j","type":"json"},"while":{"type":"literal","text":","}}%'
+execute '{"a":1},{"b":2}'
+assert_output_json_eq '{ "items": [ { "j": { "a": 1 } }, { "j": { "b": 2 } } ] }'
+execute '{"k":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},{"k":"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}'
+assert_output_json_eq '{ "items": [ { "j": { "k": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" } }, { "j": { "k": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy" } } ] }'
+execute '{,},{"a":1}'
 assert_output_contains 'unparsed-data'
 
 cleanup_tmp_files

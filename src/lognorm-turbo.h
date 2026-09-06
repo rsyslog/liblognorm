@@ -42,7 +42,7 @@ struct ln_ctx_s;
 
 /* size_t / int64_t appear in the public signatures (the real prototypes and the
  * no-op stubs alike), so the standard headers are needed no matter which branch
- * compiles.  Standard headers only -- never config.h (see the note above). */
+ * compiles.  Standard headers only, never config.h (see the note above). */
 #include <stddef.h>
 #include <stdint.h>
 
@@ -81,8 +81,16 @@ typedef enum {
 } ln_ftype_t;
 
 /** Field flag: the field name is dotted and denotes a nested object
- *  (e.g. "a.b" -> {"a":{"b":...}}). Other flag bits are private. */
+ *  (e.g. "a.b" -> {"a":{"b":...}}). */
 #define LN_FFIELD_NESTED 0x04
+
+/** Field flag: the string value is already well-formed JSON (an object,
+ *  array or scalar) captured by a json-typed parser such as %name:json%.
+ *  A consumer materialising the fast result into a json_object must parse
+ *  the value instead of treating it as an opaque string; otherwise a nested
+ *  object is emitted as a quoted string (e.g. {"kc":"{...}"} rather than
+ *  {"kc":{...}}). Other flag bits are private. */
+#define LN_FFIELD_RAW_JSON 0x08
 
 /*============================================================================
  * Availability
@@ -135,6 +143,17 @@ int ln_turbo_normalize_raw(struct ln_ctx_s *ctx, const char *str, size_t strLen,
 int ln_fast_result_field_count(const ln_fast_result_t *r);
 
 /**
+ * @return 1 if the result was truncated, 0 otherwise.
+ *
+ * Truncation means at least one parsed field or tag was dropped because the
+ * message exceeded the per-result capacity (LN_FAST_MAX_FIELDS /
+ * LN_FAST_MAX_TAGS). The fields that were captured are still valid; callers
+ * that need every field can treat a truncated turbo result as a signal to
+ * fall back to the full parser, or simply count the occurrence.
+ */
+int ln_fast_result_is_truncated(const ln_fast_result_t *r);
+
+/**
  * Get a field by index as a string.
  *
  * Non-string fields yield a NULL value with zero length; use
@@ -168,11 +187,20 @@ int ln_fast_result_get_field_typed(const ln_fast_result_t *r, int idx,
 								   const char **sval, size_t *slen,
 								   int64_t *ival, double *dval);
 
-/** Find a string field by name. @return 0 if found, -1 otherwise. */
+/**
+ * Find a string field by name.
+ *
+ * A rulebase may bind the same name more than once in one rule; the result
+ * then carries several fields under that name. The last binding wins, which
+ * is what a caller materializing the result into a JSON object also observes.
+ *
+ * @return 0 if found, -1 otherwise.
+ */
 int ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
 							  const char **value, size_t *vlen);
 
-/** Find an integer field by name. @return 0 if found, -1 otherwise. */
+/** Find an integer field by name. The last binding wins, as for
+ *  ln_fast_result_get_string(). @return 0 if found, -1 otherwise. */
 int ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 						   int64_t *value);
 
@@ -244,6 +272,7 @@ typedef enum {
 } ln_ftype_t;
 
 #define LN_FFIELD_NESTED 0x04
+#define LN_FFIELD_RAW_JSON 0x08
 
 #ifdef __cplusplus
 extern "C" {

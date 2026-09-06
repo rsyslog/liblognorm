@@ -44,7 +44,9 @@ typedef enum {
 	
 	/*=== Literals (0x10-0x1F) ===*/
 	OP_LITERAL      = 0x10,  /**< Match literal (inline), len in header */
-	OP_LITERAL_EXT  = 0x11,  /**< Match literal (external ptr) */
+	OP_LITERAL_EXT  = 0x11,  /**< Match literal in the string pool.
+                              *   data.lit_pool.off/len; used when the text
+                              *   does not fit in the 60-byte inline buffer. */
 	OP_LITERAL_CI   = 0x12,  /**< Match literal case-insensitive */
 	OP_CHAR         = 0x13,  /**< Match single char */
 	OP_ANY          = 0x14,  /**< Match any char (advance 1) */
@@ -69,8 +71,19 @@ typedef enum {
 	OP_FIELD_NAME_VALUE = 0x2F, /**< Parse name=value pairs (name-value-list) */
 	
 	/*=== Skipping (0x40-0x4F) ===*/
-	OP_SKIP_SPACE   = 0x40,  /**< Skip whitespace (0+) */
-	OP_SKIP_SPACE1  = 0x41,  /**< Skip whitespace (1+, fail if none) */
+	OP_SKIP_SPACE   = 0x40,  /**< Skip whitespace, 1+. This is what the
+							  *   %field:whitespace% parser compiles to and
+							  *   the standard parser requires at least one
+							  *   space there, so the VM fails on an empty
+							  *   run.  It is NOT a 0+ skip, whatever the
+							  *   name suggests. */
+	OP_SKIP_SPACE1  = 0x41,  /**< Skip whitespace, 1+, and never store it.
+							  *   That is the one difference from
+							  *   OP_SKIP_SPACE, which honours
+							  *   LN_INSTR_F_STORE and keeps the matched run
+							  *   as a field value.  The compiler does not
+							  *   emit this opcode; the dispatch table and
+							  *   disassembler still carry it. */
 	OP_SKIP_N       = 0x42,  /**< Skip N bytes */
 	OP_SKIP_TO      = 0x43,  /**< Skip to char (not including) */
 	OP_SKIP_PAST    = 0x44,  /**< Skip past char (including) */
@@ -101,6 +114,17 @@ typedef enum {
 	OP_V2_IPTABLES  = 0x73,  /**< Parse iptables name=value pairs */
 	OP_CEE_SYSLOG   = 0x74,  /**< Parse CEE-syslog (@cee: + JSON) */
 	OP_CHECKPOINT_LEA = 0x75, /**< Parse Checkpoint LEA name: value; */
+	OP_FIELD_TIME   = 0x76,  /**< Extract a wall-clock time, HH:MM:SS.
+                              *   aux selects the grammar: 0 reads a 24-hour
+                              *   clock, 1 a 12-hour one, 2 a duration
+                              *   (H:MM:SS or HH:MM:SS, hours unbounded). */
+	OP_FIELD_KERNEL_TS = 0x77, /**< Extract a kernel timestamp [sec.usec]. */
+	OP_CISCO_IFACE  = 0x78,  /**< Cisco interface spec: [if:]ip/port [(ip2/port2)] [(user)]. */
+	OP_REPEAT       = 0x79,  /**< Repeat parser-sub while while-sub matches.
+                              *   data.repeat holds relative PCs.
+                              *   flags LN_INSTR_F_REPEAT_PERMIT =
+                              *   permitMismatchInParser; aux bit0 =
+                              *   failOnDuplicate. */
 
 	/*=== Debug (0xF0-0xFF) ===*/
 	OP_NOP          = 0xF0,  /**< No operation */
@@ -136,20 +160,61 @@ typedef struct {
 			int32_t  _pad[14];
 		} jump;
 		
-		/* Field with delimiter */
+		/* Field with delimiter.
+		 *
+		 * char-to and char-sep terminate on a SET of characters, not on one.
+		 * A single-character set is the common case and rides in `delim`, so
+		 * the scan stays a plain byte search. A larger set is interned in the
+		 * program string pool and `set_off` points at it, with aux carrying
+		 * its length; the pool copy is NUL-terminated, which is what the
+		 * set-matching scan expects. */
 		struct {
-			char     name[56]; /**< Field name */
-			uint8_t  delim;    /**< Delimiter char */
+			char     name[52]; /**< Field name */
+			uint32_t set_off;  /**< String-pool offset of the terminator set,
+			                     *   valid only with LN_INSTR_F_CHARSET */
+			uint8_t  delim;    /**< Delimiter char (single-character set) */
 			uint8_t  ass;      /**< Assignator char (for name-value-list) */
 			uint8_t  ignore_ws;/**< name-value-list: trim surrounding whitespace */
 			uint8_t  _pad[1];
 		} char_to;
+
+		/* Field with a multi-byte delimiter string (OP_FIELD_STR_TO).
+		 * The delimiter lives in the program string pool because it does
+		 * not fit next to the field name; aux carries its length. */
+		struct {
+			char     name[56]; /**< Field name */
+			uint32_t delim_off;/**< String-pool offset of the delimiter */
+		} str_to;
 
 		/* Static key-value pair (for OP_STATIC_FIELD) */
 		struct {
 			char     key[30];  /**< Field name, null-terminated */
 			char     val[30];  /**< Field value, null-terminated */
 		} kv;
+
+		/* Static key-value pair too long to store inline: both strings
+		 * live in the program string pool.  Selected by LN_INSTR_F_KV_POOL;
+		 * aux carries the key length, as in the inline form. */
+		struct {
+			uint32_t key_off;  /**< String-pool offset of the key */
+			uint32_t val_off;  /**< String-pool offset of the value */
+			uint32_t val_len;  /**< Value length */
+			uint8_t  _pad[48];
+		} kv_pool;
+
+		/* OP_REPEAT: two relative subroutine PCs plus the array name. */
+		struct {
+			char     name[52]; /**< Field name for the JSON array */
+			int32_t  parser_off; /**< Relative PC of the parser sub */
+			int32_t  while_off;  /**< Relative PC of the while sub */
+		} repeat;
+
+		/* OP_LITERAL_EXT: text lives in the program string pool. */
+		struct {
+			uint32_t off;      /**< String-pool offset of the literal */
+			uint32_t len;      /**< Literal length in bytes */
+			uint8_t  _pad[52];
+		} lit_pool;
 	} data;
 } ln_instr_t;
 
@@ -164,6 +229,49 @@ _Static_assert(sizeof(ln_instr_t) == LN_INSTR_SIZE,
 #define LN_INSTR_F_GREEDY    0x02  /**< Greedy matching */
 #define LN_INSTR_F_STORE     0x04  /**< Store extracted field */
 #define LN_INSTR_F_CASE_INS  0x08  /**< Case-insensitive */
+#define LN_INSTR_F_NAME_POOL 0x10  /**< Field/context name lives in the program
+									  string pool: the opcode's inline name buffer
+									  holds a uint32 pool offset instead of the
+									  name. Lets turbo carry names longer than the
+									  inline buffer, like the standard parser. */
+#define LN_INSTR_F_NUMERIC   0x20  /**< Numeric field parsed with format="number":
+									  emit a native JSON number instead of a string,
+									  matching the standard parser. */
+#define LN_INSTR_F_DATE_FMT  0x80  /**< Date parser with format="timestamp-unix"
+									  or "timestamp-unix-ms". aux carries the
+									  FMT_MODE in its low byte and 0=rfc3164 /
+									  1=rfc5424 in its high byte. */
+#define LN_INSTR_F_REPEAT_PERMIT 0x40 /**< repeat: option.permitMismatchInParser */
+/*
+ * OP_STATIC_FIELD only ever carries LN_INSTR_F_KV_POOL, so the remaining bits
+ * are free for it to reuse. This one shares its value with
+ * LN_INSTR_F_OPTIONAL, which has no meaning for a field that always stores.
+ */
+#define LN_INSTR_F_CHARSEP   0x08  /**< OP_FIELD_CHAR_TO: char-sep semantics.
+                                    *   char-sep always matches: with no
+                                    *   terminator in range it takes the rest,
+                                    *   and an empty value is valid. char-to
+                                    *   refuses both. Shares its value with
+                                    *   LN_INSTR_F_CASE_INS, which this opcode
+                                    *   never carries. */
+#define LN_INSTR_F_CHARSET   0x02  /**< OP_FIELD_CHAR_TO: the terminator set does
+                                    *   not fit in `delim` and lives in the
+                                    *   program string pool at data.char_to
+                                    *   .set_off, aux holding its length.
+                                    *   Shares its value with
+                                    *   LN_INSTR_F_GREEDY, which this opcode
+                                    *   never carries. */
+#define LN_INSTR_F_ANNOT     0x01  /**< OP_STATIC_FIELD: the field was resolved
+                                    *   from an annotation. The standard parser
+                                    *   applies an annotation with a replacing
+                                    *   add, so this one overwrites a field of
+                                    *   the same name rather than appending a
+                                    *   second entry under it. */
+#define LN_INSTR_F_KV_POOL   0x40  /**< OP_STATIC_FIELD: the key and the value are
+									  too long for the inline buffers and live in
+									  the string pool instead (data.kv_pool).
+									  Lets turbo carry annotation values of any
+									  length, matching the standard parser. */
 
 /*============================================================================
  * Instruction Builders
@@ -195,12 +303,23 @@ static inline ln_instr_t ln_i_literal(const char *lit, uint16_t len) {
 	i.op = OP_LITERAL;
 	/* Clamp the inline copy to the buffer; aux carries the match length
 	 * the VM compares, so it must never exceed what we actually stored
-	 * inline (security audit #6 — VM also re-validates len <= inline size). */
+	 * inline (security audit #6; VM also re-validates len <= inline size). */
 	if (len > LN_INSTR_MAX_INLINE)
 		len = LN_INSTR_MAX_INLINE;
 	i.aux = len;
 	for (uint16_t j = 0; j < len && j < LN_INSTR_MAX_INLINE; j++)
 		i.data.str[j] = lit[j];
+	return i;
+}
+
+/** Create LITERAL_EXT instruction (text at strpool offset @p off). */
+static inline ln_instr_t ln_i_literal_ext(uint32_t off, uint32_t len) {
+	ln_instr_t i = {0};
+	i.op = OP_LITERAL_EXT;
+	i.data.lit_pool.off = off;
+	i.data.lit_pool.len = len;
+	if (len <= UINT16_MAX)
+		i.aux = (uint16_t)len;
 	return i;
 }
 
@@ -255,8 +374,9 @@ static inline ln_instr_t ln_i_field_char_to(const char *name, char delim) {
 	i.flags = LN_INSTR_F_STORE;
 	i.data.char_to.delim = (uint8_t)delim;
 	if (name) {
-		/* Reserve a NUL terminator (security audit #6). name[56]. */
-		for (int j = 0; j < 56 - 1 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). The bound comes
+		 * from the array so it cannot drift from the layout. */
+		for (size_t j = 0; j + 1 < sizeof(i.data.char_to.name) && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;
@@ -272,8 +392,9 @@ static inline ln_instr_t ln_i_field_name_value(const char *name, char sep, char 
 	i.data.char_to.ass   = (uint8_t)ass;
 	i.data.char_to.ignore_ws = ignore_ws;
 	if (name) {
-		/* Reserve a NUL terminator (security audit #6). name[56]. */
-		for (int j = 0; j < 56 - 1 && name[j]; j++)
+		/* Reserve a NUL terminator (security audit #6). The bound comes
+		 * from the array so it cannot drift from the layout. */
+		for (size_t j = 0; j + 1 < sizeof(i.data.char_to.name) && name[j]; j++)
 			i.data.char_to.name[j] = name[j];
 	}
 	return i;

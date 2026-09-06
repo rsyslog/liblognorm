@@ -1,5 +1,5 @@
 /*
- * turbo_snapshot.c -- Deep-copy snapshot of turbo parse results
+ * turbo_snapshot.c: Deep-copy snapshot of turbo parse results
  *
  * Part of the TurboVM bytecode engine for high-performance log parsing.
  *
@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stddef.h>
 
 /**
  * @brief Check if a pointer falls within the arena region.
@@ -62,7 +63,7 @@ rebase_ptr(const char *ptr, const uint8_t *old_base, const char *new_base)
  *
  * A pointer needs copying iff it is non-NULL and does NOT already live in the
  * arena region (those are handled by the cheap rebase path). The byte count
- * uses the stored length — values carry an explicit length and may contain
+ * uses the stored length: values carry an explicit length and may contain
  * embedded NULs; names are length-prefixed too. We always append a trailing
  * NUL so the snapshot strings stay C-string compatible like the originals.
  */
@@ -99,12 +100,14 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 	size_t extra = 0;        /* bytes for non-arena strings copied in */
 	size_t off;              /* bump offset into the backing buffer    */
 	size_t total;
+	size_t n;
+	size_t tail;
 	char *backing;
 	ln_fast_result_snapshot_t *snap;
 
 	if (!src) return NULL;
 
-	/* Determine arena copy size — may be 0 if no arena or no overflow strings */
+	/* Determine arena copy size: may be 0 if no arena or no overflow strings */
 	if (arena && arena->base && arena->used > 0) {
 		arena_used = arena->used;
 		arena_base = arena->base;
@@ -112,7 +115,7 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 
 	/* Pass 1: size the extra space needed for every pointer that does NOT
 	 * live in the arena and therefore cannot be rebased. "Not in arena" does
-	 * NOT imply "long-lived/static" — OP_FIELD_REST/WORD/STR_TO/CHAR_TO/QUOTED
+	 * NOT imply "long-lived/static": OP_FIELD_REST/WORD/STR_TO/CHAR_TO/QUOTED
 	 * store long (>= LN_FAST_INLINE_SIZE) values as raw pointers straight into
 	 * the input line. Those, plus non-static names and the original message,
 	 * must be copied so the snapshot can outlive the input line. */
@@ -134,8 +137,17 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 	snap = malloc(total);
 	if (!snap) return NULL;
 
-	/* Copy the result struct */
-	memcpy(&snap->result, src, sizeof(ln_fast_result_t));
+	/* Copy used fields plus the tail (n_fields, tags, match info).
+	 * Unused slots past n_fields are not read by any consumer, so they
+	 * are not copied. The allocation still covers the full array because
+	 * arena_data[] follows sizeof(ln_fast_result_t). */
+	n = src->n_fields;
+	if (n > LN_FAST_MAX_FIELDS)
+		n = LN_FAST_MAX_FIELDS;
+	memcpy(snap->result.fields, src->fields, n * sizeof(ln_fast_field_t));
+	tail = sizeof(ln_fast_result_t) - offsetof(ln_fast_result_t, n_fields);
+	memcpy(&snap->result.n_fields, &src->n_fields, tail);
+	snap->result.n_fields = (uint8_t)n;
 	/* arena_size tracks the whole owned backing region (arena + extra) so the
 	 * snapshot remains a single self-contained allocation. */
 	snap->arena_size = arena_used + extra;
@@ -147,7 +159,7 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 		memcpy(backing, arena_base, arena_used);
 	}
 
-	/* Detach from original arena — snapshot is self-contained */
+	/* Detach from original arena; snapshot is self-contained */
 	snap->result.arena = NULL;
 
 	/* Pass 2: rebase arena pointers; copy-and-repoint non-arena ones. The
@@ -197,9 +209,10 @@ ln_fast_result_snapshot_create(const ln_fast_result_t *src,
 			snap->result.original = rebase_ptr(snap->result.original,
 											   arena_base, backing);
 		} else {
-			snap->result.original = append_external(backing, &off,
-													snap->result.original,
-													snap->result.original_len);
+			snap->result.original = append_external(
+				backing, &off,
+				snap->result.original,
+				snap->result.original_len);
 		}
 	}
 
@@ -218,7 +231,7 @@ ln_fast_result_snapshot_get(const ln_fast_result_snapshot_t *snap)
 void
 ln_fast_result_snapshot_free(ln_fast_result_snapshot_t *snap)
 {
-	/* Single allocation — single free */
+	/* Single allocation, single free */
 	free(snap);
 }
 

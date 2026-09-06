@@ -28,11 +28,24 @@ extern "C" {
  * Configuration
  *============================================================================*/
 
-/** Maximum fields per result */
-#define LN_FAST_MAX_FIELDS 64
+/** Maximum fields per result.
+ *
+ * Real-world CSV-shaped rulebases go well past 64: a PAN-OS TRAFFIC record is
+ * 97 columns, and an ECS mapping adds annotations on top. Parse-time writes
+ * stop at n_fields. A snapshot still allocates the full array (arena_data[]
+ * sits after sizeof(ln_fast_result_t)); only the used prefix is copied.
+ * Anything beyond this is not truncated silently: the JSON string path
+ * refuses the result and the caller falls back to the recursive walker.
+ * n_fields is uint8_t, so this cap must stay at or below 255. */
+#define LN_FAST_MAX_FIELDS 128
 
 /** Maximum tags per result */
 #define LN_FAST_MAX_TAGS 16
+
+/** Maximum JSON object nesting depth for turbo output. Shared by the VM
+ * flattener (turbo_vm.c) and the JSON serializer (turbo_json_impl.c) so the
+ * two never disagree on how deep a dotted field name may nest. */
+#define LN_JSON_MAX_DEPTH 64
 
 /** Inline string size (fits in cache line with field metadata) */
 #define LN_FAST_INLINE_SIZE 48
@@ -65,7 +78,8 @@ typedef struct {
 
 _Static_assert(sizeof(ln_fast_field_t) == 64, "Field must be 64 bytes");
 
-/* Field flags (LN_FFIELD_NESTED 0x04 is public, see lognorm-turbo.h) */
+/* Field flags. LN_FFIELD_NESTED 0x04 and LN_FFIELD_RAW_JSON 0x08 are public
+ * (see lognorm-turbo.h, included above); only the STATIC_* bits are private. */
 #define LN_FFIELD_STATIC_NAME 0x01  /* Name is static (don't free) */
 #define LN_FFIELD_STATIC_VAL  0x02  /* Value is static (don't free) */
 
@@ -122,6 +136,8 @@ struct ln_fast_result_s {
 #define LN_FRESULT_MATCHED   0x01
 #define LN_FRESULT_PARTIAL   0x02
 #define LN_FRESULT_HAS_ORIG  0x04
+#define LN_FRESULT_TRUNCATED 0x08  /* a field or tag was dropped: the result hit
+									  LN_FAST_MAX_FIELDS / LN_FAST_MAX_TAGS */
 
 /*============================================================================
  * Fast Hash Function (FNV-1a)
@@ -172,26 +188,33 @@ ln_fast_result_clear(ln_fast_result_t *r)
 	r->original_len = 0;
 }
 
-/**
- * @brief Add string field with static name (no copy).
- *
- * FAST PATH: For known field names, pass static string literal.
- */
 static inline int
-ln_fast_add_string_static(ln_fast_result_t *r,
-						  const char *name, uint16_t name_len,
-						  const char *val, uint32_t val_len)
+ln_fast_name_taken(const ln_fast_result_t *r, const char *name, uint16_t name_len)
 {
-	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	uint8_t i;
 
-	f = &r->fields[r->n_fields++];
+	for (i = 0; i < r->n_fields; i++) {
+		const ln_fast_field_t *f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name == name)
+			return 1;
+		if (f->name != NULL && memcmp(f->name, name, name_len) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+static inline void
+ln_fast_store_string(ln_fast_field_t *f,
+					 const char *name, uint16_t name_len,
+					 const char *val, uint32_t val_len)
+{
 	f->name = name;
 	f->name_len = name_len;
 	f->flags = LN_FFIELD_STATIC_NAME | LN_FFIELD_STATIC_VAL
 			 | ln_ffield_detect_nested(name, name_len);
-
-	/* Inline small strings */
 	if (val_len < LN_FAST_INLINE_SIZE) {
 		f->type = LN_FTYPE_STRING_INLINE;
 		memcpy(f->v.inl, val, val_len);
@@ -201,7 +224,55 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 		f->v.str.ptr = val;
 		f->v.str.len = val_len;
 	}
-	
+}
+
+/**
+ * @brief Add string field with static name (no copy).
+ *
+ * FAST PATH: For known field names, pass static string literal.
+ * Appends even when the name is already present. Sequential parsers
+ * that share a name (``%f:ipv4%:%f:number%``) must all land so a
+ * last-wins lookup matches the walker. Use ln_fast_set_string_static
+ * when a later binding should overwrite in place (CEF, annotations).
+ */
+
+static inline int
+ln_fast_add_string_static(ln_fast_result_t *r,
+						  const char *name, uint16_t name_len,
+						  const char *val, uint32_t val_len)
+{
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	ln_fast_store_string(&r->fields[r->n_fields++], name, name_len, val, val_len);
+	return 0;
+}
+
+/*
+ * Replace the last matching name, or append when absent. Backward scan so
+ * the write lands on the same slot ln_fast_result_get_string reads, matching
+ * json_object_object_add.
+ *
+ * @return 0 on success, -1 if the result is full.
+ */
+static inline int
+ln_fast_set_string_static(ln_fast_result_t *r,
+						  const char *name, uint16_t name_len,
+						  const char *val, uint32_t val_len)
+{
+	int i;
+
+	for (i = (int)r->n_fields - 1; i >= 0; i--) {
+		ln_fast_field_t *const f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name != name
+			&& (f->name == NULL || memcmp(f->name, name, name_len) != 0))
+			continue;
+		ln_fast_store_string(f, name, name_len, val, val_len);
+		return 0;
+	}
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	ln_fast_store_string(&r->fields[r->n_fields++], name, name_len, val, val_len);
 	return 0;
 }
 
@@ -214,7 +285,7 @@ ln_fast_add_int_static(ln_fast_result_t *r,
 					   int64_t val)
 {
 	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	f = &r->fields[r->n_fields++];
 	f->name = name;
@@ -228,6 +299,90 @@ ln_fast_add_int_static(ln_fast_result_t *r,
 }
 
 /**
+ * @brief Add boolean field with static name.
+ *
+ * The JSON flattener used to store booleans as the strings "true"/"false",
+ * which the serializer then quoted; the standard parser emits a JSON boolean.
+ */
+static inline int
+ln_fast_add_bool_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len,
+						int val)
+{
+	ln_fast_field_t *f;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+
+	f = &r->fields[r->n_fields++];
+	f->name = name;
+	f->name_len = name_len;
+	f->type = LN_FTYPE_BOOL;
+	f->flags = LN_FFIELD_STATIC_NAME
+			 | ln_ffield_detect_nested(name, name_len);
+	f->v.b = val ? 1 : 0;
+
+	return 0;
+}
+
+/**
+ * @brief Add JSON null field with static name.
+ *
+ * A null member is part of the document: dropping it makes the field absent
+ * rather than null, which is a different result from the standard parser's.
+ */
+static inline int
+ln_fast_add_null_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len)
+{
+	ln_fast_field_t *f;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+
+	f = &r->fields[r->n_fields++];
+	f->name = name;
+	f->name_len = name_len;
+	f->type = LN_FTYPE_NULL;
+	f->flags = LN_FFIELD_STATIC_NAME
+			 | ln_ffield_detect_nested(name, name_len);
+	f->v.i = 0;
+
+	return 0;
+}
+
+static inline int
+ln_fast_set_null_static(ln_fast_result_t *r,
+						const char *name, uint16_t name_len)
+{
+	int i;
+
+	for (i = (int)r->n_fields - 1; i >= 0; i--) {
+		ln_fast_field_t *const f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name != name
+			&& (f->name == NULL || memcmp(f->name, name, name_len) != 0))
+			continue;
+		f->name = name;
+		f->name_len = name_len;
+		f->type = LN_FTYPE_NULL;
+		f->flags = LN_FFIELD_STATIC_NAME
+				 | ln_ffield_detect_nested(name, name_len);
+		f->v.i = 0;
+		return 0;
+	}
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	{
+		ln_fast_field_t *f = &r->fields[r->n_fields++];
+		f->name = name;
+		f->name_len = name_len;
+		f->type = LN_FTYPE_NULL;
+		f->flags = LN_FFIELD_STATIC_NAME
+				 | ln_ffield_detect_nested(name, name_len);
+		f->v.i = 0;
+	}
+	return 0;
+}
+
+/**
  * @brief Add double field with static name.
  */
 static inline int
@@ -236,7 +391,7 @@ ln_fast_add_double_static(ln_fast_result_t *r,
 						  double val)
 {
 	ln_fast_field_t *f;
-	if (r->n_fields >= LN_FAST_MAX_FIELDS) return -1;
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	f = &r->fields[r->n_fields++];
 	f->name = name;
@@ -245,7 +400,25 @@ ln_fast_add_double_static(ln_fast_result_t *r,
 	f->flags = LN_FFIELD_STATIC_NAME
 			 | ln_ffield_detect_nested(name, name_len);
 	f->v.d = val;
-	
+
+	return 0;
+}
+
+/**
+ * @brief Add a raw JSON value with static name.
+ *
+ * The value is stored as a string and tagged LN_FFIELD_RAW_JSON so the
+ * serializer emits it verbatim (no quotes, no escaping). @p val must already be
+ * a well-formed JSON value; the caller is responsible for validating it.
+ */
+static inline int
+ln_fast_add_rawjson_static(ln_fast_result_t *r,
+						   const char *name, uint16_t name_len,
+						   const char *val, uint32_t val_len)
+{
+	if (ln_fast_add_string_static(r, name, name_len, val, val_len) != 0)
+		return -1;
+	r->fields[r->n_fields - 1].flags |= LN_FFIELD_RAW_JSON;
 	return 0;
 }
 
@@ -259,7 +432,7 @@ ln_fast_add_tag(ln_fast_result_t *r, const char *tag)
 {
 	uint32_t h;
 	uint8_t slot;
-	if (r->n_tags >= LN_FAST_MAX_TAGS) return -1;
+	if (r->n_tags >= LN_FAST_MAX_TAGS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 
 	h = ln_fast_hash(tag);
 	slot = h & (LN_FAST_TAG_HASH_SIZE - 1);

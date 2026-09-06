@@ -156,6 +156,16 @@ size_t ln_simd_find_char(const char *buf, size_t len, char c);
 size_t ln_simd_find_char_set(const char *buf, size_t len, const char *chars);
 
 /**
+ * @brief char-to over a SET of terminators.
+ *
+ * Same contract as ln_simd_char_to(), except the field ends at whichever
+ * member of @p chars appears first. @p chars is a null-terminated set.
+ *
+ * @return LN_SIMD_OK when a terminator was found, LN_SIMD_ENOTFOUND otherwise.
+ */
+int ln_simd_char_to_set(const char *buf, size_t len, const char *chars, ln_span_t *span);
+
+/**
  * @brief Find first character NOT in a set.
  *
  * Inverse of find_char_set - finds first character that doesn't match.
@@ -175,6 +185,14 @@ size_t ln_simd_find_not_char_set(const char *buf, size_t len, const char *chars)
  * @return Number of whitespace characters skipped
  */
 size_t ln_simd_skip_space(const char *buf, size_t len);
+
+/**
+ * @brief Offset of the first whitespace byte, or len if none.
+ *
+ * Whitespace is the same class skip_space uses: HT..CR (0x09-0x0D) and SP.
+ * Vectorized on SSE4.2 and NEON; the scalar path uses the same class.
+ */
+size_t ln_simd_find_space(const char *buf, size_t len);
 
 /**
  * @brief Skip while characters match a set.
@@ -367,6 +385,17 @@ int ln_simd_ipv4_port(const char *buf, size_t len,
 int ln_simd_timestamp(const char *buf, size_t len,
 					  ln_span_t *span, int64_t *epoch_ms);
 
+/**
+ * @brief Parse a bare ISO calendar date: YYYY-MM-DD (10 bytes, no clock).
+ *
+ * Month 01-12, day 01-31. No calendar (leap-year) check; matches ISODate.
+ * Uses a 16-byte SSE4.2/NEON layout check when 16 bytes are readable,
+ * otherwise a 10-byte scalar scan. Never reads past @p len.
+ *
+ * @return LN_SIMD_OK on success, LN_SIMD_EFORMAT if not an ISO date
+ */
+int ln_simd_iso_date(const char *buf, size_t len, ln_span_t *span);
+
 /*============================================================================
  * Utility Functions
  *============================================================================*/
@@ -395,6 +424,40 @@ ln_span_eq(const ln_span_t *a, const ln_span_t *b)
 	if (a->len != b->len) return false;
 	if (a->len == 0) return true;
 	return __builtin_memcmp(a->start, b->start, a->len) == 0;
+}
+
+/**
+ * Equal-length memory compare: 16-byte SIMD chunks, scalar tail.
+ * Both pointers must be readable for @p n bytes. n == 0 is equal.
+ */
+static inline bool
+ln_simd_memeq(const char *a, const char *b, size_t n)
+{
+	if (n == 0)
+		return true;
+#if defined(LN_SIMD_NEON)
+	while (n >= 16) {
+		uint8x16_t va = vld1q_u8((const uint8_t *)(const void *)a);
+		uint8x16_t vb = vld1q_u8((const uint8_t *)(const void *)b);
+		uint64x2_t eq = vreinterpretq_u64_u8(vceqq_u8(va, vb));
+		if (~vgetq_lane_u64(eq, 0) | ~vgetq_lane_u64(eq, 1))
+			return false;
+		a += 16;
+		b += 16;
+		n -= 16;
+	}
+#elif defined(LN_SIMD_SSE42)
+	while (n >= 16) {
+		__m128i va = _mm_loadu_si128((const __m128i *)(const void *)a);
+		__m128i vb = _mm_loadu_si128((const __m128i *)(const void *)b);
+		if (_mm_movemask_epi8(_mm_cmpeq_epi8(va, vb)) != 0xFFFF)
+			return false;
+		a += 16;
+		b += 16;
+		n -= 16;
+	}
+#endif
+	return __builtin_memcmp(a, b, n) == 0;
 }
 
 /**

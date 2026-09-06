@@ -132,13 +132,18 @@ Special options. The following ones can be set:
      practice this is extremely unlikely and as such for practical
      reasons the information can be considered reliable.
 
-   * **turbo** Enable TurboVM bytecode engine for normalization. This
-     requires liblognorm to be built with ``--enable-turbo``. When
-     enabled, normalization uses the compiled bytecode VM with SIMD
-     acceleration. Output uses native JSON types (numbers as integers,
-     not strings) and nested objects for dotted field names. Falls back
-     to standard normalization if bytecode compilation failed.
-     See :doc:`turbo` for details.
+   * **turbo** Enable TurboVM bytecode engine for JSON string output.
+     Requires liblognorm built with ``--enable-turbo``. When enabled,
+     ``ln_normalize_to_str()`` runs the compiled bytecode VM. Numeric
+     fields are strings by default (as with the standard parser), or
+     native JSON numbers with ``format="number"``. Dotted field names
+     nest. Falls back to the recursive walker if bytecode compilation
+     failed or a message is declined. See :doc:`turbo` for details.
+
+   * **turbostrict** Like ``turbo``, but a declined message is reported
+     as a failure instead of silently falling back to the recursive
+     walker. Use this when measuring turbo coverage or writing parity
+     tests.
 
 ::
 

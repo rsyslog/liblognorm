@@ -273,6 +273,21 @@ static int test_skip_space_long(void)
     return 1;
 }
 
+static int test_find_space(void)
+{
+    TEST_ASSERT_EQ(ln_simd_find_space("hello world", 11), 5, "space at 5");
+    TEST_ASSERT_EQ(ln_simd_find_space("hello", 5), 5, "no whitespace");
+    TEST_ASSERT_EQ(ln_simd_find_space("a\tb", 3), 1, "tab");
+    TEST_ASSERT_EQ(ln_simd_find_space("", 0), 0, "empty");
+    {
+        /* 16 non-ws then a space: crosses the vector width. */
+        const char *buf = "0123456789abcdef X";
+        TEST_ASSERT_EQ(ln_simd_find_space(buf, 18), 16,
+                       "space after 16-byte chunk");
+    }
+    return 1;
+}
+
 /*============================================================================
  * skip_chars Tests
  *============================================================================*/
@@ -879,6 +894,7 @@ int main(void)
     printf("skip_space tests:\n");
     RUN_TEST(test_skip_space);
     RUN_TEST(test_skip_space_long);
+    RUN_TEST(test_find_space);
     printf("\n");
 
     printf("skip_chars tests:\n");

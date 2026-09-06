@@ -49,6 +49,11 @@ typedef struct {
 	uint32_t          code_len; /**< Number of instructions */
 	const char       *name;     /**< Program name (optional) */
 	uint32_t          flags;    /**< Program flags */
+	const char       *strpool;  /**< Pool of NUL-terminated names and of
+									 literals that do not fit inline.
+									 LN_INSTR_F_NAME_POOL / OP_LITERAL_EXT /
+									 OP_FIELD_STR_TO hold a byte offset here.
+									 May be NULL. */
 } ln_program_t;
 
 /*============================================================================
@@ -65,8 +70,21 @@ typedef struct {
 	const char *name;           /**< Parent field name */
 	uint16_t    name_len;       /**< Name length */
 	uint8_t     is_nested;      /**< Create nested object for this context */
-	uint8_t     _pad;
+	uint8_t     discard;        /**< Field name was "-": match but store nothing,
+	                              *  including everything nested below it */
+	uint32_t    n_fields_at_push; /**< result->n_fields when this context opened,
+	                                *  so a context that stores nothing can still
+	                                *  produce the empty object the standard
+	                                *  parser produces */
 } ln_field_ctx_t;
+
+/*
+ * Convert an RFC3164 (kind 0) or RFC5424 (kind 1) date to a Unix timestamp for
+ * OP_FIELD_DATE with format="timestamp-unix"[-ms]. Allocates nothing; parity
+ * with the standard parser is covered by tests/turbo_test_date.c.
+ */
+int ln_turbo_date2unix(const int kind, const char *const str, const size_t strLen,
+	const int ms, size_t *const parsed, int64_t *const ts);
 
 /*============================================================================
  * Fork State
@@ -127,6 +145,10 @@ typedef struct {
 	/* Error info */
 	const char *error;          /**< Error message if failed */
 	char        error_buf[64];  /**< Per-instance error buffer (thread-safe) */
+
+	/* Set around a repeat parser-sub: a second add of the same name
+	 * fails the iteration instead of first-wins skip. */
+	uint8_t     fail_on_dup;
 } ln_vm_t;
 
 /*============================================================================
