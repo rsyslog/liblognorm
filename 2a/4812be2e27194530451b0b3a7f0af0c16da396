@@ -1,0 +1,14 @@
+tests/field_rfc5424timestamp-fmt_timestamp-unix-ms.sh
+  h_95716f3de0caf5 4,6,8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "2a4812be2e27194530451b0b3a7f0af0c16da396",
+  "prompts": {},
+  "humans": {
+    "h_95716f3de0caf5": {
+      "author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
