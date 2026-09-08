@@ -1,4 +1,4 @@
-check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary
+check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary literal_embedded_nul
 TESTS_TURBO_SHELLS = \
 	turbo_smoke.sh \
 	field_name_value_whitespace_turbo.sh \
@@ -25,6 +25,11 @@ unparsed_data_binary_SOURCES = unparsed_data_binary.c
 unparsed_data_binary_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
 unparsed_data_binary_LDADD = $(LIBLOGNORM_LIBS) $(JSON_C_LIBS)
 unparsed_data_binary_LDFLAGS = -no-install
+
+literal_embedded_nul_SOURCES = literal_embedded_nul.c
+literal_embedded_nul_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+literal_embedded_nul_LDADD = $(top_builddir)/src/.libs/liblognorm.a $(JSON_C_LIBS) $(LIBESTR_LIBS)
+literal_embedded_nul_LDFLAGS = -no-install
 
 #user_test_SOURCES = user_test.c
 #user_test_CPPFLAGS = $(LIBLOGNORM_CFLAGS) $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS)
@@ -183,7 +188,8 @@ TESTS_SHELLSCRIPTS += \
 TESTS = \
         $(TESTS_SHELLSCRIPTS) \
         err_callback_cookie.sh \
-        unparsed_data_binary.sh
+        unparsed_data_binary.sh \
+        literal_embedded_nul
 
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
@@ -203,6 +209,7 @@ EXTRA_DIST = exec.sh \
 	unparsed_data_binary.c \
 	unparsed_data_binary.sh \
 	$(json_eq_self_sources) \
+	literal_embedded_nul.c \
 	$(user_test_SOURCES)
 
 if ENABLE_REGEXP
