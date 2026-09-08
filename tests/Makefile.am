@@ -28,7 +28,7 @@ unparsed_data_binary_LDFLAGS = -no-install
 
 literal_embedded_nul_SOURCES = literal_embedded_nul.c
 literal_embedded_nul_CPPFLAGS = $(JSON_C_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
-literal_embedded_nul_LDADD = $(JSON_C_LIBS) $(LIBLOGNORM_LIBS)
+literal_embedded_nul_LDADD = $(top_builddir)/src/.libs/liblognorm.a $(JSON_C_LIBS) $(LIBESTR_LIBS)
 literal_embedded_nul_LDFLAGS = -no-install
 
 #user_test_SOURCES = user_test.c
