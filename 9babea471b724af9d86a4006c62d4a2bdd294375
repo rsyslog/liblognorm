@@ -1,0 +1,19 @@
+json_object.c
+  s_e37f845b5e452a::t_4454f53e43ac6d 369-381
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "9babea471b724af9d86a4006c62d4a2bdd294375",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

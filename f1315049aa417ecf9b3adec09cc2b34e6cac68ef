@@ -1,0 +1,87 @@
+benchmarks/run.sh
+  s_7312f75ac57855::t_569619a3d4742b 5-6
+  s_7312f75ac57855::t_e9cef1ea004804 1-4,7
+benchmarks/README.md
+  s_7312f75ac57855::t_e9cef1ea004804 1-5,8-16,18-57
+  s_7312f75ac57855::t_c0c82e53f34302 17
+  s_7312f75ac57855::t_20d9f8889347de 58-61
+  s_7312f75ac57855::t_04e27a0ee5e860 6-7
+benchmarks/results/current-main-findings.json
+  s_7312f75ac57855::t_45d757b2d11e1c 1-6,9-10,16-17,24-25,31-40
+  s_7312f75ac57855::t_f912cff93628fc 7-8
+  s_7312f75ac57855::t_b8529c0f6f6d77 11-15,18-23,26-30
+benchmarks/results/direct-lookup-findings.md
+  s_7312f75ac57855::t_20d9f8889347de 1-41
+Makefile.am
+  s_7312f75ac57855::t_e282df4e76e253 8-13
+  s_7312f75ac57855::t_db290f84f139b7 3-7
+  s_7312f75ac57855::t_20d9f8889347de 14-22
+benchmarks/results/current-main-findings.md
+  s_7312f75ac57855::t_b8529c0f6f6d77 16-20,32-38,41,58-62
+  s_7312f75ac57855::t_45d757b2d11e1c 1-3,5,7-15,21-31,39-40,42-57,63-85
+  s_7312f75ac57855::t_f912cff93628fc 4,6
+benchmarks/.gitignore
+  s_7312f75ac57855::t_e9cef1ea004804 1-3
+benchmarks/selftest.py
+  s_7312f75ac57855::t_8e3940a1108ba6 51,62-68
+  s_7312f75ac57855::t_04e27a0ee5e860 18,23
+  s_7312f75ac57855::t_f294c63bb5c02e 88-90
+  s_7312f75ac57855::t_02760c0482c035 71-74
+  s_7312f75ac57855::t_e9cef1ea004804 1-17,19-22,24-41,70,75-87,91-94
+  s_7312f75ac57855::t_751dc322cbb754 42-50,52-61,69
+json_object.c
+  s_7312f75ac57855::t_c2bfb80642c926 376-388,390
+tests/test_charcase.c
+  s_7312f75ac57855::t_c2bfb80642c926 18,25,51-83
+  s_7312f75ac57855::t_db546b526cad2d 84
+benchmarks/results/direct-lookup-findings.json
+  s_7312f75ac57855::t_20d9f8889347de 1-28,30-31
+  s_7312f75ac57855::t_b5ab68d9d4d934 29
+benchmarks/benchmark.c
+  s_7312f75ac57855::t_f294c63bb5c02e 166-167,239-240,242
+  s_7312f75ac57855::t_04e27a0ee5e860 91,100-103,116,147,207,213,253-255
+  s_7312f75ac57855::t_e9cef1ea004804 1-90,92-99,104-115,117-146,148-165,168-206,208-212,214-238,241,243-252,256-267
+benchmarks/runner.py
+  s_7312f75ac57855::t_02760c0482c035 229-231,378-398
+  s_7312f75ac57855::t_f294c63bb5c02e 50-51,169-170
+  s_7312f75ac57855::t_04e27a0ee5e860 19,98-104
+  s_7312f75ac57855::t_8e3940a1108ba6 259-274,276,299-300,311
+  s_7312f75ac57855::t_e9cef1ea004804 1-18,20-32,34-45,48-49,52-97,105-128,139-165,167-168,176-228,232-253,275,277-298,301-310,312-377,399-411,413-433
+  s_7312f75ac57855::t_751dc322cbb754 33,46-47,129-138,166,171-175,254-258,412
+benchmarks/results/current-main-a.json
+  s_7312f75ac57855::t_913a04ae709c42 1-1101
+benchmarks/results/current-main-a.md
+  s_7312f75ac57855::t_a8b7362c65a957 1-56
+benchmarks/results/current-main-b.json
+  s_7312f75ac57855::t_1324e9ea331ee6 1-1108
+benchmarks/results/current-main-b.md
+  s_7312f75ac57855::t_3a1230ebecc9e5 1-56
+benchmarks/results/direct-lookup-a.json
+  s_7312f75ac57855::t_8087448ee6dfb7 1-693
+benchmarks/results/direct-lookup-a.md
+  s_7312f75ac57855::t_929aea2c3a280c 1-56
+benchmarks/results/direct-lookup-b-rerun.json
+  s_7312f75ac57855::t_489baa06e788d2 1-251
+benchmarks/results/direct-lookup-b-rerun.md
+  s_7312f75ac57855::t_5aabd02aa7df90 1-22
+benchmarks/results/direct-lookup-b.json
+  s_7312f75ac57855::t_776192d5377bdf 1-693
+benchmarks/results/direct-lookup-b.md
+  s_7312f75ac57855::t_66a67c544c5ea4 1-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "f1315049aa417ecf9b3adec09cc2b34e6cac68ef",
+  "prompts": {},
+  "sessions": {
+    "s_7312f75ac57855": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f89cd-a229-71a0-a9b4-c9e8840bd4bc",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

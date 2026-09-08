@@ -1,0 +1,29 @@
+tests/Makefile.am
+  s_e37f845b5e452a::t_3a729cc55f5754 10
+json_object.h
+  s_e37f845b5e452a::t_9bf473e248b84a 252
+json_print.c
+  s_e37f845b5e452a::t_0a15b457a40a39 159,162-163,165-168,170-171,173-179,182,198-199
+tests/test_dump_buffered.c
+  s_e37f845b5e452a::t_90774b14010c7e 1-39
+tests/test_dump_buffered.expected
+  s_e37f845b5e452a::t_ec8a67ed7a3d64 1-2
+tests/test_dump_buffered.test
+  s_e37f845b5e452a::t_8b643797b51404 1-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "5d416b9c1f48f833cf53f4fcc04036718a6717b3",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

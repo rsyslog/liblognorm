@@ -1,0 +1,21 @@
+ChangeLog
+  s_778abe43e4136f::t_6f9877b6c1bc16 1-7
+configure.ac
+  s_778abe43e4136f::t_94258799fd537e 4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.0",
+  "base_commit_sha": "aaaa045bf5b31820e45e2a8a7bb1300da9ab9b07",
+  "prompts": {},
+  "sessions": {
+    "s_778abe43e4136f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a05d36-399b-72a3-8094-ed381d807a10",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

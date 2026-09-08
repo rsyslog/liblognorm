@@ -1,0 +1,19 @@
+tests/Makefile.am
+  s_e37f845b5e452a::t_8ba2c08d46baa3 80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "2e0085a6f003108f4adeaac85f2123abec30a3db",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

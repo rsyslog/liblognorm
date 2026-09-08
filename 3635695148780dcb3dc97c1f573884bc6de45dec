@@ -1,0 +1,37 @@
+tests/Makefile.am
+  s_e37f845b5e452a::t_f3c713ce32fd72 11-12,92-93
+tests/test_json_util.c
+  s_e37f845b5e452a::t_f3c713ce32fd72 2-3,5,7-33,35-43,45-46,48-86
+tests/test_dump_buffered.c
+  s_e37f845b5e452a::t_82cb679d348afb 5,9-16,18,20-23,29-49,51-59,62-63,65-69,71-95,100-151,153-154
+tests/test_dump_buffered.expected
+  s_e37f845b5e452a::t_82cb679d348afb 1
+tests/test_json_util.test
+  s_e37f845b5e452a::t_f3c713ce32fd72 3,5
+tests/test_array_api.expected
+  s_e37f845b5e452a::t_f3c713ce32fd72 1
+tests/test_json_util.expected
+  s_e37f845b5e452a::t_f3c713ce32fd72 1
+tests/test_array_api.test
+  s_e37f845b5e452a::t_f3c713ce32fd72 3,5
+tests/test_array_api.c
+  s_e37f845b5e452a::t_f3c713ce32fd72 1-32,34-37,39,42-62,66-89
+  s_e37f845b5e452a::t_82cb679d348afb 33,38,40-41
+  s_e37f845b5e452a::t_3f75012d1972dd 63-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "3635695148780dcb3dc97c1f573884bc6de45dec",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

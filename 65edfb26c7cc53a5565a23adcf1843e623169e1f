@@ -1,0 +1,70 @@
+tests/test_fuzz_serializer.c
+  s_e37f845b5e452a::t_0fa7b3e693a8fd 1-103,106-107,112-137,139,145-150,153-214
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 104-105,108-111,138,140-144
+  s_e37f845b5e452a::t_d547ff7a2c4d2c 151-152
+tests/fuzz/corpus/parser/array.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/fuzz/corpus/parser/truncated.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/fuzz/corpus/serializer/strings.seed
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/fuzz/json.dict
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1-12
+tests/fuzz/corpus/parser/invalid.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/fuzz/corpus/parser/number.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/test_fuzz_parser.c
+  s_e37f845b5e452a::t_0fa7b3e693a8fd 1-17,23-26,28-32,35-61,64-130
+  s_e37f845b5e452a::t_d547ff7a2c4d2c 33-34,62-63
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 18-22,27
+tests/test_fuzz_serializer.test
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1-5,7
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 6
+tests/fuzz/corpus/parser/deep.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+.github/workflows/daily_fuzz.yml
+  s_e37f845b5e452a::t_f0ad6f8d3385f7 52
+  s_e37f845b5e452a::t_e4f10f081d73c6 67
+  s_e37f845b5e452a::t_b1d733b3b1779b 1,3,6-16,48-51,53-55,59-66,68-70,74-91,133-135,139-141,145-147
+  s_e37f845b5e452a::t_a9ba1f16948e3b 132
+  s_e37f845b5e452a::t_ff1001b97aac8b 2,5,17-47
+  s_e37f845b5e452a::t_44b9aab6b57a7e 4,56-58,71-73,136-138,142-144
+  s_e37f845b5e452a::t_7f7e037d5835a8 92-131
+tests/fuzz/README.md
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1-13,18-21
+  s_e37f845b5e452a::t_ed4cb0a83edb63 14-15,17
+  s_e37f845b5e452a::t_ac893f77632880 16
+tests/fuzz/corpus/parser/escaped.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/test_fuzz_parser.test
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 6
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1-5,7
+tests/fuzz/corpus/serializer/nesting.seed
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+Makefile.am
+  s_e37f845b5e452a::t_ed4cb0a83edb63 13,20,23-24,27
+  s_e37f845b5e452a::t_8b49d2ee42daa4 10-12,14,16-19,21-22,25-26,28-29,38
+  s_e37f845b5e452a::t_0bdf96da5db62b 30-33,35-36
+  s_e37f845b5e452a::t_ac893f77632880 15,34,37
+tests/fuzz/corpus/parser/object.json
+  s_e37f845b5e452a::t_8b49d2ee42daa4 1
+tests/Makefile.am
+  s_e37f845b5e452a::t_8b49d2ee42daa4 13-14,47-48,98-108
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "65edfb26c7cc53a5565a23adcf1843e623169e1f",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": null
+    }
+  }
+}

@@ -1,0 +1,23 @@
+tests/parse_flags.c
+  s_e37f845b5e452a::t_edc2572f556992 24
+tests/Makefile.am
+  s_e37f845b5e452a::t_1b2dfa6d5202bf 7-23,27-29,66
+  s_e37f845b5e452a::t_43b1683fad8a88 64
+  s_e37f845b5e452a::t_edc2572f556992 65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "1b6be54e2dd149ab12278d9bafd09a3af5dc8e6c",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

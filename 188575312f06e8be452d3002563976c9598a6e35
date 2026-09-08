@@ -1,0 +1,50 @@
+.github/workflows/zizmor.yml
+  s_e37f845b5e452a::t_5ad6e8eda24bc8 1-40
+devtools/run-build.sh
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-27
+.github/workflows/run_checks.yml
+  s_e37f845b5e452a::t_5e916ba4f100e8 1-260
+devtools/default_dev_container
+  s_e37f845b5e452a::t_717b4df8f69ee5 1
+.github/workflows/draft_release.yml
+  s_e37f845b5e452a::t_0268151c88dcd6 1-103,105-198
+  s_e37f845b5e452a::t_9b4ce475504d18 104
+.github/workflows/codeql.yml
+  s_e37f845b5e452a::t_5e916ba4f100e8 1-32,34,36-74
+  s_e37f845b5e452a::t_9b4ce475504d18 33,35
+devtools/ci/Dockerfile.arm
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-17
+.github/workflows/shellcheck.yml
+  s_e37f845b5e452a::t_5ad6e8eda24bc8 1-50
+.github/workflows/yaml_lint.yml
+  s_e37f845b5e452a::t_5ad6e8eda24bc8 1-51
+devtools/run-static-analyzer.sh
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-31
+devtools/devcontainer.sh
+  s_e37f845b5e452a::t_f00ff82c5baae4 44
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-43,45-63
+devtools/run-ci.sh
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-42
+.github/workflows/actionlint.yml
+  s_e37f845b5e452a::t_5ad6e8eda24bc8 1-27
+devtools/gather-check-logs.sh
+  s_e37f845b5e452a::t_717b4df8f69ee5 1-45
+.github/CODEOWNERS
+  s_e37f845b5e452a::t_5ad6e8eda24bc8 1-7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "188575312f06e8be452d3002563976c9598a6e35",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+tests/test_fuzz_parser.test
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 6
+.github/workflows/daily_fuzz.yml
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 52
+tests/test_fuzz_serializer.test
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 6
+tests/test_fuzz_parser.c
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 18-22,27
+tests/test_fuzz_serializer.c
+  s_e37f845b5e452a::t_23b9c13ab2f7c1 104-105,108-111,138,140-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6c0d4fea65a67e7b97990bde326f44fcb0f6545d",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}

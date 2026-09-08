@@ -1,0 +1,63 @@
+Makefile.am
+  s_e37f845b5e452a::t_743431382dd1a4 3-22
+benchmarks/.gitignore
+  s_e37f845b5e452a::t_31a5cd0a397d88 1-3
+benchmarks/README.md
+  s_e37f845b5e452a::t_d0da2846135edf 1-61
+benchmarks/benchmark.c
+  s_e37f845b5e452a::t_3a9c37a680c5f8 1-267
+benchmarks/results/current-main-a.json
+  s_e37f845b5e452a::t_86124e0806ce51 1-1101
+benchmarks/results/current-main-a.md
+  s_e37f845b5e452a::t_ce752e2346bd9f 1-56
+benchmarks/results/current-main-b.json
+  s_e37f845b5e452a::t_ba7b97a733b809 1-1108
+benchmarks/results/current-main-b.md
+  s_e37f845b5e452a::t_8cd5e18840877c 1-56
+benchmarks/results/current-main-findings.json
+  s_e37f845b5e452a::t_e987a060bac744 1-40
+benchmarks/results/current-main-findings.md
+  s_e37f845b5e452a::t_9d9b68183e08e7 1-85
+benchmarks/results/direct-lookup-a.json
+  s_e37f845b5e452a::t_510f7623b57628 1-693
+benchmarks/results/direct-lookup-a.md
+  s_e37f845b5e452a::t_04c6d47160b71d 1-56
+benchmarks/results/direct-lookup-b-rerun.json
+  s_e37f845b5e452a::t_9f63b5041fc164 1-251
+benchmarks/results/direct-lookup-b-rerun.md
+  s_e37f845b5e452a::t_30e907150097a1 1-22
+benchmarks/results/direct-lookup-b.json
+  s_e37f845b5e452a::t_42a7eb95d059cf 1-693
+benchmarks/results/direct-lookup-b.md
+  s_e37f845b5e452a::t_080f3b7b299628 1-56
+benchmarks/results/direct-lookup-findings.json
+  s_e37f845b5e452a::t_b5ecf48c27839f 1-31
+benchmarks/results/direct-lookup-findings.md
+  s_e37f845b5e452a::t_8a5739393c7f27 1-41
+benchmarks/run.sh
+  s_e37f845b5e452a::t_56c796c1aedf15 1-7
+benchmarks/runner.py
+  s_e37f845b5e452a::t_8ebc1b7d2963c2 1-433
+benchmarks/selftest.py
+  s_e37f845b5e452a::t_e20af6c46e87a5 1-94
+json_object.c
+  s_e37f845b5e452a::t_18e82021387fd8 376-388,390
+tests/test_charcase.c
+  s_e37f845b5e452a::t_b06f8fbba446cb 18,25,51-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "6b11f09e7bbf5ed1b2880fec397275787eccb85e",
+  "prompts": {},
+  "sessions": {
+    "s_e37f845b5e452a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f8dba-5c62-70f3-afa4-5dcae3e3814d",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
