@@ -2,6 +2,7 @@
 Version 2.1.1, 2026-09-08
 - TurboVM: fix optimized builds failing on an uninitialized repeat name
   length warning.
+  Thanks to Jérémie Jourdin of Advens for the patch.
 - parser(date-rfc5424): prevent millisecond timestamp overflow
   Parse only the required millisecond precision while still consuming
   additional fractional digits.
