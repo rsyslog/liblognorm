@@ -2,9 +2,11 @@
 # added 2026-09-08 by Codex
 # This file is part of the liblognorm project, released under ASL 2.0
 
-. $srcdir/exec.sh
+# shellcheck source=tests/exec.sh disable=SC1091
+srcdir="${srcdir:-.}"
+. "$srcdir"/exec.sh
 
-test_def $0 "RFC3164 timestamp with a null format"
+test_def "$0" "RFC3164 timestamp with a null format"
 add_rule 'version=2'
 add_rule 'rule=:%{"type":"date-rfc3164","name":"timestamp","format":null}%'
 
