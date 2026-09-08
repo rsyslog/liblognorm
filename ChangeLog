@@ -1,4 +1,17 @@
 ----------------------------------------------------------------------
+Version 2.1.1, 2026-09-08
+- TurboVM: fix optimized builds failing on an uninitialized repeat name
+  length warning.
+- parser(date-rfc5424): prevent millisecond timestamp overflow
+  Parse only the required millisecond precision while still consuming
+  additional fractional digits.
+- parser(literal): prevent reads past the input terminator
+  Embedded NUL bytes no longer let byte-counted literal matching continue
+  past the duplicated C string terminator.
+- parser(date-rfc3164): reject a null format safely
+  Malformed parser JSON no longer causes a null-pointer dereference and
+  continues to use the established default string output.
+----------------------------------------------------------------------
 Version 2.1.0, 2026-06-25
 - add unparsed-data-binary for failed parses containing ASCII control bytes;
   the field contains the complete unparsed byte span as lowercase hexadecimal
