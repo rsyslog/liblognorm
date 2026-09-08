@@ -141,6 +141,7 @@ TESTS_SHELLSCRIPTS = \
 	field_float.sh \
 	field_float-fmt_number.sh \
 	field_float_jsoncnf.sh \
+	field_rfc3164timestamp-format-null.sh \
 	field_rfc5424timestamp-fmt_timestamp-unix.sh \
 	field_rfc5424timestamp-fmt_timestamp-unix-ms.sh \
 	very_long_logline_jsoncnf.sh

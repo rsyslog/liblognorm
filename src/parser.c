@@ -745,7 +745,10 @@ PARSER_Construct(RFC3164Date)
 		struct json_object *const val = json_object_iter_peek_value(&it);
 		if(!strcmp(key, "format")) {
 			const char *fmtmode = json_object_get_string(val);
-			if(!strcmp(fmtmode, "timestamp-unix")) {
+			if(fmtmode == NULL) {
+				ln_errprintf(ctx, 0,
+					"invalid value for date-rfc3164:format null");
+			} else if(!strcmp(fmtmode, "timestamp-unix")) {
 				data->fmt_mode = FMT_AS_TIMESTAMP_UX;
 			} else if(!strcmp(fmtmode, "timestamp-unix-ms")) {
 				data->fmt_mode = FMT_AS_TIMESTAMP_UX_MS;
