@@ -1,0 +1,14 @@
+tests/field_rfc3164timestamp-format-null.sh
+  h_95716f3de0caf5 6,8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.2",
+  "base_commit_sha": "1d33001f30c04a91df066cb3c34b77062e74f22d",
+  "prompts": {},
+  "humans": {
+    "h_95716f3de0caf5": {
+      "author": "Rainer Gerhards <rgerhards@adiscon.com>"
+    }
+  }
+}
