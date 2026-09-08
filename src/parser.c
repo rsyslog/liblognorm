@@ -364,9 +364,17 @@ PARSER_Parse(RFC5424Date)
 	/* Now let's see if we have secfrac */
 	if(len > 0 && *pszTS == '.') {
 		--len;
-		const unsigned char *pszStart = ++pszTS;
-		secfrac = hParseInt(&pszTS, &len);
-		secfracPrecision = (int) (pszTS - pszStart);
+		++pszTS;
+		secfracPrecision = 0;
+		secfrac = 0;
+		while(len > 0 && myisdigit(*pszTS)) {
+			if(secfracPrecision < 3) {
+				secfrac = secfrac * 10 + *pszTS - '0';
+				++secfracPrecision;
+			}
+			++pszTS;
+			--len;
+		}
 	} else {
 		secfracPrecision = 0;
 		secfrac = 0;
@@ -417,17 +425,12 @@ PARSER_Parse(RFC5424Date)
 				hour, minute, second, OffsetHour, OffsetMinute, OffsetMode);
 			if(data->fmt_mode == FMT_AS_TIMESTAMP_UX_MS) {
 				timestamp *= 1000;
-				/* simulate pow(), do not use math lib! */
-				int div = 1;
 				if(secfracPrecision == 1) {
 					secfrac *= 100;
 				} else if(secfracPrecision == 2) {
 					secfrac *= 10;
-				} else if(secfracPrecision > 3) {
-					for(int i = 0 ; i < (secfracPrecision - 3) ; ++i)
-						div *= 10;
 				}
-				timestamp += secfrac / div;
+				timestamp += secfrac;
 			}
 			*value = json_object_new_int64(timestamp);
 		}
