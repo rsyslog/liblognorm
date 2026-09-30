@@ -674,9 +674,12 @@ ln_simd_find_space(const char *buf, size_t len)
  * Instead of rebuilding the 256-byte table on every call, we cache
  * the last-used table per thread.
  *
- * This is a simple 1-entry cache: if the pointer matches, reuse.
- * Since instruction data pointers are stable for the program lifetime,
- * pointer comparison is sufficient (no strcmp needed).
+ * Key on the set contents, never on the caller's pointer. The pointer
+ * often lives in the turbo string pool; a freed pool can be reused at
+ * the same address by a new context with different set bytes.
+ *
+ * Sets can be up to UINT16_MAX. Only sets of length 1..CHARSET_CACHE_CAP
+ * are cached; longer sets rebuild every time and invalidate the entry.
  *
  * Cache hit rate in practice: >95% (word extraction dominates).
  *----------------------------------------------------------------------------*/
@@ -689,24 +692,39 @@ ln_simd_find_space(const char *buf, size_t len)
 #define THREAD_LOCAL /* nothing: falls back to rebuild every time */
 #endif
 
-static THREAD_LOCAL const char *s_cached_chars = NULL;
-static THREAD_LOCAL uint8_t     s_cached_table[256];
+#define CHARSET_CACHE_CAP 64
+
+static THREAD_LOCAL uint8_t  s_cached_set[CHARSET_CACHE_CAP];
+static THREAD_LOCAL size_t   s_cached_set_len = 0;
+static THREAD_LOCAL uint8_t  s_cached_table[256];
 
 /**
  * @brief Get or build a character class table, with 1-entry TLS cache.
  *
- * @param[in]  chars  Null-terminated character set string (pointer-stable)
+ * @param[in]  chars  Null-terminated character set string
  * @return Pointer to the 256-byte TLS-cached table
  */
 static inline const uint8_t *
 get_char_class(const char *chars)
 {
-	if (chars == s_cached_chars && s_cached_chars != NULL) {
-		return s_cached_table;  /* Cache hit: same pointer, same data */
+	size_t len = strlen(chars);
+
+	if (len > 0 && len <= CHARSET_CACHE_CAP
+	    && len == s_cached_set_len
+	    && memcmp(chars, s_cached_set, len) == 0) {
+		return s_cached_table;  /* Cache hit: same set bytes */
 	}
-	/* Cache miss: build and cache */
+
+	/* Always build from the live pointer; never read a cached one. */
 	build_char_class(chars, s_cached_table);
-	s_cached_chars = chars;
+
+	if (len > 0 && len <= CHARSET_CACHE_CAP) {
+		memcpy(s_cached_set, chars, len);
+		s_cached_set_len = len;
+	} else {
+		/* Too long to cache: invalidate so a later short set rebuilds. */
+		s_cached_set_len = 0;
+	}
 	return s_cached_table;
 }
 

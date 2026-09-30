@@ -168,6 +168,31 @@ static int test_find_char_set_long(void)
     return 1;
 }
 
+/*
+ * Regression: scalar charset cache must key on set contents, not address.
+ *
+ * On ARM HF (and i386) the scalar get_char_class() once cached by the
+ * caller's pointer. turbo_test_charset creates a fresh context per
+ * comparison; the next pool is often malloc'd at the same address, so
+ * after a ",;" set the ",;|" set reused the old table and missed '|'.
+ * One stack buffer rewritten in place hits that bug; two string
+ * literals would have different addresses and miss it.
+ */
+static int test_find_char_set_cache_by_content(void)
+{
+    char set[8];
+
+    strcpy(set, ",;");
+    TEST_ASSERT_EQ(ln_simd_find_char_set("abc;def", 7, set), 3,
+                   "find ';' with two-char set");
+
+    strcpy(set, ",;|");
+    TEST_ASSERT_EQ(ln_simd_find_char_set("abc|def", 7, set), 3,
+                   "find '|' after set grew in same buffer");
+
+    return 1;
+}
+
 static int test_find_not_char_set_basic(void)
 {
     /* Skip digits */
@@ -883,6 +908,7 @@ int main(void)
     RUN_TEST(test_find_char_set_basic);
     RUN_TEST(test_find_char_set_edge);
     RUN_TEST(test_find_char_set_long);
+    RUN_TEST(test_find_char_set_cache_by_content);
     printf("\n");
 
     printf("find_not_char_set tests:\n");
