@@ -1,4 +1,14 @@
 ----------------------------------------------------------------------
+unreleased
+- rulebase directive rewrite= renames or drops keys of an inlined
+  %.:json% object, keys of a %:cef% extension list and keys of a
+  %:name-value-list% field, while they are stored. The six CEF header
+  fields are unchanged. A rule with no rewrite= line is unchanged.
+  |lower ASCII-lowercases a string value. The tag must belong to one
+  unambiguous %.:json%, %:cef% or %:name-value-list% rule.
+  See doc/configuration.rst, section "JSON key rewrite".
+
+----------------------------------------------------------------------
 Version 2.1.1, 2026-09-08
 - TurboVM: fix optimized builds failing on an uninitialized repeat name
   length warning.

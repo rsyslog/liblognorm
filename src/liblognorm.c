@@ -94,6 +94,13 @@ ln_initCtx(void)
 		ctx = NULL;
 		goto done;
 	}
+	if((ctx->rewrites = ln_newRewriteSet(ctx)) == NULL) {
+		ln_deleteAnnotSet(ctx->pas);
+		ln_pdagDelete(ctx->pdag);
+		free(ctx);
+		ctx = NULL;
+		goto done;
+	}
 
 #ifdef ENABLE_TURBO
 	/* Turbo ctx is deferred until LN_CTXOPT_TURBO is set via ln_setCtxOpts() */
@@ -194,6 +201,8 @@ ln_exitCtx(ln_ctx ctx)
 		es_deleteStr(ctx->rulePrefix);
 	if(ctx->pas != NULL)
 		ln_deleteAnnotSet(ctx->pas);
+	if(ctx->rewrites != NULL)
+		ln_deleteRewriteSet(ctx->rewrites);
 	free(ctx);
 done:
 	return r;
@@ -261,6 +270,8 @@ ln_loadSamples(ln_ctx ctx, const char *file)
 	if (r != -1) {
 		--ctx->include_level;
 		ctx->conf_file = NULL;
+		if (r == 0 && ctx->include_level == 0)
+			r = ln_rewrite_bind(ctx);
 	}
 
 	free((void*)tofree);
@@ -282,6 +293,8 @@ ln_loadSamplesFromString(ln_ctx ctx, const char *string)
 	--ctx->include_level;
 	free((void*)tofree);
 	ctx->conf_file = NULL;
+	if (r == 0 && ctx->include_level == 0)
+		r = ln_rewrite_bind(ctx);
 	ln_tryTurboCompile(ctx, r);
 done:
 	return r;

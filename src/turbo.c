@@ -43,6 +43,7 @@
 #include "turbo.h"
 #include "turbo_opcode.h"
 #include "turbo_vm.h"
+#include "rewrite.h"
 #include "turbo_result_fast.h"
 #include "turbo_arena.h"
 #include "turbo_simd.h"
@@ -965,6 +966,13 @@ emit_parser(compiler_t *comp, ln_parser_t *prs, uint32_t *out_pc)
 	if (pc == UINT32_MAX) return -1;
 	*out_pc = pc;
 
+	/* %.:json%, %:cef% or %:name-value-list% with a rewrite= table.
+	 * aux 0 keeps every key. */
+	if ((op == OP_FIELD_JSON && fname[0] == '.' && fname[1] == '\0')
+	    || op == OP_CEF_HDR || op == OP_FIELD_NAME_VALUE)
+		comp->turbo->code[pc].aux =
+			(uint16_t)ln_rewrite_id_for_parser(prs);
+
 	/* string{hexdigit,lazy} stops at the first non-hex byte, not at a space.
 	 * Mapping it to a whitespace word ate "01250003:5:" as one field and
 	 * the rest of the rule failed. aux 1 selects that scan on OP_FIELD_WORD. */
@@ -1499,6 +1507,7 @@ ln_turbo_normalize_to_str(ln_ctx ctx, const char *str, size_t strLen,
 		.name = "turbo",
 		.strpool = turbo->strpool
 	};
+	prog.rw_tabs = ln_rewrite_tabs(ctx, &prog.n_rw_tabs);
 
 	/* Execute VM with fast result */
 	int r = ln_vm_exec(&turbo->vm, &prog, str, strLen, &turbo->result);
@@ -1627,6 +1636,7 @@ ln_turbo_normalize_raw(ln_ctx ctx, const char *str, size_t strLen,
 		.name = "turbo",
 		.strpool = turbo->strpool
 	};
+	prog.rw_tabs = ln_rewrite_tabs(ctx, &prog.n_rw_tabs);
 
 	/* Execute VM */
 	int r = ln_vm_exec(&turbo->vm, &prog, str, strLen, &turbo->result);

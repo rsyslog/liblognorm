@@ -113,6 +113,7 @@ struct ln_pdag {
 		unsigned visited:1;	/**< work var for recursive procedures */
 	} flags;
 	struct json_object *tags;	/**< tags to assign to events of this type */
+	unsigned rewrite_id;		/**< 1-based JSON rewrite table, 0 = none */
 	int refcnt;			/**< reference count for deleting tracking */
 	struct {
 		unsigned called;
@@ -162,6 +163,7 @@ struct npb {
 	size_t longestParsedTo;	/**< up to which byte could this be parsed? */
 	es_str_t *rule;			/**< a mock-up of the rule used to parse */
 	es_str_t *exec_path;
+	const struct ln_parser_s *prs;	/**< parser currently executing */
 #ifdef ADVANCED_STATS
 	int pathlen;
 	int backtracked;

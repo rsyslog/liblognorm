@@ -27,6 +27,8 @@ liblognorm_la_SOURCES = \
 	pdag.h \
 	annot.c \
 	annot.h \
+	rewrite.c \
+	rewrite.h \
 	samp.c \
 	samp.h \
 	lognorm.c \

@@ -51,6 +51,8 @@ tests/turbo_test_leadws
 tests/turbo_test_checkpoint
 tests/turbo_test_compile
 tests/unparsed_data_binary
+tests/rewrite_test
+tests/rewrite_fuzz
 configure~
 .deps/
 .libs/

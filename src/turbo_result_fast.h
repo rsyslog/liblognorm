@@ -82,6 +82,10 @@ _Static_assert(sizeof(ln_fast_field_t) == 64, "Field must be 64 bytes");
  * (see lognorm-turbo.h, included above); only the STATIC_* bits are private. */
 #define LN_FFIELD_STATIC_NAME 0x01  /* Name is static (don't free) */
 #define LN_FFIELD_STATIC_VAL  0x02  /* Value is static (don't free) */
+/* A rewrite= value for a name an earlier parser of the rule stored. The older
+ * field stays untouched until the rule matches, so a backtrack (which only
+ * rolls n_fields back) still finds it; OP_MATCH then drops it. */
+#define LN_FFIELD_SUPERSEDES  0x80
 
 /**
  * @brief Check if a field name contains a dot (indicating nested object).
@@ -138,6 +142,7 @@ struct ln_fast_result_s {
 #define LN_FRESULT_HAS_ORIG  0x04
 #define LN_FRESULT_TRUNCATED 0x08  /* a field or tag was dropped: the result hit
 									  LN_FAST_MAX_FIELDS / LN_FAST_MAX_TAGS */
+#define LN_FRESULT_SUPERSEDE 0x80  /* some field may carry LN_FFIELD_SUPERSEDES */
 
 /*============================================================================
  * Fast Hash Function (FNV-1a)
@@ -243,6 +248,54 @@ ln_fast_add_string_static(ln_fast_result_t *r,
 {
 	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
 	ln_fast_store_string(&r->fields[r->n_fields++], name, name_len, val, val_len);
+	return 0;
+}
+
+/**
+ * @brief Store a rewrite= string value, backtrack-safe.
+ *
+ * A slot stored since first_field (by the parser doing the rewrite) is
+ * reused, last write wins. A name an earlier parser of the rule stored is
+ * not overwritten: a backtrack only rolls n_fields back and would keep the
+ * overwrite. It gets a new slot marked LN_FFIELD_SUPERSEDES, which replaces
+ * the earlier field once the rule matches.
+ *
+ * @return 0 on success, -1 if the result is full.
+ */
+static inline int
+ln_fast_set_rewritten_string(ln_fast_result_t *r, uint32_t first_field,
+			     const char *name, uint16_t name_len,
+			     const char *val, uint32_t val_len)
+{
+	int supersedes = 0;
+	int i;
+
+	for (i = (int)r->n_fields - 1; i >= 0; i--) {
+		ln_fast_field_t *const f = &r->fields[i];
+
+		if (f->name_len != name_len)
+			continue;
+		if (f->name != name
+			&& (f->name == NULL || memcmp(f->name, name, name_len) != 0))
+			continue;
+		if ((uint32_t)i >= first_field) {
+			/* a store resets the flags: keep the supersede mark */
+			const uint8_t keep = f->flags & LN_FFIELD_SUPERSEDES;
+
+			ln_fast_store_string(f, name, name_len, val, val_len);
+			f->flags |= keep;
+			return 0;
+		}
+		supersedes = 1;
+		break;
+	}
+	if (r->n_fields >= LN_FAST_MAX_FIELDS) { r->flags |= LN_FRESULT_TRUNCATED; return -1; }
+	ln_fast_store_string(&r->fields[r->n_fields], name, name_len, val, val_len);
+	if (supersedes) {
+		r->fields[r->n_fields].flags |= LN_FFIELD_SUPERSEDES;
+		r->flags |= LN_FRESULT_SUPERSEDE;
+	}
+	r->n_fields++;
 	return 0;
 }
 

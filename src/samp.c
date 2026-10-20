@@ -892,6 +892,8 @@ ln_processSamp(ln_ctx ctx, const char *buf, const size_t lenBuf)
 		CHKR(processType(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "annotate")) {
 		CHKR(processAnnotate(ctx, buf, lenBuf, offs));
+	} else if(!es_strconstcmp(typeStr, "rewrite")) {
+		CHKR(ln_rewrite_add_line(ctx, buf, lenBuf, offs));
 	} else if(!es_strconstcmp(typeStr, "include")) {
 		CHKR(processInclude(ctx, buf, offs));
 	} else {

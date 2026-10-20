@@ -1,4 +1,5 @@
-check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary literal_embedded_nul
+check_PROGRAMS = json_eq err_callback_cookie unparsed_data_binary literal_embedded_nul \
+	rewrite_test rewrite_fuzz
 TESTS_TURBO_SHELLS = \
 	turbo_smoke.sh \
 	field_name_value_whitespace_turbo.sh \
@@ -190,7 +191,19 @@ TESTS = \
         $(TESTS_SHELLSCRIPTS) \
         err_callback_cookie.sh \
         unparsed_data_binary.sh \
-        literal_embedded_nul
+        literal_embedded_nul \
+        rewrite_test rewrite_fuzz
+
+rewrite_test_SOURCES = rewrite_test.c
+rewrite_test_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+rewrite_test_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS)
+# -static links the uninstalled archive. -no-install still loads a system liblognorm.so.5.
+rewrite_test_LDFLAGS = -static
+
+rewrite_fuzz_SOURCES = rewrite_fuzz.c
+rewrite_fuzz_CPPFLAGS = $(JSON_C_CFLAGS) $(LIBESTR_CFLAGS) $(WARN_CFLAGS) -I$(top_srcdir)/src
+rewrite_fuzz_LDADD = ../src/liblognorm.la $(JSON_C_LIBS) $(LIBESTR_LIBS)
+rewrite_fuzz_LDFLAGS = -static
 
 REGEXP_TESTS = \
 	field_regex_default_group_parse_and_return.sh \
@@ -211,6 +224,8 @@ EXTRA_DIST = exec.sh \
 	unparsed_data_binary.sh \
 	$(json_eq_self_sources) \
 	literal_embedded_nul.c \
+	rewrite_test.c \
+	rewrite_fuzz.c \
 	$(user_test_SOURCES)
 
 if ENABLE_REGEXP

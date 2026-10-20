@@ -30,6 +30,7 @@
 #include "liblognorm.h"
 #include "pdag.h"
 #include "annot.h"
+#include "rewrite.h"
 
 /* some limits */
 #define MAX_FIELDNAME_LEN 1024
@@ -53,6 +54,7 @@ struct ln_ctx_s {
 	void *errmsgCookie; /**< cookie to be passed to error message callback */
 	ln_pdag *pdag; /**< parse dag being used by this context */
 	ln_annotSet *pas; /**< associated set of annotations */
+	ln_rewriteSet *rewrites; /**< JSON key renames, keyed by rule tag */
 	unsigned nNodes; /**< number of nodes in our parse tree */
 	unsigned char debug; /**< boolean: are we in debug mode? */
 	es_str_t *rulePrefix; /**< work variable for loading rule bases

@@ -44,6 +44,8 @@ extern "C" {
  * Program Structure
  *============================================================================*/
 
+struct ln_rw_tab;
+
 typedef struct {
 	const ln_instr_t *code;     /**< Instruction array */
 	uint32_t          code_len; /**< Number of instructions */
@@ -54,6 +56,9 @@ typedef struct {
 									 LN_INSTR_F_NAME_POOL / OP_LITERAL_EXT /
 									 OP_FIELD_STR_TO hold a byte offset here.
 									 May be NULL. */
+	const struct ln_rw_tab *rw_tabs; /**< JSON rewrite tables. OP_FIELD_JSON
+					  * aux is a 1-based index, 0 = none. */
+	uint32_t          n_rw_tabs;
 } ln_program_t;
 
 /*============================================================================

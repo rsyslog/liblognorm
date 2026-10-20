@@ -41,6 +41,7 @@
 #include "lognorm.h"
 #include "internal.h"
 #include "parser.h"
+#include "rewrite.h"
 #include "samp.h"
 #include "helpers.h"
 
@@ -2788,7 +2789,8 @@ static int
 parseNameValue(npb_t *const npb,
 	size_t *const __restrict__ offs,
 	struct json_object *const __restrict__ valroot,
-	const char sep, const char ass, const bool ignore_ws)
+	const char sep, const char ass, const bool ignore_ws,
+	const struct ln_rw_tab *tab)
 {
 	int r = LN_WRONGPARSER;
 	size_t i = *offs;
@@ -2905,12 +2907,37 @@ parseNameValue(npb_t *const npb,
 	if(valroot == NULL)
 		goto done;
 
+	if(tab != NULL) {
+		const struct ln_rw_ent *ent = ln_rw_lookup(tab, npb->str + iName, lenName);
+		json_object *json;
+
+		if(ent == NULL)
+			goto done;
+		if(ent->lower && lenVal > 0) {
+			size_t k;
+
+			CHKN(name = malloc(lenVal));
+			memcpy(name, npb->str + iVal, lenVal);
+			for(k = 0; k < lenVal; ++k) {
+				if(name[k] >= 'A' && name[k] <= 'Z')
+					name[k] = (char)(name[k] + 32);
+			}
+			CHKN(json = json_object_new_string_len(name, lenVal));
+		} else {
+			CHKN(json = json_object_new_string_len(npb->str + iVal, lenVal));
+		}
+		json_object_object_add(valroot, ent->dst, json);
+		goto done;
+	}
+
 	CHKN(name = malloc(lenName+1));
 	memcpy(name, npb->str+iName, lenName);
 	name[lenName] = '\0';
-	json_object *json;
-	CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
-	json_object_object_add(valroot, name, json);
+	{
+		json_object *json;
+		CHKN(json = json_object_new_string_len(npb->str+iVal, lenVal));
+		json_object_object_add(valroot, name, json);
+	}
 done:
 	free(name);
 	return r;
@@ -3007,7 +3034,7 @@ PARSER_Parse(NameValue)
 
 	/* stage one */
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, NULL, sep, ass, ignore_ws) == 0 ) {
+		if (parseNameValue(npb, &i, NULL, sep, ass, ignore_ws, NULL) == 0 ) {
 			if(ignore_ws && sep != 0) {
 				while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
 					++i;
@@ -3032,8 +3059,11 @@ PARSER_Parse(NameValue)
 
 	i = *offs;
 	CHKN(*value = json_object_new_object());
+	{
+	const struct ln_rw_tab *tab = ln_rewrite_tab_for_parser(npb->ctx, npb->prs);
+
 	while(i < npb->strLen) {
-		if (parseNameValue(npb, &i, *value, sep, ass, ignore_ws) == 0 ) {
+		if (parseNameValue(npb, &i, *value, sep, ass, ignore_ws, tab) == 0 ) {
 			if(ignore_ws && sep != 0) {
 				while(i < npb->strLen && isspace((unsigned char) npb->str[i]))
 					++i;
@@ -3046,6 +3076,7 @@ PARSER_Parse(NameValue)
 		} else {
 			break;
 		}
+	}
 	}
 
 	/* TODO: fix mem leak if alloc json fails */
@@ -3277,8 +3308,15 @@ cefParseExtensions(npb_t *const npb,
 	size_t iValue, lenValue;
 	char *name = NULL;
 	char *value = NULL;
+	const struct ln_rw_tab *tab;
+
+	tab = NULL;
+	if(jroot != NULL)
+		tab = ln_rewrite_tab_for_parser(npb->ctx, npb->prs);
 
 	while(i < npb->strLen) {
+		const struct ln_rw_ent *ent = NULL;
+
 		while(i < npb->strLen && npb->str[i] == ' ')
 			++i;
 		iName = i;
@@ -3300,7 +3338,10 @@ cefParseExtensions(npb_t *const npb,
 			++i; /* skip past value */
 		}
 
-		if(jroot != NULL) {
+		/* with a rewrite table, only the keys it lists are stored */
+		if(jroot != NULL && tab != NULL)
+			ent = ln_rw_lookup(tab, npb->str + iName, lenName);
+		if(jroot != NULL && (tab == NULL || ent != NULL)) {
 			CHKN(name = malloc(sizeof(char) * (lenName + 1)));
 			memcpy(name, npb->str+iName, lenName);
 			name[lenName] = '\0';
@@ -3329,9 +3370,15 @@ cefParseExtensions(npb_t *const npb,
 				++iDst;
 			}
 			value[iDst] = '\0';
+			if(ent != NULL && ent->lower) {
+				for(size_t k = 0 ; k < iDst ; ++k) {
+					if(value[k] >= 'A' && value[k] <= 'Z')
+						value[k] = (char)(value[k] + 32);
+				}
+			}
 			json_object *json;
 			CHKN(json = json_object_new_string(value));
-			json_object_object_add(jroot, name, json);
+			json_object_object_add(jroot, (ent != NULL) ? ent->dst : name, json);
 			free(name); name = NULL;
 			free(value); value = NULL;
 		}

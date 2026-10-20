@@ -1321,8 +1321,13 @@ addUnparsedField(ln_ctx ctx, const char *str, const size_t strLen, const size_t 
 	struct json_object *value;
 
 	CHKR(addOriginalMsg(str, strLen, json));
-	
-	value = json_object_new_string(str + offs);
+
+	/* str is a length, not a C string. json_object_new_string() would
+	 * strlen() past a buffer that is not NUL-terminated. */
+	{
+		const size_t from = (offs > strLen) ? strLen : offs;
+		value = json_object_new_string_len(str + from, strLen - from);
+	}
 	if (value == NULL) {
 		goto done;
 	}
@@ -1392,6 +1397,31 @@ fixJSON(struct ln_pdag *dag,
 		}
 		*value = NULL;
 	} else if(prs->name[0] == '.' && prs->name[1] == '\0') {
+		/* only an inlined %.:json% object is renamed. Other inlined
+		 * parsers (custom types; CEF and name-value-list, which rewrite
+		 * their keys while they store them) keep their fields here */
+		const struct ln_rw_tab *rtab = (prs->prsid == LN_PRSID_JSON)
+			? ln_rewrite_tab_for_parser(dag->ctx, prs) : NULL;
+		if (rtab != NULL && json_object_get_type(*value) == json_type_object) {
+			if (ln_rewrite_merge(json, *value, rtab, failOnDuplicate) != 0) {
+				json_object_put(*value);
+				*value = NULL;
+				goto done;
+			}
+			json_object_put(*value);
+			*value = NULL;
+			r = 0;
+			goto done;
+		}
+		if (rtab != NULL) {
+			/* Top-level array (or scalar): no object key to rename.
+			 * Drop it, matching the turbo walker, which only keeps
+			 * mapped leaves. */
+			json_object_put(*value);
+			*value = NULL;
+			r = 0;
+			goto done;
+		}
 		if(json_object_get_type(*value) == json_type_object) {
 			struct json_object_iterator it = json_object_iter_begin(*value);
 			struct json_object_iterator itEnd = json_object_iter_end(*value);
@@ -1542,8 +1572,12 @@ tryParser(npb_t *const __restrict__ npb,
 		es_addBuf(&npb->astats.exec_path, "[R:USR],", 8);
 		#endif
 	} else {
+		const struct ln_parser_s *saved = npb->prs;
+
+		npb->prs = prs;
 		r = parser_lookup_table[prs->prsid].parser(npb,
 			offs, prs->parser_data, parser_name, pParsed, (prs->name == NULL) ? NULL : value);
+		npb->prs = saved;
 	}
 done:
 	LN_DBGPRINTF(npb->ctx, "parser lookup returns %d, pParsed %zu", r, *pParsed);
