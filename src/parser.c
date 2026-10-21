@@ -3225,6 +3225,12 @@ cefParseExtensionValue(npb_t *const npb,
 		}
 	}
 
+	/* a backslash that ends the message escapes nothing; the unescape
+	 * loop in cefParseExtensions() relies on every escape having a
+	 * following character */
+	if(inEscape)
+		FAIL(LN_WRONGPARSER);
+
 	/* Note: iLastWordBegin can never be at offset zero, because
 	 * the CEF header starts there!
 	 */

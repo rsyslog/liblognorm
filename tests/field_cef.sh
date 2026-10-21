@@ -1,9 +1,11 @@
 #!/bin/bash
 # added 2015-05-05 by Rainer Gerhards
 # This file is part of the liblognorm project, released under ASL 2.0
-. $srcdir/exec.sh
+srcdir="${srcdir:-.}"
+# shellcheck disable=SC1091
+. "$srcdir"/exec.sh
 
-test_def $0 "CEF parser"
+test_def "$0" "CEF parser"
 add_rule 'version=2'
 add_rule 'rule=:%f:cef%'
 
@@ -31,6 +33,11 @@ assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature 
 
 execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=v\alue' #invalid escape in extension
 assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=v\\alue", "unparsed-data": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=v\\alue" }'
+
+# the message itself ends in a backslash
+# shellcheck disable=SC1003
+execute 'CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=value\' #escape at end of message
+assert_output_json_eq '{ "originalmsg": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=value\\", "unparsed-data": "CEF:0|Vendor|Product|Version|Signature ID|some name|Severity| name=value\\" }'
 
 execute 'CEF:0|V\endor|Product|Version|Signature ID|some name|Severity| name=value' #invalid escape in header
 assert_output_json_eq '{ "originalmsg": "CEF:0|V\\endor|Product|Version|Signature ID|some name|Severity| name=value", "unparsed-data": "CEF:0|V\\endor|Product|Version|Signature ID|some name|Severity| name=value" }'
