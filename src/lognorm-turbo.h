@@ -80,6 +80,15 @@ typedef enum {
 	LN_FTYPE_BOOL           /**< Boolean (reported as int 0/1)   */
 } ln_ftype_t;
 
+/** What ln_fast_result_find() reports for a dotted name. */
+typedef enum {
+	LN_FIND_ABSENT = 0, /**< no field at the name or at a dotted parent of it */
+	LN_FIND_STRING,     /**< a string field, returned in value / vlen    */
+	LN_FIND_INT,        /**< an integer field, returned in ival          */
+	LN_FIND_OTHER       /**< anything else: read the JSON built from the
+	                         result to know what the name holds          */
+} ln_find_t;
+
 /** Field flag: the field name is dotted and denotes a nested object
  *  (e.g. "a.b" -> {"a":{"b":...}}). */
 #define LN_FFIELD_NESTED 0x04
@@ -204,6 +213,30 @@ int ln_fast_result_get_string(const ln_fast_result_t *r, const char *name,
 int ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 						   int64_t *value);
 
+/**
+ * Look up a dotted name with the result of a JSON object built from it in
+ * mind (dotted names become nested objects, the last binding of a name
+ * wins, a %name:json% value is parsed, tags go to a "tags" array).
+ *
+ * LN_FIND_STRING and LN_FIND_INT give the value that object holds at
+ * @p name, exactly as ln_fast_result_get_string() and
+ * ln_fast_result_get_int() do. LN_FIND_ABSENT means the object holds
+ * nothing at @p name, even for a reader that compares keys without case in
+ * any locale. LN_FIND_OTHER covers
+ * every other case: a double, boolean, null or parsed JSON value, an object
+ * (@p name is a dotted parent of a field), a field that is a dotted parent
+ * of @p name, a field whose name differs from @p name only in case, and a
+ * field name, or @p name, with an empty dotted component. The caller then
+ * reads the JSON.
+ *
+ * @p name need not be NUL-terminated. Any of @p value, @p vlen and @p ival
+ * may be NULL.
+ *
+ * @return one of ln_find_t.
+ */
+int ln_fast_result_find(const ln_fast_result_t *r, const char *name, size_t nlen,
+						const char **value, size_t *vlen, int64_t *ival);
+
 /** Number of tags in the result. */
 int ln_fast_result_tag_count(const ln_fast_result_t *r);
 
@@ -270,6 +303,15 @@ typedef enum {
 	LN_FTYPE_DOUBLE,
 	LN_FTYPE_BOOL
 } ln_ftype_t;
+
+/** What ln_fast_result_find() reports for a dotted name. */
+typedef enum {
+	LN_FIND_ABSENT = 0, /**< no field at the name or at a dotted parent of it */
+	LN_FIND_STRING,     /**< a string field, returned in value / vlen    */
+	LN_FIND_INT,        /**< an integer field, returned in ival          */
+	LN_FIND_OTHER       /**< anything else: read the JSON built from the
+	                         result to know what the name holds          */
+} ln_find_t;
 
 #define LN_FFIELD_NESTED 0x04
 #define LN_FFIELD_RAW_JSON 0x08
@@ -340,6 +382,14 @@ ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 {
 	(void)r; (void)name; (void)value;
 	return -1;
+}
+
+static inline int
+ln_fast_result_find(const ln_fast_result_t *r, const char *name, size_t nlen,
+		const char **value, size_t *vlen, int64_t *ival)
+{
+	(void)r; (void)name; (void)nlen; (void)value; (void)vlen; (void)ival;
+	return LN_FIND_ABSENT;
 }
 
 static inline int

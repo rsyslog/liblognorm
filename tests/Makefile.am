@@ -220,12 +220,17 @@ endif
 if ENABLE_TURBO
 TESTS += $(TESTS_TURBO_SHELLS)
 
-check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint
+check_PROGRAMS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint turbo_test_find
 
 turbo_test_arena_SOURCES = turbo_test_arena.c
 turbo_test_arena_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_arena_LDADD = ../src/liblognorm.la
 turbo_test_arena_LDFLAGS = -no-install
+
+turbo_test_find_SOURCES = turbo_test_find.c
+turbo_test_find_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS) $(JSON_C_CFLAGS)
+turbo_test_find_LDADD = ../src/liblognorm.la $(JSON_C_LIBS)
+turbo_test_find_LDFLAGS = -no-install
 
 turbo_test_result_SOURCES = turbo_test_result.c
 turbo_test_result_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
@@ -302,5 +307,5 @@ turbo_test_json_CPPFLAGS = -I$(top_srcdir)/src $(WARN_CFLAGS)
 turbo_test_json_LDADD = ../src/liblognorm.la -lm
 turbo_test_json_LDFLAGS = -no-install
 
-TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint
+TESTS += turbo_test_arena turbo_test_result turbo_test_simd turbo_test_vm turbo_test_json turbo_test_compile turbo_test_date turbo_test_dupfield turbo_test_cef turbo_test_annot turbo_test_maxval turbo_test_time turbo_test_charset turbo_test_word turbo_test_leadws turbo_test_checkpoint turbo_test_find
 endif
