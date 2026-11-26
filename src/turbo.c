@@ -1768,6 +1768,124 @@ ln_fast_result_get_int(const ln_fast_result_t *r, const char *name,
 	return -1;
 }
 
+/* Fold a byte so that two names a case-insensitive reader could take for
+ * the same key fold the same. ASCII letters lose their case. 'I', 'i' and
+ * every byte above 0x7f share one class: strcasecmp() follows the locale,
+ * which folds those differently (the Turkish dotted and dotless i, Latin-1
+ * letters). Folding too much only turns a lookup into LN_FIND_OTHER. */
+static inline unsigned char
+ln_find_fold(const unsigned char c)
+{
+	if (c >= 0x80 || c == 'I' || c == 'i') return 0x80;
+	return (c >= 'A' && c <= 'Z') ? (unsigned char)(c + ('a' - 'A')) : c;
+}
+
+/* First index below n where a and b differ after ln_find_fold(), or n.
+ * *raw_eq is set when a and b are byte-identical below that index. Equal
+ * 8-byte words are skipped without folding. */
+static size_t
+ln_find_diverge(const char *a, const char *b, size_t n, int *raw_eq)
+{
+	size_t i = 0;
+	*raw_eq = 1;
+	while (i + 8 <= n) {
+		uint64_t wa, wb;
+		memcpy(&wa, a + i, 8);
+		memcpy(&wb, b + i, 8);
+		if (wa != wb) break;
+		i += 8;
+	}
+	for (; i < n; i++) {
+		if (a[i] == b[i]) continue;
+		*raw_eq = 0;
+		if (ln_find_fold((unsigned char)a[i]) != ln_find_fold((unsigned char)b[i]))
+			return i;
+	}
+	return n;
+}
+
+/* A dotted name the JSON build does not nest component by component: an
+ * empty component ("a..b", ".a", "a.") collapses there. */
+static int
+ln_find_odd_name(const char *n, size_t len)
+{
+	if (len == 0 || n[0] == '.' || n[len - 1] == '.') return 1;
+	for (size_t i = 1; i < len; i++)
+		if (n[i] == '.' && n[i - 1] == '.') return 1;
+	return 0;
+}
+
+int
+ln_fast_result_find(const ln_fast_result_t *r, const char *name, size_t nlen,
+					const char **value, size_t *vlen, int64_t *ival)
+{
+	int exact = -1;
+	int other = 0;
+
+	if (!r || !name || nlen == 0) return LN_FIND_ABSENT;
+	if (ln_find_odd_name(name, nlen)) return LN_FIND_OTHER;
+	const unsigned char first = ln_find_fold((unsigned char)name[0]);
+	/* tags become a "tags" array at the top of the object */
+	if (r->n_tags > 0 && nlen >= 4 && (nlen == 4 || name[4] == '.')) {
+		int raw_eq;
+		if (ln_find_diverge(name, "tags", 4, &raw_eq) == 4) return LN_FIND_OTHER;
+	}
+
+	for (int i = 0; i < r->n_fields; i++) {
+		const ln_fast_field_t *f = &r->fields[i];
+		const char *fn = f->name;
+		const size_t fl = f->name_len;
+		if (fn == NULL || fl == 0) continue;
+		/* Most fields differ in their first letter. The JSON build drops a
+		 * leading dot, so such a name may land anywhere. */
+		if (fn[0] == '.') {
+			other = 1;
+			continue;
+		}
+		if (ln_find_fold((unsigned char)fn[0]) != first)
+			continue;
+		int raw_eq;
+		const size_t n = fl < nlen ? fl : nlen;
+		const size_t k = ln_find_diverge(fn, name, n, &raw_eq);
+		if (k < n) {
+			/* Unrelated names, unless the field has an empty component
+			 * right there ("a..b" nests like "a.b"). */
+			if (fn[k] == '.' && fn[k - 1] == '.') other = 1;
+			continue;
+		}
+		if (fl == nlen) {
+			if (raw_eq)
+				exact = i; /* the last binding wins */
+			else
+				other = 1; /* same key for a case-insensitive reader */
+		} else if (fl < nlen) {
+			if (name[fl] == '.') other = 1; /* the field is a parent of name */
+		} else if (fn[nlen] == '.') {
+			other = 1; /* name is an object holding the field */
+		}
+	}
+	if (other) return LN_FIND_OTHER;
+	if (exact < 0) return LN_FIND_ABSENT;
+	const ln_fast_field_t *f = &r->fields[exact];
+	switch (f->type) {
+	case LN_FTYPE_STRING:
+		if (f->flags & LN_FFIELD_RAW_JSON) return LN_FIND_OTHER;
+		if (value) *value = f->v.str.ptr;
+		if (vlen) *vlen = f->v.str.len;
+		return LN_FIND_STRING;
+	case LN_FTYPE_STRING_INLINE:
+		if (f->flags & LN_FFIELD_RAW_JSON) return LN_FIND_OTHER;
+		if (value) *value = f->v.inl;
+		if (vlen) *vlen = strlen(f->v.inl);
+		return LN_FIND_STRING;
+	case LN_FTYPE_INT:
+		if (ival) *ival = f->v.i;
+		return LN_FIND_INT;
+	default:
+		return LN_FIND_OTHER;
+	}
+}
+
 int
 ln_fast_result_tag_count(const ln_fast_result_t *r)
 {
